@@ -1,0 +1,162 @@
+{
+  "realm": "olly",
+  "displayName": "Olly Flow (DESENVOLVIMENTO)",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": false,
+  "rememberMe": false,
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "internationalizationEnabled": true,
+  "supportedLocales": ["pt-BR"],
+  "defaultLocale": "pt-BR",
+  "groups": [
+    {
+      "name": "admin",
+      "path": "/admin"
+    },
+    {
+      "name": "editor",
+      "path": "/editor"
+    },
+    {
+      "name": "executor",
+      "path": "/executor"
+    },
+    {
+      "name": "viewer",
+      "path": "/viewer"
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "olly-api",
+      "name": "Olly Flow API",
+      "description": "Resource server: aparece apenas como audience dos tokens.",
+      "enabled": true,
+      "bearerOnly": true,
+      "publicClient": false,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false
+    },
+    {
+      "clientId": "olly-web",
+      "name": "Olly Flow Web",
+      "description": "SPA: Authorization Code + PKCE. Password grant habilitado SOMENTE neste realm de desenvolvimento (NFR-003).",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["http://localhost:5173/*"],
+      "webOrigins": ["http://localhost:5173"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:5173/*"
+      },
+      "protocolMappers": [
+        {
+          "name": "audience-olly-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "olly-api",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        },
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "groups",
+            "full.path": "false",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "admin@olly.local",
+      "email": "admin@olly.local",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Ana",
+      "lastName": "Administradora",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "olly123",
+          "temporary": false
+        }
+      ],
+      "groups": ["/admin"]
+    },
+    {
+      "username": "editor@olly.local",
+      "email": "editor@olly.local",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Eduardo",
+      "lastName": "Editor",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "olly123",
+          "temporary": false
+        }
+      ],
+      "groups": ["/editor"]
+    },
+    {
+      "username": "executor@olly.local",
+      "email": "executor@olly.local",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Ester",
+      "lastName": "Executora",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "olly123",
+          "temporary": false
+        }
+      ],
+      "groups": ["/executor"]
+    },
+    {
+      "username": "viewer@olly.local",
+      "email": "viewer@olly.local",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Vitor",
+      "lastName": "Visualizador",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "olly123",
+          "temporary": false
+        }
+      ],
+      "groups": ["/viewer"]
+    }
+  ]
+}

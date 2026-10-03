@@ -1,0 +1,21 @@
+packages:
+  - apps/*
+  - packages/*
+
+# pnpm 10 não executa scripts de instalação por padrão; liberamos apenas o necessário.
+onlyBuiltDependencies:
+  - esbuild
+
+# Dependências opcionais nativas/pós-instalação que não precisamos compilar.
+ignoredBuiltDependencies:
+  - cpu-features
+  - protobufjs
+  - ssh2
+
+# Correções de segurança em dependências transitivas (pnpm audit). Remover quando as
+# dependências diretas passarem a exigir versões corrigidas.
+overrides:
+  # @nestjs/platform-fastify 11 fixa fastify 5.11.3 (GHSA-hwr6-493r-vm6h, GHSA-9q9j-q6p8-xq58 e outras).
+  fastify: ^5.12.5
+  # @nestjs/swagger usa js-yaml 5.x vulnerável a DoS por merge keys.
+  'js-yaml@>=5.0.0 <5.4.1': ^5.4.1

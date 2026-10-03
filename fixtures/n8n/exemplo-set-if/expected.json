@@ -1,0 +1,48 @@
+{
+  "Definir campos": {
+    "main": [
+      {
+        "json": {
+          "nome": "Ana",
+          "sobrenome": "Souza",
+          "idade": 34,
+          "nomeCompleto": "Ana Souza",
+          "maiorDeIdade": true
+        }
+      },
+      {
+        "json": {
+          "nome": "Bruno",
+          "sobrenome": "Lima",
+          "idade": 16,
+          "nomeCompleto": "Bruno Lima",
+          "maiorDeIdade": false
+        }
+      }
+    ]
+  },
+  "Maior de idade?": {
+    "true": [
+      {
+        "json": {
+          "nome": "Ana",
+          "sobrenome": "Souza",
+          "idade": 34,
+          "nomeCompleto": "Ana Souza",
+          "maiorDeIdade": true
+        }
+      }
+    ],
+    "false": [
+      {
+        "json": {
+          "nome": "Bruno",
+          "sobrenome": "Lima",
+          "idade": 16,
+          "nomeCompleto": "Bruno Lima",
+          "maiorDeIdade": false
+        }
+      }
+    ]
+  }
+}

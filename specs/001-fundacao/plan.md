@@ -36,6 +36,7 @@ Monorepo pnpm + Turborepo com API NestJS/Fastify, frontend React/Vite, PostgreSQ
 
 ### §2 Docker Compose
 - Serviços `postgres:16`, `redis:7`, `keycloak` (import do realm no start) e `minio`, todos com healthcheck.
+- MinIO: as imagens oficiais (`minio/minio`, `quay.io/minio/minio`) deixaram de ser publicadas. Usa-se a build da Chainguard a partir do código-fonte (`cgr.dev/chainguard/minio`, fixada por digest). O bucket é criado pelo próprio serviço, porque `docker compose up --wait` falha quando um serviço *one-shot* termina.
 - **Realm `olly`:**
   - client `olly-web` (público, PKCE, redirect `http://localhost:5173/*`) e audience `olly-api`;
   - grupos `admin`, `editor`, `executor` e `viewer`;
@@ -45,7 +46,7 @@ Monorepo pnpm + Turborepo com API NestJS/Fastify, frontend React/Vite, PostgreSQ
 
 ### §3 `packages/db`
 - Kysely + `pg`, com os tipos das tabelas em `src/schema.ts`.
-- Migrator Kysely lendo `infra/migrations`.
+- Migrator Kysely lendo `infra/migrations`. Cada migration é um par de arquivos SQL (`NNNN_nome.up.sql` + `NNNN_nome.down.sql`, com `down` obrigatório), carregado por um `MigrationProvider` próprio: SQL roda igual no build, no Vitest e em scripts, sem importar TypeScript em tempo de execução.
 - `audit_log` com trigger `BEFORE UPDATE OR DELETE` que lança exceção.
 - **Seed de papéis** (`docs/arquitetura/contratos.md`):
   - `admin`: todas as permissões;
@@ -95,7 +96,7 @@ Tabelas `users`, `roles`, `projects`, `project_members` e `audit_log`, conforme 
 
 | Método | Rota | Acesso | Saída |
 |---|---|---|---|
-| GET | `/health` | Público | `{ status, db, redis }` |
+| GET | `/health` | Público | `{ status, db, redis, idp }`: 200 com `status` `ok` ou `degraded` (IdP fora); 503 com `error` se banco ou Redis estiver fora |
 | GET | `/api/v1/me` | Autenticado | `{ id, email, name, permissions }` |
 
 ## Configuração
@@ -135,3 +136,11 @@ Tabelas `users`, `roles`, `projects`, `project_members` e `audit_log`, conforme 
 |---|---|
 | IdP institucional indefinido | Configuração OIDC genérica; Keycloak dev |
 | Testcontainers lento no CI | Cache de imagens; testes de integração em job separado |
+
+## Histórico de alterações
+
+| Data | Alteração | Motivo |
+|---|---|---|
+| 03/10/2026 | `/health` passa a incluir `idp` e a responder 503 quando banco ou Redis estão fora | Caso de borda da spec ("IdP fora do ar: `/health` indica a dependência degradada") |
+| 03/10/2026 | Migrations em SQL puro com provider próprio | Rodar igual em build, testes e scripts (ver §3) |
+| 03/10/2026 | MinIO via imagem Chainguard; bucket criado pelo próprio serviço | Imagens oficiais descontinuadas; compatibilidade com `docker compose up --wait` |

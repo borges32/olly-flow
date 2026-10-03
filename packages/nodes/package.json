@@ -1,0 +1,32 @@
+{
+  "name": "@olly/nodes",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Contrato de nós e registro de nós (src/<categoria>/<nome>/ a partir da spec 002)",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "eslint .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@olly/shared-types": "workspace:*",
+    "@types/json-schema": "^7.0.15",
+    "ajv": "^8.20.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "typescript": "~5.9.3",
+    "vitest": "^3.2.7"
+  }
+}

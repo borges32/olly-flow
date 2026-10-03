@@ -8,7 +8,7 @@
 
 | # | Spec | Fase | Objetivo | Depende de | Status | Marco |
 |---|---|---|---|---|---|---|
-| 001 | [fundacao](../specs/001-fundacao/spec.md) | 0 — Fundação | Monorepo, Compose, OIDC, banco, contratos, CI | — | Aprovada | |
+| 001 | [fundacao](../specs/001-fundacao/spec.md) | 0 — Fundação | Monorepo, Compose, OIDC, banco, contratos, CI | — | Implementada ([relatório](../specs/001-fundacao/report.md)) | |
 | 002 | [editor-workflows-rbac](../specs/002-editor-workflows-rbac/spec.md) | 1 — MVP | Canvas, CRUD de workflows, RBAC por projeto, esqueleto do motor | 001 | Aprovada | |
 | 003 | [expressoes-execucao-teste](../specs/003-expressoes-execucao-teste/spec.md) | 1 — MVP | Expressões N8N em sandbox, If, `$vars`, execução de teste, log | 002 | Aprovada | |
 | 004 | [credenciais-http-postgres](../specs/004-credenciais-http-postgres/spec.md) | 1 — MVP | Credenciais, anti-SSRF, HTTP, Postgres, retry/timeout | 003 | Aprovada | |

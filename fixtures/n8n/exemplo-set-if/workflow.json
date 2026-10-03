@@ -1,0 +1,77 @@
+{
+  "name": "Exemplo Set + If (sintético)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "5b0f3c1e-0001-4a6e-9a51-000000000001",
+      "name": "Início",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "nomeCompleto",
+              "value": "={{ $json.nome }} {{ $json.sobrenome }}",
+              "type": "string"
+            },
+            {
+              "id": "a2",
+              "name": "maiorDeIdade",
+              "value": "={{ $json.idade >= 18 }}",
+              "type": "boolean"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "5b0f3c1e-0002-4a6e-9a51-000000000002",
+      "name": "Definir campos",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.maiorDeIdade }}",
+              "rightValue": "",
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "5b0f3c1e-0003-4a6e-9a51-000000000003",
+      "name": "Maior de idade?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [440, 0]
+    }
+  ],
+  "connections": {
+    "Início": {
+      "main": [[{ "node": "Definir campos", "type": "main", "index": 0 }]]
+    },
+    "Definir campos": {
+      "main": [[{ "node": "Maior de idade?", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

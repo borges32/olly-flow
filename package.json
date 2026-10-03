@@ -1,0 +1,37 @@
+{
+  "name": "olly-flow",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.34.6",
+  "engines": {
+    "node": ">=22 <23"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint && eslint scripts tests && prettier --check .",
+    "format": "prettier --write .",
+    "typecheck": "turbo run typecheck && tsc -p tsconfig.json",
+    "test": "turbo run test && vitest run",
+    "test:integration": "turbo run test:integration",
+    "test:e2e": "turbo run test:e2e",
+    "smoke": "tsx scripts/smoke.ts",
+    "db:migrate": "turbo run build --filter=@olly/db --output-logs=errors-only && pnpm --filter @olly/db run migrate",
+    "db:rollback": "turbo run build --filter=@olly/db --output-logs=errors-only && pnpm --filter @olly/db run rollback",
+    "db:seed": "turbo run build --filter=@olly/db --output-logs=errors-only && pnpm --filter @olly/db run seed"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^22.20.5",
+    "eslint": "^10.12.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.7",
+    "globals": "^17.13.0",
+    "prettier": "^3.9.9",
+    "tsx": "^4.23.15",
+    "turbo": "^2.11.7",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.71.0",
+    "vitest": "^3.2.7"
+  }
+}

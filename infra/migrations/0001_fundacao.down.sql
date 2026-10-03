@@ -1,0 +1,6 @@
+DROP TABLE IF EXISTS audit_log;
+DROP FUNCTION IF EXISTS audit_log_immutable();
+DROP TABLE IF EXISTS project_members;
+DROP TABLE IF EXISTS projects;
+DROP TABLE IF EXISTS roles;
+DROP TABLE IF EXISTS users;

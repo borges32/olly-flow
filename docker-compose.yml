@@ -1,0 +1,92 @@
+# Ambiente local (FR-002): PostgreSQL, Redis, IdP de desenvolvimento e object storage.
+# Uso: docker compose up -d --wait
+name: olly-flow
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-olly}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-olly}
+      POSTGRES_DB: ${POSTGRES_DB:-olly}
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - '6379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  keycloak:
+    # IdP somente de desenvolvimento. O realm importado habilita o password grant,
+    # que não deve existir em outros ambientes (NFR-003).
+    image: quay.io/keycloak/keycloak:26.6
+    command: ['start-dev', '--import-realm']
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USER:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      KC_HEALTH_ENABLED: 'true'
+    ports:
+      - '8080:8080'
+    volumes:
+      - ./infra/keycloak/olly-realm.json:/opt/keycloak/data/import/olly-realm.json:ro
+    healthcheck:
+      # A imagem não tem curl/wget; usa /dev/tcp do bash na porta de gerenciamento.
+      test:
+        - CMD-SHELL
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/9000 &&
+          printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+          grep -q '"UP"' <&3
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 30s
+
+  minio:
+    # As imagens oficiais do MinIO deixaram de ser publicadas; esta é a build mantida
+    # pela Chainguard a partir do código-fonte (ver report.md da spec 001).
+    image: cgr.dev/chainguard/minio:latest-dev@sha256:7c248c1d7832ff65a6345cb6ff7bf9cf081ccf88527f8d6f25bb9227801a5121
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-olly}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-olly-dev-secret}
+      S3_BUCKET: ${S3_BUCKET:-olly}
+    # O bucket é criado aqui, e não num serviço one-shot, porque `docker compose up --wait`
+    # falha quando um container termina, mesmo com código 0.
+    entrypoint: ['sh', '-c']
+    command:
+      - >-
+        rm -f /tmp/bucket-ready;
+        minio server /data --console-address :9001 & pid=$$!;
+        trap 'kill -TERM $$pid' TERM INT;
+        until mc alias set local http://127.0.0.1:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD" >/dev/null 2>&1; do sleep 1; done;
+        mc mb --ignore-existing "local/$$S3_BUCKET" && touch /tmp/bucket-ready;
+        wait $$pid
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - wget -q --spider http://127.0.0.1:9000/minio/health/live && test -f /tmp/bucket-ready
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+volumes:
+  postgres-data:
+  minio-data:

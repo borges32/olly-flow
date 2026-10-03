@@ -5,6 +5,7 @@
 ## Tipos de workflow (`packages/shared-types`)
 
 ```ts
+export interface BinaryRef { id: string; mimeType: string; fileName?: string; size?: number }
 export interface Item {
   json: Record<string, unknown>;
   binary?: Record<string, BinaryRef>;            // referência a objeto no storage
@@ -28,6 +29,12 @@ export interface WorkflowNode {
   };
 }
 export interface Edge { id: string; from: string; fromPort: string; to: string; toPort: string }
+export interface PortDef {
+  name: string; displayName?: string; required?: boolean;
+  kind: 'main' | 'ai_languageModel' | 'ai_memory' | 'ai_tool';
+}
+export type ExecutionStatus = 'queued' | 'running' | 'waiting' | 'success' | 'error' | 'cancelled';
+export type NodeExecutionStatus = 'running' | 'success' | 'error' | 'skipped' | 'waiting' | 'cancelled';
 
 export interface WorkflowSettings {
   timeoutSec?: number;
@@ -39,9 +46,11 @@ export interface WorkflowDefinition {
   nodes: WorkflowNode[];
   edges: Edge[];
   settings: WorkflowSettings;
-  pinData?: Record<string, Item[]>;               // spec 003
+  pinData?: Record<string, Item[]>;               // por id do nó (spec 003)
 }
 ```
+
+`workflowDefinitionSchema` (zod) valida também: ids e nomes de nó únicos, ids de aresta únicos e arestas/`pinData` apontando para nós existentes.
 
 ## Contrato de nó (`packages/nodes`)
 
@@ -62,7 +71,9 @@ export interface NodeDefinition {
 }
 ```
 
-`NodeContext` oferece, entre outros: `getParam(name, itemIndex)` (com expressões resolvidas), `getCredential()`, `signal` (`AbortSignal`), `logger` e `helpers` (paired items, binários).
+`NodeContext` oferece, entre outros: `getParam(name, itemIndex)` (com expressões resolvidas), `getCredential()`, `signal` (`AbortSignal`), `logger` e `helpers` (paired items, binários). `NodeExecuteInput` traz `inputs` (itens por porta) e `items` (atalho para `inputs.main`).
+
+`NodeRegistry` (`register`, `get(type, version?)`, `list()` sem `execute`) recusa nós cujo `paramsSchema` não seja um JSON Schema draft-07 válido com `type: "object"` na raiz. Palavras-chave desconhecidas são erro; as extensões aceitas são `x-display-options` e `x-secret`.
 
 ## Tipos de nó
 
@@ -93,6 +104,8 @@ export interface NodeDefinition {
 | `workflow:publish`, `execution:readData` | 005 |
 | `audit:read` | 009 |
 | `mcp:manage` | 010 |
+
+Catálogo e papéis padrão em `packages/shared-types/src/rbac.ts` (seed da spec 001): `admin` tem todas; `editor`, todas exceto `user:manage`, `project:manage` e `audit:read`; `executor`, `workflow:read`, `workflow:execute` e `execution:read`; `viewer`, `workflow:read` e `execution:read`. `mcp:manage` entra no catálogo e no seed na spec 010.
 
 Matriz por papel: [`docs/rbac-matriz.md`](../rbac-matriz.md), gerada pelo teste da spec 005.
 

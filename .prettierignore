@@ -1,0 +1,7 @@
+**/*.md
+pnpm-lock.yaml
+**/dist
+**/coverage
+**/playwright-report
+**/test-results
+.turbo

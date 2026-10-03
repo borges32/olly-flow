@@ -35,13 +35,15 @@
 ```sql
 CREATE TABLE users (
   id UUID PRIMARY KEY, external_id TEXT UNIQUE, email TEXT UNIQUE NOT NULL,
-  name TEXT, is_active BOOLEAN DEFAULT true, created_at TIMESTAMPTZ DEFAULT now()
+  name TEXT, is_active BOOLEAN DEFAULT true, created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ                      -- última mudança de nome/e-mail vinda do IdP
 );
 CREATE TABLE roles (id SERIAL PRIMARY KEY, name TEXT UNIQUE NOT NULL, permissions TEXT[] NOT NULL);
 CREATE TABLE projects (id UUID PRIMARY KEY, name TEXT NOT NULL, created_at TIMESTAMPTZ DEFAULT now());
 CREATE TABLE project_members (
   project_id UUID REFERENCES projects(id), user_id UUID REFERENCES users(id),
-  role_id INT REFERENCES roles(id), PRIMARY KEY (project_id, user_id)
+  role_id INT REFERENCES roles(id), created_at TIMESTAMPTZ DEFAULT now(),
+  PRIMARY KEY (project_id, user_id)
 );
 CREATE TABLE workflows (
   id UUID PRIMARY KEY, project_id UUID REFERENCES projects(id), name TEXT NOT NULL,
@@ -70,8 +72,8 @@ CREATE TABLE node_executions (
   input_data JSONB, output_data JSONB, data_ref TEXT, error JSONB,
   PRIMARY KEY (execution_id, node_id, run_index, started_at)
 ) PARTITION BY RANGE (started_at);
-CREATE TABLE audit_log (
+CREATE TABLE audit_log (                      -- sem FK em user_id: o registro sobrevive a users
   id BIGSERIAL PRIMARY KEY, user_id UUID, action TEXT NOT NULL, entity_type TEXT,
   entity_id TEXT, details JSONB, ip INET, created_at TIMESTAMPTZ DEFAULT now()
-);
+);                                            -- triggers bloqueiam UPDATE, DELETE e TRUNCATE
 ```

@@ -1,0 +1,7 @@
+{
+  "trigger": "Início",
+  "items": [
+    { "json": { "nome": "Ana", "sobrenome": "Souza", "idade": 34 } },
+    { "json": { "nome": "Bruno", "sobrenome": "Lima", "idade": 16 } }
+  ]
+}
