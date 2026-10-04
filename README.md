@@ -30,7 +30,7 @@ Desenvolvimento com recarga automática (API em `:3000`, frontend em `:5173`):
 pnpm dev
 ```
 
-Abra <http://localhost:5173> e entre com um usuário de teste (senha `olly123`):
+Abra <http://localhost:5173> e entre com um usuário de teste (senha `olly123`). Só `admin@olly.local` (grupo `admin` do IdP) tem acesso global; os demais precisam ser adicionados a um projeto em **Administração** para ver e editar workflows.
 
 | Usuário | Papel |
 |---|---|
@@ -38,6 +38,22 @@ Abra <http://localhost:5173> e entre com um usuário de teste (senha `olly123`):
 | `editor@olly.local` | editor |
 | `executor@olly.local` | executor |
 | `viewer@olly.local` | viewer |
+
+### Testar a UX sem ambiente de desenvolvimento
+
+Para validar o editor com usuários (por exemplo, da POC) sem instalar Node, suba também a API e o frontend em containers:
+
+```bash
+docker compose --profile app up -d --build --wait   # ou: pnpm app:up
+```
+
+Abra <http://localhost:5173>. A API e o frontend usam as portas `3000` e `5173`: pare o `pnpm dev` antes, e use `pnpm app:down` para voltar ao modo de desenvolvimento. Após mudar o código, repita o comando (ele reconstrói as imagens).
+
+- **Apagar tudo e recomeçar:** `pnpm app:reset` (remove containers e volumes e sobe de novo).
+- **Banco sempre pronto:** o serviço `db-init` aplica migrations e seed e continua vigiando; se o banco for recriado com a API no ar, o schema volta em segundos.
+- **Usuários:** o login é exclusivamente pelo IdP (não há cadastro na plataforma). No ambiente local, use os usuários de teste da tabela acima, que existem no Keycloak desde a subida; o registro na plataforma acontece no primeiro login.
+
+Roteiro sugerido: entre uma vez com cada usuário de teste (para existirem na plataforma), depois, como `admin@olly.local`, crie um projeto em **Administração** e adicione os demais com os papéis desejados.
 
 Outros endereços úteis:
 
@@ -60,6 +76,7 @@ Outros endereços úteis:
 | `pnpm test:integration` | Testes de integração com Testcontainers (exige Docker) |
 | `pnpm test:e2e` | Playwright; sobe o compose, aplica migrations e inicia API e frontend |
 | `pnpm smoke` | Smoke test do ambiente (inicia a API compilada se ela não estiver no ar) |
+| `pnpm app:up` / `pnpm app:down` / `pnpm app:reset` | Sobe/para/recria do zero a API e o frontend em containers (profile `app`), para testes de UX |
 | `pnpm db:migrate` / `pnpm db:rollback` / `pnpm db:seed` | Migrations ([`infra/migrations`](infra/migrations/README.md)) e papéis padrão |
 
 Na primeira execução do E2E, instale o navegador: `pnpm --filter @olly/web exec playwright install chromium`.
@@ -67,11 +84,12 @@ Na primeira execução do E2E, instale o navegador: `pnpm --filter @olly/web exe
 ## Estrutura
 
 ```text
-apps/api               API REST (NestJS + Fastify): OIDC, /health, /api/v1/me
-apps/web               Frontend (React + Vite + Tailwind + shadcn/ui)
+apps/api               API REST (NestJS + Fastify): OIDC, RBAC por projeto, projetos, workflows
+apps/web               Frontend (React + Vite + Tailwind + shadcn/ui), editor com React Flow
 apps/worker, apps/task-runner, apps/python-runner   reservados (specs 003, 006, 008)
 packages/shared-types  Tipos e schemas zod dos contratos centrais
-packages/nodes         Contrato de nó e registro de nós
+packages/nodes         Contrato de nó, registro e nós (docs/nos/)
+packages/engine        Validação estrutural e motor de execução
 packages/db            Kysely, migrator, seed
 infra/keycloak         Realm do IdP de desenvolvimento
 infra/migrations       Migrations SQL versionadas

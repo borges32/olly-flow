@@ -33,7 +33,8 @@ export class OidcTokenVerifier {
   constructor(@Inject(APP_CONFIG) private readonly config: AppConfig) {}
 
   private get discoveryUrl(): string {
-    return `${this.config.oidc.issuerUrl}/.well-known/openid-configuration`;
+    const base = this.config.oidc.discoveryUrl ?? this.config.oidc.issuerUrl;
+    return `${base}/.well-known/openid-configuration`;
   }
 
   async verify(token: string): Promise<AccessTokenClaims> {

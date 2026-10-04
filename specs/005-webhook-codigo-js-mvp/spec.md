@@ -115,3 +115,4 @@ Fila/workers, paralelismo, Merge, While, Python, cron, OAuth2 Authorization Code
 | Data | Alteração | Motivo |
 |---|---|---|
 | 03/10/2026 | Criação a partir do prompt da Sprint 4 | Migração para SDD |
+| 03/10/2026 | Permissões RBAC explicitadas no plano (seção e tarefa T089), sem mudança de requisito | Decisão humana sobre permissões por spec |

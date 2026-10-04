@@ -93,15 +93,17 @@
   - execução assíncrona no processo da API.
 - **Gateway `/executions`:** autentica o JWT no *handshake*. O evento `join { executionId }` verifica `execution:read` no projeto antes de entrar na sala.
 - **Eventos:** `executionStarted`, `nodeStarted`, `nodeFinished { status, itemsOut, durationMs, data (truncado) }` e `executionFinished`.
-- **`POST /expressions/preview`** (`workflow:execute`): avalia uma expressão sobre os dados da última execução de teste para o item 0.
+- **`POST /workflows/:id/expressions/preview`** (`workflow:execute` no workflow): avalia uma expressão sobre os dados da execução de teste indicada (`executionId`), para o nó e o item escolhidos. A execução é reconstruída do log (`input_sources` guarda a origem dos itens para os *paired items*); nó que não rodou usa a saída dos pais.
+- **`GET /executions/:id`** (`execution:read` no projeto da execução): execução e dados por nó (o editor completa por aqui os eventos que perdeu).
+- **Sala do workflow:** `joinWorkflow { workflowId }` → `workflow:<id>`, que recebe os eventos de todas as execuções do workflow. O editor entra ao abrir; eventos de uma execução cujo id ainda não voltou do POST ficam guardados no cliente e são aplicados quando ele chega.
 
 ### §8 Frontend
-- **Painel do nó:** colunas Entrada | Parâmetros | Saída, com abas Tabela/JSON/Schema; "Executar até este nó"; "Fixar dados" com edição de JSON.
+- **Painel do nó:** aberto com clique duplo (ou Enter no nó selecionado), em três colunas Entrada | Parâmetros | Saída, com abas Tabela/JSON/Schema; a Entrada pode mostrar a saída de qualquer nó anterior; "Executar até este nó"; "Fixar dados" com edição de JSON. Substitui o painel lateral da spec 002.
 - **Canvas:** status por nó (executando, sucesso com contagem, erro) e marcador de pin.
 - **Editor de expressões:**
   - alternador Fixo/Expressão por campo;
-  - Monaco de uma linha (expansível em modal) com destaque de `{{ }}`;
-  - *completion provider* baseado no schema inferido da última execução;
+  - campo de texto monoespaçado (template sem o `=`), sem Monaco (ver Histórico);
+  - autocomplete baseado no schema inferido da última execução (`$json.`, `$('Nó').item.json.`, nomes de nós e variáveis);
   - preview com *debounce* de 300 ms.
 - **Arrastar campo:** gera `{{ $json.campo }}` (nó imediatamente anterior) ou `{{ $('Nó').item.json.campo }}`.
 
@@ -126,6 +128,17 @@
 | Avaliação em lote | IPC por item | Latência de IPC |
 | Execução de teste no processo da API | Fila | A fila só chega na spec 006 (`ExecutionDispatcher` na 005) |
 
+## Permissões RBAC
+
+Regra geral (decisão de 03/10/2026): cada spec é responsável pelas permissões que introduz: aplicá-las nas rotas (`@RequirePermission`), garantir que constem do catálogo (`packages/shared-types/src/rbac.ts`), do seed de papéis e de `docs/arquitetura/contratos.md`, e testar o acesso negado por papel.
+
+| Permissão | Situação no catálogo/seed | Papéis com a permissão | O que esta spec faz |
+|---|---|---|---|
+| `execution:read` | Já presente desde a spec 001 | admin, editor, executor, viewer | Exigir na consulta de execuções e nos eventos WebSocket (FR-013) |
+| `workflow:execute` | Já presente desde a spec 001 (spec 002) | admin, editor, executor | Exigir para disparar a execução de teste |
+
+Nenhuma permissão nova é criada nesta spec.
+
 ## Estratégia de testes
 
 | Requisito | Tipo | Caso |
@@ -145,3 +158,14 @@
 |---|---|
 | Desempenho de isolated-vm com muitos itens | Lote, cache de scripts, cópia só dos nós referenciados |
 | Divergência sutil do N8N | Suíte de compatibilidade e fixtures reais |
+
+## Histórico de alterações
+
+| Data | Alteração | Motivo |
+|---|---|---|
+| 03/10/2026 | Seção "Permissões RBAC" e tarefa T089 | Decisão humana: cada spec acrescenta e garante as permissões que cria |
+| 03/10/2026 | Editor de expressões em campo de texto com autocomplete e preview, sem Monaco | Monaco carrega de CDN por padrão e exige workers; para campos de uma linha, um campo próprio atende FR-018 com menos peso (Art. IX.2). Monaco segue previsto para o nó de código (spec 005) |
+| 03/10/2026 | Preview em `POST /workflows/:id/expressions/preview` (era `/expressions/preview`) | O escopo RBAC é resolvido pelo parâmetro de rota (workflow) |
+| 03/10/2026 | Sala WebSocket `workflow:<id>` (`joinWorkflow`) além de `execution:<id>` | Execuções rápidas terminavam antes de o editor entrar na sala da execução, e os eventos se perdiam |
+| 03/10/2026 | `GET /executions/:id`; coluna `node_executions.input_sources`; `executions.project_id` | Catch-up do editor; reconstrução dos *paired items* no preview; autorização sem depender do workflow |
+| 03/10/2026 | `NodeContext.setVariable`; extensão `x-hidden` (alias `keepOnlySet` oculto) | Contrato para `data.setVariable`; compatibilidade com workflows da spec 002 |

@@ -4,6 +4,7 @@ import type { IncomingMessage } from 'node:http';
 import type { Http2ServerRequest } from 'node:http2';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
+import { IoAdapter } from '@nestjs/platform-socket.io';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module.js';
@@ -27,6 +28,8 @@ export async function createApp(config: AppConfig): Promise<NestFastifyApplicati
     { bufferLogs: true },
   );
   app.useLogger(app.get(Logger));
+  // Socket.io no mesmo servidor HTTP (eventos de execução, spec 003).
+  app.useWebSocketAdapter(new IoAdapter(app));
   app.enableShutdownHooks();
   app.setGlobalPrefix('api/v1', { exclude: ['health', 'metrics'] });
 

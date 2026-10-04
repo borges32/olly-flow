@@ -1,42 +1,45 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { Db, User } from '@olly/db';
-import { isPermission, type Permission } from '@olly/shared-types';
+import { PERMISSIONS, isPermission, type EffectivePermissions } from '@olly/shared-types';
+import { APP_CONFIG, type AppConfig } from '../config/config.js';
 import { DB } from '../core/tokens.js';
 import type { AccessTokenClaims } from './auth.types.js';
 
+export interface ResolvedPermissions {
+  isAdmin: boolean;
+  permissions: EffectivePermissions;
+}
+
 /** Calcula as permissões efetivas do usuário autenticado. */
 export interface PermissionResolver {
-  resolve(user: User, claims: AccessTokenClaims): Promise<Permission[]>;
+  resolve(user: User, claims: AccessTokenClaims): Promise<ResolvedPermissions>;
 }
 
 export const PERMISSION_RESOLVER = Symbol('PERMISSION_RESOLVER');
 
-const ROLES_TTL_MS = 60_000;
-
 /**
- * Implementação da spec 001: cada grupo do claim `groups` com o nome de um papel concede as
- * permissões desse papel globalmente. A spec 002 a substitui pelo RBAC por projeto.
+ * RBAC por projeto (spec 002, FR-010): o grupo de administração do IdP concede todas as
+ * permissões em todos os projetos; os demais usuários têm as permissões do seu papel
+ * somente nos projetos dos quais são membros. Substitui o resolver por grupo da spec 001.
  */
 @Injectable()
-export class GroupPermissionResolver implements PermissionResolver {
-  private roles?: { byName: Map<string, Permission[]>; expiresAt: number };
+export class ProjectPermissionResolver implements PermissionResolver {
+  constructor(
+    @Inject(DB) private readonly db: Db,
+    @Inject(APP_CONFIG) private readonly config: AppConfig,
+  ) {}
 
-  constructor(@Inject(DB) private readonly db: Db) {}
-
-  async resolve(_user: User, claims: AccessTokenClaims): Promise<Permission[]> {
-    const byName = await this.loadRoles();
-    const permissions = new Set<Permission>();
-    for (const group of claims.groups ?? []) {
-      for (const permission of byName.get(group) ?? []) permissions.add(permission);
-    }
-    return [...permissions].sort();
-  }
-
-  private async loadRoles(): Promise<Map<string, Permission[]>> {
-    if (this.roles && this.roles.expiresAt > Date.now()) return this.roles.byName;
-    const rows = await this.db.selectFrom('roles').select(['name', 'permissions']).execute();
-    const byName = new Map(rows.map((r) => [r.name, r.permissions.filter(isPermission)]));
-    this.roles = { byName, expiresAt: Date.now() + ROLES_TTL_MS };
-    return byName;
+  async resolve(user: User, claims: AccessTokenClaims): Promise<ResolvedPermissions> {
+    const isAdmin = (claims.groups ?? []).includes(this.config.oidc.adminGroup);
+    const rows = await this.db
+      .selectFrom('project_members')
+      .innerJoin('roles', 'roles.id', 'project_members.role_id')
+      .select(['project_members.project_id', 'roles.permissions'])
+      .where('project_members.user_id', '=', user.id)
+      .execute();
+    const projects = Object.fromEntries(
+      rows.map((r) => [r.project_id, r.permissions.filter(isPermission).sort()]),
+    );
+    return { isAdmin, permissions: { global: isAdmin ? [...PERMISSIONS].sort() : [], projects } };
   }
 }

@@ -71,9 +71,9 @@ export interface NodeDefinition {
 }
 ```
 
-`NodeContext` oferece, entre outros: `getParam(name, itemIndex)` (com expressões resolvidas), `getCredential()`, `signal` (`AbortSignal`), `logger` e `helpers` (paired items, binários). `NodeExecuteInput` traz `inputs` (itens por porta) e `items` (atalho para `inputs.main`).
+`NodeContext` oferece, entre outros: `getParam(name, itemIndex)` (com expressões já resolvidas para o item; erros de expressão são lançados como `ExpressionError` na leitura), `setVariable(name, value)` (variável da execução, lida em `$vars`; spec 003), `getCredential()`, `signal` (`AbortSignal`), `logger` e `helpers` (paired items, binários). `NodeExecuteInput` traz `inputs` (itens por porta) e `items` (atalho para `inputs.main`).
 
-`NodeRegistry` (`register`, `get(type, version?)`, `list()` sem `execute`) recusa nós cujo `paramsSchema` não seja um JSON Schema draft-07 válido com `type: "object"` na raiz. Palavras-chave desconhecidas são erro; as extensões aceitas são `x-display-options` e `x-secret`.
+`NodeRegistry` (`register`, `get(type, version?)`, `list()` sem `execute`) recusa nós cujo `paramsSchema` não seja um JSON Schema draft-07 válido com `type: "object"` na raiz. Palavras-chave desconhecidas são erro; as extensões aceitas são `x-display-options`, `x-secret` e `x-hidden` (ver [docs/nos/README.md](../nos/README.md)).
 
 ## Tipos de nó
 
@@ -105,16 +105,24 @@ export interface NodeDefinition {
 | `audit:read` | 009 |
 | `mcp:manage` | 010 |
 
+**Responsabilidade por spec (decisão de 03/10/2026):** cada spec acrescenta as permissões que cria ao catálogo, ao seed e a esta tabela, e as declara na seção "Permissões RBAC" do seu `plan.md`. As permissões das specs 002 a 009 já estão no catálogo e no seed desde a spec 001; essas specs apenas as aplicam e testam.
+
 Catálogo e papéis padrão em `packages/shared-types/src/rbac.ts` (seed da spec 001): `admin` tem todas; `editor`, todas exceto `user:manage`, `project:manage` e `audit:read`; `executor`, `workflow:read`, `workflow:execute` e `execution:read`; `viewer`, `workflow:read` e `execution:read`. `mcp:manage` entra no catálogo e no seed na spec 010.
+
+**Permissões efetivas (spec 002):** o grupo de administração do IdP (`OIDC_ADMIN_GROUP`) concede todas as permissões em todos os projetos; os demais usuários têm as permissões do seu papel somente nos projetos dos quais são membros (`project_members`). `GET /api/v1/me` devolve `permissions: { global: Permission[], projects: { [projectId]: Permission[] } }` (`EffectivePermissions` em `@olly/shared-types`). Toda rota declara `@Public()`, `@Authenticated()`, `@RequireProjectMember(param)` ou `@RequirePermission(permissão, escopo)`; recurso de projeto do qual o usuário não é membro responde 404.
 
 Matriz por papel: [`docs/rbac-matriz.md`](../rbac-matriz.md), gerada pelo teste da spec 005.
 
 ## Convenção de expressões (spec 003)
 
 - Um parâmetro string que começa com `=` é uma expressão-template: `"=Olá {{ $json.nome }}"`.
-- Um template formado por um único `{{ }}` preserva o tipo do resultado. Um template misto produz string.
+- Um template formado por um único `{{ }}` preserva o tipo do resultado. Um template misto produz string (`null`/`undefined` viram vazio; objetos, JSON; datas, ISO 8601).
+- Avaliação somente no sandbox do task runner (`@olly/expressions` + `apps/task-runner`), em lote por nó. Detalhes, limites e divergências: [docs/expressoes.md](../expressoes.md).
 - Variáveis: `$json`, `$binary`, `$itemIndex`, `$input.*`, `$('Nó').item|all()|first()|last()|params`, `$node["Nó"]` (legado), `$vars`, `$env` (somente `OLLY_EXPOSED_*`), `$execution`, `$workflow`, `$now`, `$today`, `$loop` (spec 007), `$response` e `$pageCount` (paginação, spec 008), `$fromAI()` (tools, spec 011).
 
-## Eventos WebSocket (namespace `/executions`, sala `execution:<id>`)
+## Eventos WebSocket (namespace `/executions`)
 
-`executionStarted` · `nodeStarted` · `nodeFinished` (inclui `runIndex`) · `executionFinished` · `agentStep` (spec 011) · `testWebhookReceived` (spec 005).
+- Autenticação no handshake (`auth.token` = access token). Salas, com `execution:read` verificado no projeto a cada pedido (resposta `{ ok: false, error: 'not_found' }` sem permissão):
+  - `join { executionId }` → sala `execution:<id>`;
+  - `joinWorkflow { workflowId }` → sala `workflow:<id>`, que recebe os eventos de todas as execuções do workflow desde o início (o editor entra ao abrir, antes de conhecer o id da execução).
+- Eventos (tipos `ExecutionEvents` em `@olly/shared-types`): `executionStarted` · `nodeStarted` · `nodeFinished` (status, contagens, duração, dados truncados; `runIndex` a partir da spec 007) · `executionFinished` · `agentStep` (spec 011) · `testWebhookReceived` (spec 005).

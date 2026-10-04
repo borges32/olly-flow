@@ -33,6 +33,13 @@
 
 <Endpoints (método, rota, permissão, entrada, saída), eventos WebSocket, parâmetros de nós, mensagens IPC.>
 
+## Permissões RBAC
+
+<Permissões que esta spec introduz ou usa, se já existem no catálogo/seed e quais papéis as recebem. Cada spec acrescenta as permissões que cria ao catálogo (`packages/shared-types/src/rbac.ts`), ao seed e a `docs/arquitetura/contratos.md`. Permissões exclusivas do admin entram também na lista de exclusões do editor.>
+
+| Permissão | Situação no catálogo/seed | Papéis | O que esta spec faz |
+|---|---|---|---|
+
 ## Configuração
 
 | Variável | Padrão | Descrição |

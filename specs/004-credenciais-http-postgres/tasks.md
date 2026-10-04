@@ -44,6 +44,7 @@
 
 ## Fase 7 — Verificação e relatório
 
+- [ ] T089 Permissões RBAC: confirmar `credential:manage` e `credential:use` no catálogo e no seed, exigi-las nas rotas e testar 403 por papel (FR-007) → plan, Permissões RBAC
 - [ ] T090 Rodar todos os comandos de verificação do AGENTS.md
 - [ ] T091 E2E `integrations.spec.ts` (SC-001)
 - [ ] T092 Documentar `docs/nos/http.request.md`, `docs/nos/postgres.query.md`, `docs/nos/postgres.write.md` e `docs/credenciais.md`

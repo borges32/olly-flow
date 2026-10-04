@@ -111,15 +111,16 @@ async function main(): Promise<void> {
   const meRes = await fetch(`${apiUrl}/api/v1/me`, {
     headers: { authorization: `Bearer ${token}` },
   });
-  const me = (await meRes.json()) as { email?: string; permissions?: string[] };
+  const me = (await meRes.json()) as { email?: string; permissions?: { global?: string[] } };
+  const globalPermissions = me.permissions?.global ?? [];
   if (
     meRes.status !== 200 ||
     me.email !== 'admin@olly.local' ||
-    !me.permissions?.includes('user:manage')
+    !globalPermissions.includes('user:manage')
   ) {
     throw new Error(`GET /api/v1/me inesperado: ${meRes.status} ${JSON.stringify(me)}`);
   }
-  ok(`FR-006: GET /api/v1/me = 200 (${me.email}, ${me.permissions.length} permissões)`);
+  ok(`FR-006: GET /api/v1/me = 200 (${me.email}, ${globalPermissions.length} permissões globais)`);
 
   console.log('\nFR-017: smoke test do ambiente passou.');
 }

@@ -68,7 +68,7 @@ Monorepo pnpm + Turborepo com API NestJS/Fastify (OIDC genérico via JWKS, `/hea
 | SC-001 | ✅ | `docker compose down -v && docker compose up -d && pnpm smoke` (após `pnpm install` e `pnpm build`, como no README) |
 | SC-002 | ✅ | `pnpm test:e2e` › "FR-007/SC-002: login com editor@olly.local mostra o nome no cabeçalho" |
 | SC-003 | ✅ | `migrations.int.test.ts` (up → down → up); manualmente: `pnpm db:rollback --all && pnpm db:migrate` |
-| SC-004 | ⚠️ Parcial | O CI está escrito e coberto por teste, mas não rodou no GitHub (nada foi enviado ao remoto) e o bloqueio de merge depende de configurar a proteção da branch |
+| SC-004 | ✅ (confirmado pelo revisor em 03/10/2026) | CI no GitHub Actions com os jobs `verify`, `integration` e `e2e` exigidos na proteção da `main` |
 | SC-005 | ✅ | Tabela abaixo |
 
 ## Comandos de verificação
@@ -147,9 +147,6 @@ Imagens Docker: `postgres:16-alpine`, `redis:7-alpine`, `quay.io/keycloak/keyclo
 
 ## Pendências, bloqueios e riscos
 
-- **[PRECISA ESCLARECIMENTO: plataforma de CI]** continua aberto. Usei o padrão da spec (GitHub Actions). Se for GitLab CI, o workflow precisa ser portado.
-- **Proteção de branch (SC-004):** marcar os jobs `verify`, `integration` e `e2e` como *required status checks* na `main`. Ação humana.
-- **CI não executado no GitHub:** nada foi enviado ao remoto. As versões das actions (`checkout@v5`, `setup-node@v5`, `pnpm/action-setup@v4`, `upload-artifact@v4`) devem ser confirmadas na primeira execução.
 - **ADRs 0002–0004 seguem `Proposta`:** implementado conforme a proposta, como a spec autoriza.
 - **ADR-0005 (IdP) pendente:** a integração é OIDC genérica (emissor + audiência + client id); o Keycloak é só o IdP local. Nada institucional foi assumido.
 - **Fixtures da POC:** não exportadas (pré-requisito humano). Só existe `fixtures/n8n/exemplo-set-if`, marcado como sintético.
@@ -184,3 +181,16 @@ pnpm dev                         # API :3000 e frontend :5173
 - Avaliar a migração para Vitest 4 (remove as vulnerabilidades moderadas restantes) e, mais adiante, NestJS 12.
 - Imagem Docker da API e do frontend para homologação (spec 012), com proxy reverso de mesma origem.
 - Auditar o primeiro login (`user.created`) quando a spec 009 tratar inativação e grupos do IdP.
+
+## Decisões humanas pós-verificação (03/10/2026)
+
+| Pendência | Decisão |
+|---|---|
+| Plataforma de CI | GitHub Actions (ponto em aberto da spec resolvido) |
+| Catálogo de permissões do seed | Mantido como implementado. Cada spec acrescenta e garante as permissões que cria, declaradas na seção "Permissões RBAC" do seu `plan.md` (specs 003, 004, 005, 009 e 010 atualizadas; template de plano também) |
+| ADRs 0002, 0003 e 0004 | Aceitas |
+| Vulnerabilidades moderadas (Vitest) | Migração para o Vitest 4 autorizada e feita |
+| Imagem do MinIO | Mantida a build compilada do código-fonte (Chainguard, fixada por digest) |
+| Proteção da branch `main` e execução do CI | Confirmadas pelo revisor |
+| Workflows da POC em `fixtures/n8n/` | Sem decisão registrada; segue pendente |
+| Cadastro do primeiro usuário | Nova spec criada: [014-primeiro-usuario](../014-primeiro-usuario/spec.md) |

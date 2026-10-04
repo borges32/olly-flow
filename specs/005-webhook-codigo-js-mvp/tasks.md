@@ -40,6 +40,7 @@
 
 ## Fase 6 — Verificação e relatório
 
+- [ ] T089 Permissões RBAC: confirmar `workflow:publish` e `execution:readData` no catálogo e no seed, exigi-las nas rotas e cobri-las no teste da matriz (FR-001, FR-014, FR-017) → plan, Permissões RBAC
 - [ ] T090 Rodar todos os comandos de verificação do AGENTS.md (SC-005)
 - [ ] T091 Conferir que cada FR tem teste que o cita e cada SC foi verificado
 - [ ] T092 Documentar `docs/nos/trigger.webhook.md`, `docs/nos/http.respondToWebhook.md` e `docs/nos/code.javascript.md`

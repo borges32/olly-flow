@@ -107,3 +107,4 @@ Nenhum.
 | Data | Alteração | Motivo |
 |---|---|---|
 | 03/10/2026 | Criação a partir do prompt da Sprint 3 | Migração para SDD |
+| 03/10/2026 | Permissões RBAC explicitadas no plano (seção e tarefa T089), sem mudança de requisito | Decisão humana sobre permissões por spec |

@@ -116,6 +116,17 @@
 | Isolate novo por execução de nó (código) | Reaproveitar o das expressões | Código pode poluir o estado global; isolamento entre nós |
 | Matriz RBAC gerada pelo teste | Documento manual | Fonte única, sem divergência |
 
+## Permissões RBAC
+
+Regra geral (decisão de 03/10/2026): cada spec é responsável pelas permissões que introduz: aplicá-las nas rotas (`@RequirePermission`), garantir que constem do catálogo (`packages/shared-types/src/rbac.ts`), do seed de papéis e de `docs/arquitetura/contratos.md`, e testar o acesso negado por papel.
+
+| Permissão | Situação no catálogo/seed | Papéis com a permissão | O que esta spec faz |
+|---|---|---|---|
+| `workflow:publish` | Já presente desde a spec 001 | admin, editor | Exigir em publicar e despublicar |
+| `execution:readData` | Já presente desde a spec 001 | admin, editor | Omitir dados de execução de quem não a tem (`dataRedacted: true`) |
+
+O teste da matriz papel × ação (FR-017) gera `docs/rbac-matriz.md` a partir do catálogo e do seed reais. Nenhuma permissão nova é criada nesta spec.
+
 ## Estratégia de testes
 
 | Requisito | Tipo | Caso |
@@ -137,3 +148,9 @@
 |---|---|
 | Fixtures da POC indisponíveis | Exemplo sintético + pendência no relatório |
 | Execução em processo degradar a API | Limite de concorrência; fila na spec 006 |
+
+## Histórico de alterações
+
+| Data | Alteração | Motivo |
+|---|---|---|
+| 03/10/2026 | Seção "Permissões RBAC" e tarefa T089 | Decisão humana: cada spec acrescenta e garante as permissões que cria |

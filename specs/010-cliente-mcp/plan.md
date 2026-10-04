@@ -119,6 +119,16 @@ Tabelas `mcp_servers`, `mcp_tool_policies` e `mcp_calls`.
 | Snapshot com bloqueio | Confiar no servidor | Mitiga *tool poisoning*/*rug pull* |
 | stdio em container | Processo no worker | Isola código de terceiros |
 
+## Permissões RBAC
+
+Regra geral (decisão de 03/10/2026): cada spec é responsável pelas permissões que introduz: aplicá-las nas rotas (`@RequirePermission`), garantir que constem do catálogo (`packages/shared-types/src/rbac.ts`), do seed de papéis e de `docs/arquitetura/contratos.md`, e testar o acesso negado por papel.
+
+| Permissão | Situação no catálogo/seed | Papéis com a permissão | O que esta spec faz |
+|---|---|---|---|
+| `mcp:manage` | **Nova**: não existe no catálogo | somente admin | Acrescentar ao catálogo, ao seed e a `contratos.md`; exigir na gestão do catálogo MCP |
+
+Atenção: o seed deriva o editor como "todas as permissões, exceto as de administrador". Ao incluir `mcp:manage` no catálogo, inclua-a também na lista de permissões exclusivas do admin, senão o editor a recebe por consequência. O seed é idempotente: rodá-lo atualiza os papéis existentes. Atualizar `docs/rbac-matriz.md`.
+
 ## Estratégia de testes
 
 | Requisito | Tipo | Caso |
@@ -139,3 +149,9 @@ Tabelas `mcp_servers`, `mcp_tool_policies` e `mcp_calls`.
 | Docker indisponível no ambiente-alvo | `StdioLauncher` com adapter Kubernetes |
 
 Ao concluir, produzir `docs/mcp-governanca.md` (catálogo, políticas, snapshot, ameaças).
+
+## Histórico de alterações
+
+| Data | Alteração | Motivo |
+|---|---|---|
+| 03/10/2026 | Seção "Permissões RBAC" e tarefa T089 | Decisão humana: cada spec acrescenta e garante as permissões que cria |

@@ -7,9 +7,12 @@ import { RequireAuth } from '@/auth/require-auth';
 import { AppLayout } from '@/components/layout/app-layout';
 import { ThemeProvider } from '@/components/theme/theme-provider';
 import { Toaster } from '@/components/ui/toaster';
+import { EditorPage } from '@/editor/editor-page';
+import { AdminPage } from '@/pages/admin-page';
 import { AuthCallbackPage } from '@/pages/auth-callback-page';
 import { HomePage } from '@/pages/home-page';
 import { NotFoundPage } from '@/pages/not-found-page';
+import { WorkflowsPage } from '@/pages/workflows-page';
 import { PlaceholderPage } from '@/pages/placeholder-page';
 
 const queryClient = new QueryClient({
@@ -30,10 +33,11 @@ const router = createBrowserRouter([
         element: <AppLayout />,
         children: [
           { index: true, element: <HomePage /> },
-          { path: 'workflows', element: <PlaceholderPage title="Workflows" spec="002" /> },
+          { path: 'workflows', element: <WorkflowsPage /> },
+          { path: 'workflows/:id', element: <EditorPage /> },
           { path: 'executions', element: <PlaceholderPage title="Execuções" spec="003" /> },
           { path: 'credentials', element: <PlaceholderPage title="Credenciais" spec="004" /> },
-          { path: 'admin', element: <PlaceholderPage title="Administração" spec="002" /> },
+          { path: 'admin', element: <AdminPage /> },
           { path: '*', element: <NotFoundPage /> },
         ],
       },

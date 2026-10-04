@@ -1,4 +1,4 @@
-import type { Permission } from '@olly/shared-types';
+import type { EffectivePermissions } from '@olly/shared-types';
 import { z } from 'zod';
 
 export const accessTokenClaimsSchema = z.object({
@@ -15,5 +15,7 @@ export interface AuthenticatedUser {
   externalId: string;
   email: string;
   name: string | null;
-  permissions: Permission[];
+  /** Membro do grupo de administração global do IdP. */
+  isAdmin: boolean;
+  permissions: EffectivePermissions;
 }

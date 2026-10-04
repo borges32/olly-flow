@@ -95,6 +95,7 @@
   ],
   "users": [
     {
+      "id": "0a1d0000-0000-4000-8000-000000000001",
       "username": "admin@olly.local",
       "email": "admin@olly.local",
       "emailVerified": true,
@@ -111,6 +112,7 @@
       "groups": ["/admin"]
     },
     {
+      "id": "0a1d0000-0000-4000-8000-000000000002",
       "username": "editor@olly.local",
       "email": "editor@olly.local",
       "emailVerified": true,
@@ -127,6 +129,7 @@
       "groups": ["/editor"]
     },
     {
+      "id": "0a1d0000-0000-4000-8000-000000000003",
       "username": "executor@olly.local",
       "email": "executor@olly.local",
       "emailVerified": true,
@@ -143,6 +146,7 @@
       "groups": ["/executor"]
     },
     {
+      "id": "0a1d0000-0000-4000-8000-000000000004",
       "username": "viewer@olly.local",
       "email": "viewer@olly.local",
       "emailVerified": true,

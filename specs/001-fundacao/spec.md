@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| **Status** | Implementada |
+| **Status** | Verificada |
 | **Fase** | 0 — Fundação |
 | **Depende de** | — |
 | **Requisitos de produto** | PR-08 (parcial), PR-15 (parcial), PR-19 (parcial), PR-20 (parcial) |
@@ -114,7 +114,7 @@ Canvas, workflows, execução, nós concretos e fila.
 
 ## Pontos em aberto
 
-- [PRECISA ESCLARECIMENTO: plataforma de CI — GitHub Actions ou GitLab CI?] O padrão é GitHub Actions.
+- ~~[PRECISA ESCLARECIMENTO: plataforma de CI — GitHub Actions ou GitLab CI?]~~ Resolvido em 03/10/2026: **GitHub Actions**.
 
 ## Histórico de alterações
 
@@ -122,3 +122,4 @@ Canvas, workflows, execução, nós concretos e fila.
 |---|---|---|
 | 03/10/2026 | Criação a partir do prompt da Sprint 0 | Migração para SDD |
 | 03/10/2026 | Status `Implementada`; sem mudança de comportamento. Desvios de plano registrados em [report.md](report.md) | Implementação da spec |
+| 03/10/2026 | Ponto em aberto resolvido: CI no GitHub Actions | Decisão humana |

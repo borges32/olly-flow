@@ -1,0 +1,114 @@
+import { Inject, Logger } from '@nestjs/common';
+import {
+  ConnectedSocket,
+  MessageBody,
+  SubscribeMessage,
+  WebSocketGateway,
+  type OnGatewayInit,
+} from '@nestjs/websockets';
+import type { Namespace, Socket } from 'socket.io';
+import { Authenticator, type Authentication } from '../auth/authenticator.js';
+import { AbilityFactory, canInProject } from '../rbac/ability.factory.js';
+import { ResourceResolver } from '../rbac/resource-resolver.js';
+import { ExecutionEventsService, executionRoom, workflowRoom } from './execution-events.service.js';
+import { joinSchema, joinWorkflowSchema } from './executions.schemas.js';
+
+export type JoinAck = { ok: true } | { ok: false; error: 'invalid' | 'not_found' };
+
+/**
+ * Namespace `/executions` (plan §7): o token é validado no handshake e cada `join` verifica
+ * `execution:read` no projeto da execução (FR-013). Sem permissão, responde como inexistente.
+ */
+@WebSocketGateway({ namespace: 'executions' })
+export class ExecutionsGateway implements OnGatewayInit {
+  private readonly logger = new Logger(ExecutionsGateway.name);
+  /** Autenticação feita no handshake, por conexão. */
+  private readonly sessions = new WeakMap<Socket, Authentication>();
+
+  constructor(
+    @Inject(Authenticator) private readonly authenticator: Authenticator,
+    @Inject(AbilityFactory) private readonly abilities: AbilityFactory,
+    @Inject(ResourceResolver) private readonly resources: ResourceResolver,
+    @Inject(ExecutionEventsService) private readonly events: ExecutionEventsService,
+  ) {}
+
+  afterInit(namespace: Namespace): void {
+    this.events.attach(namespace);
+    namespace.use((socket, next) => {
+      const token = (socket.handshake.auth as { token?: unknown }).token;
+      this.authenticator
+        .authenticate(typeof token === 'string' ? token : undefined)
+        .then((auth) => {
+          this.sessions.set(socket, auth);
+          next();
+        })
+        .catch((error: unknown) => {
+          this.logger.debug(`Conexão WebSocket recusada: ${String(error)}`);
+          next(new Error('unauthenticated'));
+        });
+    });
+  }
+
+  @SubscribeMessage('join')
+  async join(@ConnectedSocket() socket: Socket, @MessageBody() body: unknown): Promise<JoinAck> {
+    const parsed = joinSchema.safeParse(body);
+    const auth = this.sessions.get(socket);
+    if (!parsed.success || !auth) return { ok: false, error: 'invalid' };
+    const { executionId } = parsed.data;
+    if (!(await this.canRead(auth, 'execution', executionId)))
+      return { ok: false, error: 'not_found' };
+    await socket.join(executionRoom(executionId));
+    return { ok: true };
+  }
+
+  /**
+   * Entra na sala do workflow para receber os eventos de todas as execuções dele desde o
+   * início, sem depender de conhecer o id antes (evita perder eventos de execuções rápidas).
+   */
+  @SubscribeMessage('joinWorkflow')
+  async joinWorkflow(
+    @ConnectedSocket() socket: Socket,
+    @MessageBody() body: unknown,
+  ): Promise<JoinAck> {
+    const parsed = joinWorkflowSchema.safeParse(body);
+    const auth = this.sessions.get(socket);
+    if (!parsed.success || !auth) return { ok: false, error: 'invalid' };
+    const { workflowId } = parsed.data;
+    if (!(await this.canRead(auth, 'workflow', workflowId)))
+      return { ok: false, error: 'not_found' };
+    await socket.join(workflowRoom(workflowId));
+    return { ok: true };
+  }
+
+  @SubscribeMessage('leaveWorkflow')
+  async leaveWorkflow(
+    @ConnectedSocket() socket: Socket,
+    @MessageBody() body: unknown,
+  ): Promise<{ ok: boolean }> {
+    const parsed = joinWorkflowSchema.safeParse(body);
+    if (parsed.success) await socket.leave(workflowRoom(parsed.data.workflowId));
+    return { ok: parsed.success };
+  }
+
+  /** `execution:read` no projeto do recurso, com permissões recalculadas a cada pedido. */
+  private async canRead(
+    auth: Authentication,
+    kind: 'workflow' | 'execution',
+    id: string,
+  ): Promise<boolean> {
+    const projectId = await this.resources.projectIdFor(kind, id);
+    if (!projectId) return false;
+    const user = await this.authenticator.toUser(auth.account, auth.claims);
+    return canInProject(this.abilities.forUser(user), 'execution:read', projectId);
+  }
+
+  @SubscribeMessage('leave')
+  async leave(
+    @ConnectedSocket() socket: Socket,
+    @MessageBody() body: unknown,
+  ): Promise<{ ok: boolean }> {
+    const parsed = joinSchema.safeParse(body);
+    if (parsed.success) await socket.leave(executionRoom(parsed.data.executionId));
+    return { ok: parsed.success };
+  }
+}

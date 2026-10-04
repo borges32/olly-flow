@@ -108,6 +108,7 @@ Tabelas `users`, `roles`, `projects`, `project_members` e `audit_log`, conforme 
 | `OIDC_ISSUER_URL` | `http://localhost:8080/realms/olly` | Emissor OIDC |
 | `OIDC_CLIENT_ID` | `olly-web` | Client do frontend |
 | `OIDC_AUDIENCE` | `olly-api` | Audience exigida |
+| `OIDC_DISCOVERY_URL` | (= emissor) | Endereço interno para descoberta e JWKS, quando difere do `iss` público |
 | `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET` | — | Object storage |
 
 ## Decisões técnicas
@@ -144,3 +145,5 @@ Tabelas `users`, `roles`, `projects`, `project_members` e `audit_log`, conforme 
 | 03/10/2026 | `/health` passa a incluir `idp` e a responder 503 quando banco ou Redis estão fora | Caso de borda da spec ("IdP fora do ar: `/health` indica a dependência degradada") |
 | 03/10/2026 | Migrations em SQL puro com provider próprio | Rodar igual em build, testes e scripts (ver §3) |
 | 03/10/2026 | MinIO via imagem Chainguard; bucket criado pelo próprio serviço | Imagens oficiais descontinuadas; compatibilidade com `docker compose up --wait` |
+| 03/10/2026 | Profile `app` no compose (API e frontend em containers, `infra/docker/`), `OIDC_DISCOVERY_URL`, `KC_HOSTNAME` fixo e ids fixos dos usuários de teste no realm | Pedido do usuário para testar a UX (pré-requisito humano das specs 002–005). O `sub` estável evita 409 ao recriar o Keycloak |
+| 03/10/2026 | Serviço `db-init` no profile `app` (migrations e seed contínuos) e aviso na UI quando a API falha após o login | Banco recriado com a API no ar deixava a plataforma sem schema, e a UI mostrava um estado vazio enganoso |

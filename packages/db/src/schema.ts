@@ -2,7 +2,9 @@ import type { ColumnType, Generated, Insertable, Selectable, Updateable } from '
 
 // Tipos espelham infra/migrations. Ao alterar uma tabela, atualize os dois.
 
-type Timestamp = ColumnType<Date, Date | string | undefined, Date | string>;
+type Timestamp = ColumnType<Date, Date | string, Date | string>;
+/** Coluna com DEFAULT: opcional no insert. `GeneratedTimestamp` aninharia ColumnType. */
+type GeneratedTimestamp = ColumnType<Date, Date | string | undefined, Date | string>;
 
 export interface UsersTable {
   id: Generated<string>;
@@ -10,7 +12,7 @@ export interface UsersTable {
   email: string;
   name: string | null;
   is_active: Generated<boolean>;
-  created_at: Generated<Timestamp>;
+  created_at: GeneratedTimestamp;
   updated_at: Timestamp | null;
 }
 
@@ -23,14 +25,14 @@ export interface RolesTable {
 export interface ProjectsTable {
   id: Generated<string>;
   name: string;
-  created_at: Generated<Timestamp>;
+  created_at: GeneratedTimestamp;
 }
 
 export interface ProjectMembersTable {
   project_id: string;
   user_id: string;
   role_id: number;
-  created_at: Generated<Timestamp>;
+  created_at: GeneratedTimestamp;
 }
 
 export interface AuditLogTable {
@@ -43,7 +45,74 @@ export interface AuditLogTable {
   /** JSONB: insira com `JSON.stringify`. */
   details: ColumnType<unknown, string | null | undefined, never>;
   ip: string | null;
-  created_at: Generated<Timestamp>;
+  created_at: GeneratedTimestamp;
+}
+
+export interface WorkflowsTable {
+  id: Generated<string>;
+  project_id: string;
+  name: string;
+  version: Generated<number>;
+  deleted_at: Timestamp | null;
+  created_by: string | null;
+  created_at: GeneratedTimestamp;
+  updated_at: GeneratedTimestamp;
+}
+
+export interface WorkflowVersionsTable {
+  workflow_id: string;
+  version: number;
+  /** JSONB: insira com `JSON.stringify`. */
+  definition: ColumnType<unknown, string, never>;
+  message: string | null;
+  created_by: string | null;
+  created_at: GeneratedTimestamp;
+}
+
+export interface WebhooksTable {
+  id: Generated<string>;
+  workflow_id: string;
+  node_id: string;
+  method: string;
+  path: string;
+  active: Generated<boolean>;
+  created_at: GeneratedTimestamp;
+}
+
+export interface ExecutionsTable {
+  id: Generated<string>;
+  workflow_id: string;
+  project_id: string;
+  workflow_version: number | null;
+  mode: 'test' | 'production';
+  trigger_type: string;
+  triggered_by: string | null;
+  status: string;
+  started_at: GeneratedTimestamp;
+  finished_at: Timestamp | null;
+  /** JSONB: insira com `JSON.stringify`. */
+  error: ColumnType<unknown, string | null | undefined, string | null>;
+}
+
+export interface NodeExecutionsTable {
+  execution_id: string;
+  node_id: string;
+  node_name: string;
+  run_index: Generated<number>;
+  status: string;
+  attempts: Generated<number>;
+  pinned: Generated<boolean>;
+  started_at: Timestamp;
+  finished_at: Timestamp | null;
+  items_in: Generated<number>;
+  items_out: Generated<number>;
+  /** JSONB: insira com `JSON.stringify`. */
+  input_data: ColumnType<unknown, string | null | undefined, string | null>;
+  input_sources: ColumnType<unknown, string | null | undefined, string | null>;
+  output_data: ColumnType<unknown, string | null | undefined, string | null>;
+  data_truncated: Generated<boolean>;
+  data_ref: string | null;
+  error: ColumnType<unknown, string | null | undefined, string | null>;
 }
 
 export interface Database {
@@ -52,6 +121,11 @@ export interface Database {
   projects: ProjectsTable;
   project_members: ProjectMembersTable;
   audit_log: AuditLogTable;
+  workflows: WorkflowsTable;
+  workflow_versions: WorkflowVersionsTable;
+  webhooks: WebhooksTable;
+  executions: ExecutionsTable;
+  node_executions: NodeExecutionsTable;
 }
 
 export type User = Selectable<UsersTable>;
@@ -62,3 +136,8 @@ export type Project = Selectable<ProjectsTable>;
 export type ProjectMember = Selectable<ProjectMembersTable>;
 export type AuditLogEntry = Selectable<AuditLogTable>;
 export type NewAuditLogEntry = Insertable<AuditLogTable>;
+export type Workflow = Selectable<WorkflowsTable>;
+export type WorkflowVersion = Selectable<WorkflowVersionsTable>;
+export type Execution = Selectable<ExecutionsTable>;
+export type NodeExecution = Selectable<NodeExecutionsTable>;
+export type NewNodeExecution = Insertable<NodeExecutionsTable>;

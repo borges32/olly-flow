@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| **Status** | Aprovada |
+| **Status** | Verificada |
 | **Fase** | 1 — MVP |
 | **Depende de** | 001 |
 | **Requisitos de produto** | PR-08, PR-15 |
@@ -102,3 +102,4 @@ Nenhum.
 | Data | Alteração | Motivo |
 |---|---|---|
 | 03/10/2026 | Criação a partir do prompt da Sprint 1 | Migração para SDD |
+| 03/10/2026 | Status `Implementada`; sem mudança de comportamento. Desvios de plano registrados em [report.md](report.md) | Implementação da spec |

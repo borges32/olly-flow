@@ -134,6 +134,17 @@
 | Vínculos com origem | Sobrescrever tudo no login | Preserva os ajustes manuais |
 | Vault Transit | Guardar a KEK no Vault KV | A KEK nunca sai do Vault |
 
+## Permissões RBAC
+
+Regra geral (decisão de 03/10/2026): cada spec é responsável pelas permissões que introduz: aplicá-las nas rotas (`@RequirePermission`), garantir que constem do catálogo (`packages/shared-types/src/rbac.ts`), do seed de papéis e de `docs/arquitetura/contratos.md`, e testar o acesso negado por papel.
+
+| Permissão | Situação no catálogo/seed | Papéis com a permissão | O que esta spec faz |
+|---|---|---|---|
+| `audit:read` | Já presente desde a spec 001 | somente admin | Exigir na consulta e exportação da auditoria |
+| `execution:readData` (executor) | Presente; o executor não a tem por padrão | executor, quando `projects.executor_can_read_data` | Concessão condicional por projeto na `AbilityFactory` (plan §9) |
+
+O mapeamento de grupos do IdP para papéis (`group_role_mappings`) reutiliza os papéis existentes; nenhuma permissão nova é criada. Atualizar `docs/rbac-matriz.md`.
+
 ## Estratégia de testes
 
 | Requisito | Tipo | Caso |
@@ -156,3 +167,9 @@
 | Falsos positivos no mascaramento | Validação de dígitos verificadores (CPF/CNPJ/Luhn) |
 
 Ao concluir, produzir `docs/governanca.md` e `docs/lgpd.md` e atualizar `docs/rbac-matriz.md`.
+
+## Histórico de alterações
+
+| Data | Alteração | Motivo |
+|---|---|---|
+| 03/10/2026 | Seção "Permissões RBAC" e tarefa T089 | Decisão humana: cada spec acrescenta e garante as permissões que cria |

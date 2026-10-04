@@ -1,7 +1,7 @@
-import type { JSONSchema7 } from 'json-schema';
+import type { JSONSchema7, JSONSchema7Definition } from 'json-schema';
 import type { BinaryRef, Item, NodeOutput, PortDef, WorkflowNode } from '@olly/shared-types';
 
-export type { JSONSchema7 };
+export type { JSONSchema7, JSONSchema7Definition };
 
 export const NODE_CATEGORIES = [
   'trigger',
@@ -15,7 +15,7 @@ export const NODE_CATEGORIES = [
 export type NodeCategory = (typeof NODE_CATEGORIES)[number];
 
 /** Extensões aceitas em `paramsSchema`, além do JSON Schema draft-07. */
-export const PARAMS_SCHEMA_EXTENSIONS = ['x-display-options', 'x-secret'] as const;
+export const PARAMS_SCHEMA_EXTENSIONS = ['x-display-options', 'x-secret', 'x-hidden'] as const;
 
 export interface NodeExecuteInput {
   /** Itens por porta de entrada. */
@@ -44,6 +44,8 @@ export interface NodeContext {
   readonly node: WorkflowNode;
   /** Valor do parâmetro com expressões já resolvidas para o item. */
   getParam(name: string, itemIndex: number): unknown;
+  /** Grava uma variável da execução, lida pelas expressões seguintes em `$vars` (spec 003). */
+  setVariable(name: string, value: unknown): void;
   getCredential(): Promise<Record<string, unknown>>;
   readonly signal: AbortSignal;
   readonly logger: NodeLogger;

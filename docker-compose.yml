@@ -1,5 +1,9 @@
 # Ambiente local (FR-002): PostgreSQL, Redis, IdP de desenvolvimento e object storage.
 # Uso: docker compose up -d --wait
+#
+# Profile `app`: também sobe a API e o frontend em containers, para testes de UX sem
+# ferramentas de desenvolvimento. Usa as portas 3000 e 5173 (pare o `pnpm dev` antes):
+#   docker compose --profile app up -d --build --wait   →   http://localhost:5173
 name: olly-flow
 
 services:
@@ -38,6 +42,11 @@ services:
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USER:-admin}
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
       KC_HEALTH_ENABLED: 'true'
+      # Emissor público fixo (o `iss` dos tokens é sempre localhost:8080, que é o que o
+      # navegador usa). Os endpoints de backchannel (JWKS, token) respondem no endereço
+      # pelo qual foram chamados, para a API em container usar http://keycloak:8080.
+      KC_HOSTNAME: http://localhost:8080
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: 'true'
     ports:
       - '8080:8080'
     volumes:
@@ -86,6 +95,76 @@ services:
       interval: 5s
       timeout: 5s
       retries: 30
+
+  db-init:
+    # Aplica migrations e seed e continua vigiando: se o banco for recriado com a API no
+    # ar (ex.: `docker compose down -v` sem o profile), o schema volta em segundos.
+    profiles: ['app']
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile
+      target: api
+    init: true
+    command: ['db-keeper']
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-olly}:${POSTGRES_PASSWORD:-olly}@postgres:5432/${POSTGRES_DB:-olly}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'test', '-f', '/tmp/ready']
+      interval: 3s
+      timeout: 3s
+      retries: 40
+
+  api:
+    profiles: ['app']
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile
+      target: api
+    environment:
+      LOG_LEVEL: info
+      API_PORT: 3000
+      DATABASE_URL: postgres://${POSTGRES_USER:-olly}:${POSTGRES_PASSWORD:-olly}@postgres:5432/${POSTGRES_DB:-olly}
+      REDIS_URL: redis://redis:6379
+      OIDC_ISSUER_URL: http://localhost:8080/realms/olly
+      OIDC_DISCOVERY_URL: http://keycloak:8080/realms/olly
+      OIDC_AUDIENCE: ${OIDC_AUDIENCE:-olly-api}
+      OIDC_ADMIN_GROUP: ${OIDC_ADMIN_GROUP:-admin}
+    ports:
+      - '3000:3000'
+    depends_on:
+      db-init:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:3000/health']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  web:
+    profiles: ['app']
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile
+      target: web
+    ports:
+      # Porta fixa: é o redirect URI registrado no client `olly-web` do realm.
+      - '5173:80'
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1/']
+      interval: 5s
+      timeout: 5s
+      retries: 20
 
 volumes:
   postgres-data:

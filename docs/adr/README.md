@@ -10,9 +10,9 @@ Cada decisão segue o formato **Contexto → Decisão → Consequências**.
 | ADR | Título | Status | Decidir até | Afeta specs |
 |---|---|---|---|---|
 | [0001](0001-abordagem-hibrida.md) | Abordagem híbrida: plataforma própria compatível com o N8N | **Aceita** (02/10/2026) | — | Todas |
-| [0002](0002-backend-node-nestjs.md) | Backend em Node.js + TypeScript com NestJS | Proposta | Início da 001 | Todas |
-| [0003](0003-sandbox-javascript.md) | Sandbox JavaScript com isolated-vm em task runner separado | Proposta | Início da 001 | 003, 005 |
-| [0004](0004-runner-python.md) | Runner Python em container isolado | Proposta | Início da 001 | 008 |
+| [0002](0002-backend-node-nestjs.md) | Backend em Node.js + TypeScript com NestJS | **Aceita** (03/10/2026) | — | Todas |
+| [0003](0003-sandbox-javascript.md) | Sandbox JavaScript com isolated-vm em task runner separado | **Aceita** (03/10/2026) | — | 003, 005 |
+| [0004](0004-runner-python.md) | Runner Python em container isolado | **Aceita** (03/10/2026) | — | 008 |
 | [0005](0005-autenticacao-oidc.md) | Autenticação via OIDC federado ao diretório institucional | Proposta — institucional | 009 | 001, 009 |
 | [0006](0006-infraestrutura.md) | Infraestrutura de execução | Proposta — institucional | 006 / 012 | 006, 012 |
 | [0007](0007-gestao-de-segredos.md) | Gestão de segredos | Proposta — institucional | 009 | 004, 009 |

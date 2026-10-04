@@ -1,8 +1,14 @@
+import { Link } from 'react-router';
+import { useProjects } from '@/api/queries';
 import { useMe } from '@/api/use-me';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { ROLE_LABELS } from '@/lib/roles';
 
 export function HomePage() {
   const { data: me } = useMe();
+  const { data: projects, isError: projectsFailed } = useProjects();
+  const isGlobalAdmin = (me?.permissions.global.length ?? 0) > 0;
   return (
     <div className="grid gap-6">
       <div>
@@ -13,23 +19,33 @@ export function HomePage() {
       </div>
       <Card>
         <CardHeader>
-          <CardTitle>Suas permissões</CardTitle>
-          <CardDescription>Concedidas pelos grupos da sua conta institucional.</CardDescription>
+          <CardTitle>Seus projetos</CardTitle>
+          <CardDescription>
+            {isGlobalAdmin
+              ? 'Você é administrador global e tem acesso a todos os projetos.'
+              : 'Projetos dos quais você participa e o seu papel em cada um.'}
+          </CardDescription>
         </CardHeader>
-        <CardContent>
-          {me && me.permissions.length > 0 ? (
-            <ul className="flex flex-wrap gap-2" data-testid="permissions">
-              {me.permissions.map((p) => (
-                <li
-                  key={p}
-                  className="rounded-md bg-accent px-2 py-1 font-mono text-xs text-accent-foreground"
-                >
-                  {p}
+        <CardContent data-testid="projects">
+          {projectsFailed ? (
+            <p className="text-sm text-destructive">Não foi possível carregar os projetos.</p>
+          ) : !projects ? (
+            <p className="text-sm text-muted-foreground">Carregando…</p>
+          ) : projects.length > 0 ? (
+            <ul className="grid gap-2">
+              {projects.map((p) => (
+                <li key={p.id} className="flex items-center justify-between gap-2">
+                  <Link to={`/workflows?project=${p.id}`} className="font-medium hover:underline">
+                    {p.name}
+                  </Link>
+                  {p.role && <Badge variant="secondary">{ROLE_LABELS[p.role]}</Badge>}
                 </li>
               ))}
             </ul>
           ) : (
-            <p className="text-sm text-muted-foreground">Nenhuma permissão atribuída.</p>
+            <p className="text-sm text-muted-foreground">
+              Você ainda não participa de nenhum projeto.
+            </p>
           )}
         </CardContent>
       </Card>

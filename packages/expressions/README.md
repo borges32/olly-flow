@@ -1,5 +1,6 @@
 # packages/expressions
 
-Parser e avaliador de expressões `{{ }}` compatíveis com o N8N.
+Expressões `{{ }}` compatíveis com o N8N ([spec 003](../../specs/003-expressoes-execucao-teste/spec.md), [docs/expressoes.md](../../docs/expressoes.md)).
 
-> Workspace reservado pela [spec 001](../../specs/001-fundacao/spec.md) (FR-001). Implementação na [spec 003](../../specs/003-expressoes-execucao-teste/spec.md).
+- `@olly/expressions`: parser de templates, coleta de expressões nos parâmetros, detecção de referências a nós, tipos do contrato de avaliação. Código puro, sem dependências nativas.
+- `@olly/expressions/isolate`: `IsolateEvaluator`, que avalia em lote dentro de um isolate V8 (isolated-vm, ADR-0003). Só deve ser carregado pelo `apps/task-runner` (processo separado) e pelos testes.

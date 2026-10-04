@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| **Status** | Aprovada |
+| **Status** | Implementada |
 | **Fase** | 1 — MVP |
 | **Depende de** | 002 |
 | **Requisitos de produto** | PR-02, PR-07, PR-11, PR-15, PR-17 (parcial) |
@@ -108,3 +108,5 @@ Nenhum. Divergência registrada: no N8N, `$vars` são variáveis globais somente
 | Data | Alteração | Motivo |
 |---|---|---|
 | 03/10/2026 | Criação a partir do prompt da Sprint 2 | Migração para SDD |
+| 03/10/2026 | Permissões RBAC explicitadas no plano (seção e tarefa T089), sem mudança de requisito | Decisão humana sobre permissões por spec |
+| 03/10/2026 | Status `Implementada`; sem mudança de requisito. Desvios de plano registrados em [report.md](report.md) | Implementação da spec |

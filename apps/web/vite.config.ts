@@ -10,7 +10,12 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, repoRoot, '');
   const apiTarget = env.API_URL ?? 'http://localhost:3000';
   // Mesma origem para a SPA e a API: sem CORS em desenvolvimento.
-  const proxy = { '/api': apiTarget, '/health': apiTarget };
+  const proxy = {
+    '/api': apiTarget,
+    '/health': apiTarget,
+    // Eventos de execução em tempo real (socket.io).
+    '/socket.io': { target: apiTarget, ws: true },
+  };
 
   return {
     envDir: repoRoot,

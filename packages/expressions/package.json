@@ -1,0 +1,36 @@
+{
+  "name": "@olly/expressions",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Expressões {{ }} compatíveis com o N8N: parser, contexto e avaliador em sandbox (isolated-vm)",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./isolate": {
+      "types": "./dist/isolate.d.ts",
+      "default": "./dist/isolate.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "eslint .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@olly/shared-types": "workspace:*",
+    "isolated-vm": "6.2.0",
+    "luxon": "^3.7.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "typescript": "~5.9.3",
+    "vitest": "^4.1.11"
+  }
+}

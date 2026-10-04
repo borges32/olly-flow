@@ -23,4 +23,6 @@ Senha de todos: `olly123`.
 | `executor@olly.local` | Ester Executora | `executor` |
 | `viewer@olly.local` | Vitor Visualizador | `viewer` |
 
+Os usuários têm `id` fixo no arquivo: o `sub` dos tokens não muda quando o realm é reimportado. Sem isso, recriar o Keycloak geraria novos `sub` e a API recusaria o login (409: e-mail já associado a outro usuário).
+
 O realm só é importado se ainda não existir. Após alterar o arquivo, recrie o container: `docker compose up -d --force-recreate keycloak`.

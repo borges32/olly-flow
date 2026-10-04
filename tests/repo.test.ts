@@ -10,13 +10,13 @@ describe('FR-001: monorepo com os workspaces de stack.md', () => {
     'packages/shared-types',
     'packages/nodes',
     'packages/db',
+    'packages/engine',
+    'packages/expressions',
+    'apps/task-runner',
   ];
   const reserved = [
     'apps/worker',
-    'apps/task-runner',
     'apps/python-runner',
-    'packages/engine',
-    'packages/expressions',
     'packages/mcp-client',
     'packages/importer-n8n',
   ];
@@ -74,6 +74,17 @@ describe('FR-002: ambiente local com healthchecks', () => {
         `\\n  ${service}:\\n([\\s\\S]*?)(?=\\n  [a-z-]+:\\n|\\nvolumes:)`,
       ).exec(compose);
       expect(block, `serviço ${service} ausente`).not.toBeNull();
+      expect(block?.[1]).toContain('healthcheck:');
+    },
+  );
+
+  it.each(['db-init', 'api', 'web'])(
+    'serviço %s fica no profile app, com healthcheck',
+    (service) => {
+      const block = new RegExp(
+        `\\n  ${service}:\\n([\\s\\S]*?)(?=\\n  [a-z-]+:\\n|\\nvolumes:)`,
+      ).exec(compose);
+      expect(block?.[1]).toContain("profiles: ['app']");
       expect(block?.[1]).toContain('healthcheck:');
     },
   );

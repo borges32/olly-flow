@@ -60,7 +60,7 @@ Os itens PR-01 a PR-14 são os requisitos originais solicitados. Os itens PR-15 
 |---|---|
 | NFR-G01 | Código de usuário (JS/Python) e expressões executam isolados, sem acesso ao host, com limites de recursos |
 | NFR-G02 | Credenciais criptografadas em repouso; nunca expostas na UI, API, logs ou dados de execução |
-| NFR-G03 | Login exclusivamente via provedor de identidade institucional (OIDC) |
+| NFR-G03 | Login exclusivamente via provedor de identidade institucional (OIDC). A spec 014 (primeiro usuário, em rascunho) pode afetar este requisito |
 | NFR-G04 | Toda ação administrativa e de edição é auditável |
 | NFR-G05 | Dados pessoais mascarados em logs e históricos (LGPD), com retenção configurável |
 | NFR-G06 | Workers escaláveis horizontalmente; falha de um worker não deixa execuções em estado indefinido |
@@ -69,28 +69,28 @@ Os itens PR-01 a PR-14 são os requisitos originais solicitados. Os itens PR-15 
 
 ## 6. Matriz de rastreabilidade (requisito de produto → specs)
 
-| PR | 001 | 002 | 003 | 004 | 005 | 006 | 007 | 008 | 009 | 010 | 011 | 012 | 013 |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| PR-01 While | | | | | | | ● | | | | | | |
-| PR-02 If | | | ● | | | | ○ | | | | | | |
-| PR-03 HTTP | | | | ● | | | | ○ | | | | | |
-| PR-04 Query PG | | | | ● | | | | | | | | | |
-| PR-05 Escrita PG | | | | ● | | | | | | | | | |
-| PR-06 Webhook | | | | | ● | | | | | | | | |
-| PR-07 Log | | | ● | | ● | | | | ○ | | | ○ | |
-| PR-08 RBAC | ○ | ● | | | ● | | | | ○ | | | | |
-| PR-09 JS | | | | | ● | | | | | | | | |
-| PR-10 Python | | | | | | | | ● | | | | | |
-| PR-11 Variáveis | | | ● | | | | | | | | | | |
-| PR-12 Paralelo | | | | | | ● | | | | | | | |
-| PR-13 Merge | | | | | | | ● | | | | | | |
-| PR-14 MCP | | | | | | | | | | ● | ○ | | |
-| PR-15 Editor | ○ | ● | ● | | | | | | | | | | |
-| PR-16 Agent | | | | | | | | | | | ● | | |
-| PR-17 N8N | | | ○ | | ○ | | | | | | | ● | ○ |
-| PR-18 Credenciais | | | | ● | | | | | ○ | | | | |
-| PR-19 Auditoria/LGPD | ○ | | | | ● | | | | ● | | | | |
-| PR-20 Operação | ○ | | | | | ● | | | | | | ● | ● |
+| PR | 001 | 002 | 003 | 004 | 005 | 006 | 007 | 008 | 009 | 010 | 011 | 012 | 013 | 014 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| PR-01 While | | | | | | | ● | | | | | | | |
+| PR-02 If | | | ● | | | | ○ | | | | | | | |
+| PR-03 HTTP | | | | ● | | | | ○ | | | | | | |
+| PR-04 Query PG | | | | ● | | | | | | | | | | |
+| PR-05 Escrita PG | | | | ● | | | | | | | | | | |
+| PR-06 Webhook | | | | | ● | | | | | | | | | |
+| PR-07 Log | | | ● | | ● | | | | ○ | | | ○ | | |
+| PR-08 RBAC | ○ | ● | | | ● | | | | ○ | | | | | ○ |
+| PR-09 JS | | | | | ● | | | | | | | | | |
+| PR-10 Python | | | | | | | | ● | | | | | | |
+| PR-11 Variáveis | | | ● | | | | | | | | | | | |
+| PR-12 Paralelo | | | | | | ● | | | | | | | | |
+| PR-13 Merge | | | | | | | ● | | | | | | | |
+| PR-14 MCP | | | | | | | | | | ● | ○ | | | |
+| PR-15 Editor | ○ | ● | ● | | | | | | | | | | | |
+| PR-16 Agent | | | | | | | | | | | ● | | | |
+| PR-17 N8N | | | ○ | | ○ | | | | | | | ● | ○ | |
+| PR-18 Credenciais | | | | ● | | | | | ○ | | | | | |
+| PR-19 Auditoria/LGPD | ○ | | | | ● | | | | ● | | | | | |
+| PR-20 Operação | ○ | | | | | ● | | | | | | ● | ● | ○ |
 
 ● entrega principal · ○ entrega parcial/complementar
 

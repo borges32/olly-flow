@@ -9,7 +9,7 @@ import { Authenticated } from '../auth/public.decorator.js';
 @ApiBearerAuth()
 @Controller()
 export class MeController {
-  /** FR-006: usuário autenticado e suas permissões efetivas. */
+  /** FR-006 (spec 001) e FR-010 (spec 002): usuário e permissões globais e por projeto. */
   @ApiOperation({ summary: 'Usuário autenticado e permissões efetivas' })
   @Authenticated()
   @Get('me')

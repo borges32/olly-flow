@@ -5,9 +5,12 @@ packages:
 # pnpm 10 não executa scripts de instalação por padrão; liberamos apenas o necessário.
 onlyBuiltDependencies:
   - esbuild
+  # Usa binário pré-compilado; o script só compila se não houver binário para a plataforma.
+  - isolated-vm
 
 # Dependências opcionais nativas/pós-instalação que não precisamos compilar.
 ignoredBuiltDependencies:
+  - '@scarf/scarf'
   - cpu-features
   - protobufjs
   - ssh2

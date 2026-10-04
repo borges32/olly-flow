@@ -172,32 +172,30 @@ describe('FR-005: sincronização do usuário com o IdP', () => {
 });
 
 describe('FR-006: GET /api/v1/me', () => {
-  it('FR-006: retorna usuário e permissões efetivas do papel', async () => {
+  it('FR-006: retorna o usuário e as permissões efetivas (formato da spec 002)', async () => {
     const res = await getMe(await ctx.issuer.sign(editor));
     const { id, ...body } = res.json<MeResponse>();
     expect(id).toMatch(/^[0-9a-f-]{36}$/);
     expect(body).toEqual({
       email: 'editor@olly.local',
       name: 'Eduardo Editor',
-      permissions: [...DEFAULT_ROLE_PERMISSIONS.editor].sort(),
+      permissions: { global: [], projects: {} },
     });
   });
 
-  it('FR-006: vários grupos somam permissões; grupos desconhecidos são ignorados', async () => {
+  it('FR-006: o grupo de administração concede todas as permissões globalmente', async () => {
     const token = await ctx.issuer.sign({
-      sub: 'sub-multi',
-      email: 'multi@olly.local',
-      groups: ['viewer', 'executor', 'grupo-qualquer'],
+      sub: 'sub-admin',
+      email: 'admin@olly.local',
+      groups: ['admin'],
     });
-    expect((await getMe(token)).json<MeResponse>().permissions).toEqual([
-      'execution:read',
-      'workflow:execute',
-      'workflow:read',
-    ]);
+    expect((await getMe(token)).json<MeResponse>().permissions.global).toEqual(
+      [...DEFAULT_ROLE_PERMISSIONS.admin].sort(),
+    );
   });
 
-  it('FR-006: sem grupo de papel, permissões vazias', async () => {
+  it('FR-006: sem nome, devolve name nulo', async () => {
     const token = await ctx.issuer.sign({ sub: 'sub-sem-grupo', email: 'semgrupo@olly.local' });
-    expect((await getMe(token)).json<MeResponse>()).toMatchObject({ name: null, permissions: [] });
+    expect((await getMe(token)).json<MeResponse>()).toMatchObject({ name: null });
   });
 });

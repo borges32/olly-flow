@@ -11,6 +11,23 @@ const envSchema = z.object({
   REDIS_URL: z.url({ protocol: /^rediss?$/ }),
   OIDC_ISSUER_URL: z.url({ protocol: /^https?$/ }),
   OIDC_AUDIENCE: z.string().min(1),
+  // Endereço interno do emissor para descoberta e JWKS, quando difere do `iss` público
+  // (ex.: API em container falando com o IdP pela rede do compose).
+  OIDC_DISCOVERY_URL: z.url({ protocol: /^https?$/ }).optional(),
+  // Grupo do IdP que concede administração global (spec 002). O nome institucional depende
+  // da ADR-0005; o padrão é o grupo do IdP de desenvolvimento.
+  OIDC_ADMIN_GROUP: z.string().min(1).default('admin'),
+  // Spec 003: sandbox de expressões e log de execuções.
+  OLLY_EXPRESSION_TIMEOUT_MS: z.coerce.number().int().min(1).max(10_000).default(100),
+  OLLY_ISOLATE_MEMORY_MB: z.coerce.number().int().min(8).max(4096).default(128),
+  OLLY_NODE_DATA_MAX_BYTES: z.coerce.number().int().min(1024).default(1_048_576),
+  OLLY_TIMEZONE: z
+    .string()
+    .refine(
+      (tz) => Intl.supportedValuesOf('timeZone').includes(tz) || tz === 'UTC',
+      'fuso horário desconhecido',
+    )
+    .default('America/Sao_Paulo'),
 });
 
 export interface AppConfig {
@@ -20,7 +37,13 @@ export interface AppConfig {
   host: string;
   databaseUrl: string;
   redisUrl: string;
-  oidc: { issuerUrl: string; audience: string };
+  oidc: { issuerUrl: string; discoveryUrl?: string; audience: string; adminGroup: string };
+  execution: {
+    expressionTimeoutMs: number;
+    isolateMemoryMb: number;
+    nodeDataMaxBytes: number;
+    timezone: string;
+  };
 }
 
 export const APP_CONFIG = Symbol('APP_CONFIG');
@@ -49,6 +72,17 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     host: e.API_HOST,
     databaseUrl: e.DATABASE_URL,
     redisUrl: e.REDIS_URL,
-    oidc: { issuerUrl: e.OIDC_ISSUER_URL.replace(/\/+$/, ''), audience: e.OIDC_AUDIENCE },
+    oidc: {
+      issuerUrl: e.OIDC_ISSUER_URL.replace(/\/+$/, ''),
+      ...(e.OIDC_DISCOVERY_URL && { discoveryUrl: e.OIDC_DISCOVERY_URL.replace(/\/+$/, '') }),
+      audience: e.OIDC_AUDIENCE,
+      adminGroup: e.OIDC_ADMIN_GROUP,
+    },
+    execution: {
+      expressionTimeoutMs: e.OLLY_EXPRESSION_TIMEOUT_MS,
+      isolateMemoryMb: e.OLLY_ISOLATE_MEMORY_MB,
+      nodeDataMaxBytes: e.OLLY_NODE_DATA_MAX_BYTES,
+      timezone: e.OLLY_TIMEZONE,
+    },
   };
 }

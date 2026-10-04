@@ -132,6 +132,17 @@
 | Validação de IP no `lookup` | Validar só a URL | Protege contra DNS rebinding |
 | Proibir expressão em `query` | Sanitizar | Eliminação do vetor em vez de mitigação |
 
+## Permissões RBAC
+
+Regra geral (decisão de 03/10/2026): cada spec é responsável pelas permissões que introduz: aplicá-las nas rotas (`@RequirePermission`), garantir que constem do catálogo (`packages/shared-types/src/rbac.ts`), do seed de papéis e de `docs/arquitetura/contratos.md`, e testar o acesso negado por papel.
+
+| Permissão | Situação no catálogo/seed | Papéis com a permissão | O que esta spec faz |
+|---|---|---|---|
+| `credential:manage` | Já presente desde a spec 001 | admin, editor | Exigir nas rotas de gestão (criar, editar, excluir, testar) |
+| `credential:use` | Já presente desde a spec 001 | admin, editor | Exigir para listar credenciais e usá-las em nós e na introspecção do Postgres |
+
+Executor e visualizador não recebem nenhuma das duas. Nenhuma permissão nova é criada; se surgir uma, ela entra no catálogo, no seed e em `contratos.md` nesta spec.
+
 ## Estratégia de testes
 
 | Requisito | Tipo | Caso |
@@ -152,3 +163,9 @@
 |---|---|
 | Vazamento de segredo por caminho não previsto | Teste de varredura com valor sentinela em todos os destinos |
 | Pools de conexão esgotando o banco externo | Limite por credencial e fechamento de pools ociosos |
+
+## Histórico de alterações
+
+| Data | Alteração | Motivo |
+|---|---|---|
+| 03/10/2026 | Seção "Permissões RBAC" e tarefa T089 | Decisão humana: cada spec acrescenta e garante as permissões que cria |

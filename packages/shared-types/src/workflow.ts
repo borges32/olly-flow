@@ -167,61 +167,65 @@ export const workflowSettingsSchema = z.object({
  * ids e nomes únicos, arestas e pinData (indexado por id do nó) apontando para nós existentes.
  * A validação de tipos de nó e portas cabe ao registro de nós (spec 002).
  */
-export const workflowDefinitionSchema = z
-  .object({
-    nodes: z.array(workflowNodeSchema),
-    edges: z.array(edgeSchema),
-    settings: workflowSettingsSchema,
-    pinData: z.record(z.string(), z.array(itemSchema)).optional(),
-  })
-  .superRefine((def, ctx) => {
-    const ids = new Set<string>();
-    const names = new Set<string>();
-    def.nodes.forEach((node, i) => {
-      if (ids.has(node.id)) {
+/**
+ * Só a forma do JSON. A API usa este schema e delega as invariantes à validação estrutural
+ * do `@olly/engine`, que identifica os nós envolvidos em cada erro (spec 002, FR-005).
+ */
+export const workflowDefinitionShapeSchema = z.object({
+  nodes: z.array(workflowNodeSchema),
+  edges: z.array(edgeSchema),
+  settings: workflowSettingsSchema,
+  pinData: z.record(z.string(), z.array(itemSchema)).optional(),
+}) satisfies z.ZodType<WorkflowDefinition>;
+
+export const workflowDefinitionSchema = workflowDefinitionShapeSchema.superRefine((def, ctx) => {
+  const ids = new Set<string>();
+  const names = new Set<string>();
+  def.nodes.forEach((node, i) => {
+    if (ids.has(node.id)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['nodes', i, 'id'],
+        message: `id de nó duplicado: ${node.id}`,
+      });
+    }
+    if (names.has(node.name)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['nodes', i, 'name'],
+        message: `nome de nó duplicado: ${node.name}`,
+      });
+    }
+    ids.add(node.id);
+    names.add(node.name);
+  });
+  const edgeIds = new Set<string>();
+  def.edges.forEach((edge, i) => {
+    if (edgeIds.has(edge.id)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['edges', i, 'id'],
+        message: `id de aresta duplicado: ${edge.id}`,
+      });
+    }
+    edgeIds.add(edge.id);
+    for (const end of ['from', 'to'] as const) {
+      if (!ids.has(edge[end])) {
         ctx.addIssue({
           code: 'custom',
-          path: ['nodes', i, 'id'],
-          message: `id de nó duplicado: ${node.id}`,
-        });
-      }
-      if (names.has(node.name)) {
-        ctx.addIssue({
-          code: 'custom',
-          path: ['nodes', i, 'name'],
-          message: `nome de nó duplicado: ${node.name}`,
-        });
-      }
-      ids.add(node.id);
-      names.add(node.name);
-    });
-    const edgeIds = new Set<string>();
-    def.edges.forEach((edge, i) => {
-      if (edgeIds.has(edge.id)) {
-        ctx.addIssue({
-          code: 'custom',
-          path: ['edges', i, 'id'],
-          message: `id de aresta duplicado: ${edge.id}`,
-        });
-      }
-      edgeIds.add(edge.id);
-      for (const end of ['from', 'to'] as const) {
-        if (!ids.has(edge[end])) {
-          ctx.addIssue({
-            code: 'custom',
-            path: ['edges', i, end],
-            message: `nó inexistente: ${edge[end]}`,
-          });
-        }
-      }
-    });
-    for (const nodeId of Object.keys(def.pinData ?? {})) {
-      if (!ids.has(nodeId)) {
-        ctx.addIssue({
-          code: 'custom',
-          path: ['pinData', nodeId],
-          message: `pinData de nó inexistente: ${nodeId}`,
+          path: ['edges', i, end],
+          message: `nó inexistente: ${edge[end]}`,
         });
       }
     }
-  }) satisfies z.ZodType<WorkflowDefinition>;
+  });
+  for (const nodeId of Object.keys(def.pinData ?? {})) {
+    if (!ids.has(nodeId)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['pinData', nodeId],
+        message: `pinData de nó inexistente: ${nodeId}`,
+      });
+    }
+  }
+}) satisfies z.ZodType<WorkflowDefinition>;

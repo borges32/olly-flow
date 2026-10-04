@@ -31,18 +31,18 @@ Três frentes:
 
 ### §1 RBAC (CASL)
 - **`AbilityFactory.forUser(user)`:**
-  - membro do grupo `admin` do IdP: `can('manage', 'all')`;
+  - membro do grupo de administração do IdP (`OIDC_ADMIN_GROUP`, padrão `admin`): `can('manage', 'all')`;
   - demais usuários: para cada `project_members`, as permissões do papel com a condição `{ projectId }`.
-- `@RequirePermission('workflow:update')` + `PermissionGuard`. Um `ResourceResolver` resolve o `projectId` a partir de `:id` (workflow → projeto, credencial → projeto...).
+- `@RequirePermission('workflow:update', { workflow: 'id' })` + `PermissionGuard`. O segundo argumento é o escopo: `{ project: param }`, `{ workflow: param }`, `'global'` ou `'anyProject'`. Um `ResourceResolver` resolve o `projectId` a partir do parâmetro (workflow → projeto, credencial → projeto...). `@RequireProjectMember(param)` exige só ser membro; `@Authenticated()` (spec 001) declara rotas que exigem apenas login.
 - **Recurso de outro projeto:** quando o usuário não é membro, o guard lança `NotFoundException`.
-- **Teste de cobertura:** usa `DiscoveryService` do NestJS para listar todas as rotas e falha se alguma não tiver `@Public` nem `@RequirePermission`.
-- Substitui o `PermissionResolver` da spec 001. `/me` passa a retornar `{ global: [...], projects: { [id]: [...] } }`.
+- **Teste de cobertura:** usa `DiscoveryService` do NestJS para listar todas as rotas e falha se alguma não tiver `@Public`, `@Authenticated` ou `@RequirePermission`/`@RequireProjectMember`.
+- Substitui o `PermissionResolver` da spec 001. `/me` passa a retornar `permissions: { global: [...], projects: { [id]: [...] } }`, mantendo `id`, `email` e `name`.
 
 ### §2 API
 
 | Método | Rota | Permissão | Observação |
 |---|---|---|---|
-| POST/GET/PUT/DELETE | `/projects[/:id]` | `project:manage` (GET: membro) | |
+| POST/GET/PUT/DELETE | `/projects[/:id]` | `project:manage` (GET: membro) | `GET /projects` lista os projetos do usuário (todos, para o administrador global). `DELETE` responde 409 se o projeto tiver workflows |
 | GET/PUT/DELETE | `/projects/:id/members[/:userId]` | `project:manage` | |
 | GET | `/users?search=` | `user:manage` ou `project:manage` | |
 | POST | `/projects/:id/workflows` | `workflow:create` | |
@@ -57,9 +57,9 @@ Todas as mutações geram registro em `audit_log` (`AuditService.record(action, 
 
 ### §3 Validação estrutural (`packages/engine/validate.ts`)
 - Retorna `{ errors: Issue[], warnings: Issue[] }` com `Issue = { code, message, nodeIds[] }`.
-- **Erros:** `EDGE_UNKNOWN_NODE`, `EDGE_UNKNOWN_PORT`, `DUPLICATE_NODE_NAME`, `CYCLE` (via Tarjan/DFS, listando os nós do ciclo).
+- **Erros:** `EDGE_UNKNOWN_NODE`, `EDGE_UNKNOWN_PORT`, `DUPLICATE_NODE_NAME`, `CYCLE` (via Tarjan/DFS, listando os nós do ciclo), além de `NODE_UNKNOWN_TYPE` e `DUPLICATE_NODE_ID` (sem eles não há como validar portas).
 - **Avisos:** `ORPHAN_NODE`.
-- A API rejeita com 422 se houver erros.
+- A API rejeita com 422 se houver erros. Corpo fora do schema zod (forma do JSON) responde 400 com o caminho do campo.
 
 ### §4 Motor sequencial
 - **`ExecutionState`:** mapa `nodeId → { inputs: Record<port, Item[]>, status }` e cálculo de prontidão.
@@ -82,7 +82,7 @@ Todas as mutações geram registro em `audit_log` (`AuditService.record(action, 
 - 409 abre um diálogo "recarregar versão mais recente".
 
 ### §7 Painel de parâmetros
-- Renderizador próprio de JSON Schema: string, number, boolean, enum, array de objetos, objeto e `x-widget: code|json` (Monaco).
+- Renderizador próprio de JSON Schema: string, number, boolean, enum, array de objetos e objeto. O `x-widget: code|json` (Monaco) fica para a primeira spec com um nó que o use (ver Histórico).
 - **`x-display-options`:** `{ show?: { campo: [valores] }, hide?: {...} }`, equivalente ao `displayOptions` do N8N. Documentado em `docs/nos/README.md`.
 - Renomear o nó com validação de unicidade.
 
@@ -93,7 +93,7 @@ Todas as mutações geram registro em `audit_log` (`AuditService.record(action, 
 
 ## Modelo de dados
 
-`workflows`, `workflow_versions` e `webhooks` (estrutura; uso na spec 005), conforme [modelo-dados.md](../../docs/arquitetura/modelo-dados.md).
+`workflows`, `workflow_versions` e `webhooks` (estrutura; uso na spec 005), conforme [modelo-dados.md](../../docs/arquitetura/modelo-dados.md). `workflows.version` guarda a última versão: o salvamento faz `UPDATE ... WHERE version = baseVersion`, e nenhuma linha afetada significa 409.
 
 ## Decisões técnicas
 
@@ -121,3 +121,13 @@ Todas as mutações geram registro em `audit_log` (`AuditService.record(action, 
 |---|---|
 | Desempenho do canvas com muitos nós | Memoização dos componentes de nó; teste com 100 nós |
 | Complexidade do renderizador de formulários | Suportar só o subconjunto de JSON Schema usado pelos nós |
+
+## Histórico de alterações
+
+| Data | Alteração | Motivo |
+|---|---|---|
+| 03/10/2026 | `x-widget: code|json` (Monaco) adiado para a spec do primeiro nó que o use (003 ou 005) | Nenhum nó da spec 002 usa o widget; constituição, Art. IX.2 (sem abstrações para uso futuro) |
+| 03/10/2026 | Grupo de administração global configurável (`OIDC_ADMIN_GROUP`) | O nome do grupo institucional depende da ADR-0005 (Art. VI) |
+| 03/10/2026 | Escopo explícito no `@RequirePermission`, `@RequireProjectMember` e `@Authenticated` aceitos na cobertura | Rotas sem permissão específica (`/me`, `/node-types`, `GET /projects`) precisam de declaração explícita (Art. III.4) |
+| 03/10/2026 | Erros `NODE_UNKNOWN_TYPE` e `DUPLICATE_NODE_ID`; 400 para corpo malformado | Pré-condições da validação de portas e da identificação dos nós |
+| 03/10/2026 | `DELETE /projects/:id` com workflows responde 409; coluna `workflows.version` | Preservar o histórico de versões; concorrência otimista atômica |

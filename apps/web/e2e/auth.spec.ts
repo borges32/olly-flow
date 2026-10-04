@@ -29,7 +29,7 @@ test.describe('FR-007: login OIDC no frontend', () => {
 
     await expect(page.getByTestId('user-name')).toHaveText('Eduardo Editor');
     await expect(page.getByRole('heading', { name: 'Olá, Eduardo Editor' })).toBeVisible();
-    await expect(page.getByTestId('permissions')).toContainText('workflow:create');
+    await expect(page.getByTestId('projects')).toBeVisible();
     await expect(page).toHaveURL('/');
   });
 

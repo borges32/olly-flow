@@ -5,6 +5,7 @@ interface Realm {
   realm: string;
   groups: { name: string }[];
   users: {
+    id?: string;
     username: string;
     email: string;
     enabled: boolean;
@@ -38,6 +39,12 @@ describe('FR-003: usuários de teste do IdP de desenvolvimento', () => {
       expect(user?.credentials.every((c) => !c.temporary)).toBe(true);
     },
   );
+
+  it('FR-003: usuários têm id fixo, para o sub sobreviver à reimportação do realm', () => {
+    const ids = realm.users.map((u) => u.id);
+    expect(ids.every((id) => /^[0-9a-f-]{36}$/.test(id ?? ''))).toBe(true);
+    expect(new Set(ids).size).toBe(realm.users.length);
+  });
 
   it('FR-003: o claim groups traz o nome simples do grupo', () => {
     const mapper = web?.protocolMappers?.find(

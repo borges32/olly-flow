@@ -44,6 +44,7 @@
 
 ## Fase 8 — Verificação e relatório
 
+- [ ] T089 Permissões RBAC: confirmar `audit:read` (somente admin) no catálogo e no seed, exigi-la nas rotas de auditoria e testar a concessão condicional de `execution:readData` ao executor (FR-018) → plan, Permissões RBAC
 - [ ] T090 Rodar todos os comandos de verificação do AGENTS.md
 - [ ] T091 Conferir que cada FR tem teste que o cita e cada SC foi verificado
 - [ ] T092 Documentar `docs/governanca.md` e `docs/lgpd.md`; atualizar `docs/rbac-matriz.md` e `docs/arquitetura/modelo-dados.md`

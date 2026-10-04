@@ -1,22 +1,33 @@
-import { History, KeyRound, LogOut, Settings, Workflow, type LucideIcon } from 'lucide-react';
+import {
+  AlertTriangle,
+  History,
+  KeyRound,
+  LogOut,
+  Settings,
+  Workflow,
+  type LucideIcon,
+} from 'lucide-react';
 import { NavLink, Outlet } from 'react-router';
+import { useCanAnywhere } from '@/api/use-can';
 import { useMe } from '@/api/use-me';
 import { useAuth } from '@/auth/auth-provider';
 import { ThemeToggle } from '@/components/theme/theme-toggle';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
-const NAV: { to: string; label: string; icon: LucideIcon }[] = [
+const NAV: { to: string; label: string; icon: LucideIcon; adminOnly?: boolean }[] = [
   { to: '/workflows', label: 'Workflows', icon: Workflow },
   { to: '/executions', label: 'Execuções', icon: History },
   { to: '/credentials', label: 'Credenciais', icon: KeyRound },
-  { to: '/admin', label: 'Administração', icon: Settings },
+  { to: '/admin', label: 'Administração', icon: Settings, adminOnly: true },
 ];
 
 export function AppLayout() {
   const { user, logout } = useAuth();
-  const { data: me } = useMe();
+  const meQuery = useMe();
+  const me = meQuery.data;
   const displayName = me?.name ?? me?.email ?? user?.profile.name ?? '';
+  const canAdmin = useCanAnywhere('project:manage');
 
   return (
     <div className="flex min-h-svh">
@@ -28,7 +39,7 @@ export function AppLayout() {
           Olly Flow
         </NavLink>
         <nav aria-label="Menu principal" className="grid gap-1 p-2">
-          {NAV.map(({ to, label, icon: Icon }) => (
+          {NAV.filter((item) => !item.adminOnly || canAdmin).map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}
               to={to}
@@ -56,6 +67,23 @@ export function AppLayout() {
             Sair
           </Button>
         </header>
+        {meQuery.isError && (
+          <div
+            role="alert"
+            className="flex items-center gap-3 border-b border-destructive/30 bg-destructive/10 px-6 py-3 text-sm text-destructive"
+          >
+            <AlertTriangle className="size-4 shrink-0" />
+            <span className="flex-1">
+              Você entrou no provedor de identidade, mas a plataforma não conseguiu carregar seus
+              dados
+              {meQuery.error.message ? ` (${meQuery.error.message})` : ''}. Tente novamente em
+              instantes; se persistir, avise o administrador.
+            </span>
+            <Button size="sm" variant="outline" onClick={() => void meQuery.refetch()}>
+              Tentar novamente
+            </Button>
+          </div>
+        )}
         <main className="flex-1 p-6">
           <Outlet />
         </main>

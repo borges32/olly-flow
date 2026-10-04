@@ -1,0 +1,52 @@
+{
+  "nodes": [
+    {
+      "id": "inicio",
+      "type": "trigger.manual",
+      "name": "Início",
+      "params": {},
+      "position": [0, 0]
+    },
+    {
+      "id": "definir",
+      "type": "data.set",
+      "name": "Definir campos",
+      "params": {
+        "fields": [
+          {
+            "name": "nomeCompleto",
+            "type": "string",
+            "value": "={{ $json.nome }} {{ $json.sobrenome }}"
+          },
+          { "name": "maiorDeIdade", "type": "boolean", "value": "={{ $json.idade >= 18 }}" }
+        ],
+        "includeOtherFields": true
+      },
+      "position": [220, 0]
+    },
+    {
+      "id": "se",
+      "type": "logic.if",
+      "name": "Maior de idade?",
+      "params": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.maiorDeIdade }}",
+              "rightValue": "",
+              "operator": { "type": "boolean", "operation": "true" }
+            }
+          ]
+        },
+        "looseTypeValidation": false
+      },
+      "position": [440, 0]
+    }
+  ],
+  "edges": [
+    { "id": "e1", "from": "inicio", "fromPort": "main", "to": "definir", "toPort": "main" },
+    { "id": "e2", "from": "definir", "fromPort": "main", "to": "se", "toPort": "main" }
+  ],
+  "settings": {}
+}

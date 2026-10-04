@@ -1,4 +1,4 @@
-import type { ApiErrorBody } from '@olly/shared-types';
+import type { ApiErrorBody, ApiIssue } from '@olly/shared-types';
 
 export class ApiError extends Error {
   constructor(
@@ -6,6 +6,7 @@ export class ApiError extends Error {
     readonly code: string,
     message: string,
     readonly requestId?: string,
+    readonly issues: ApiIssue[] = [],
   ) {
     super(message);
     this.name = 'ApiError';
@@ -25,6 +26,9 @@ export interface ApiClientOptions {
 export interface ApiClient {
   request<T>(method: string, path: string, body?: unknown): Promise<T>;
   get<T>(path: string): Promise<T>;
+  post<T>(path: string, body?: unknown): Promise<T>;
+  put<T>(path: string, body?: unknown): Promise<T>;
+  delete(path: string): Promise<void>;
 }
 
 function isApiErrorBody(value: unknown): value is ApiErrorBody {
@@ -56,11 +60,18 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
       err?.code ?? 'http_error',
       err?.message ?? res.statusText,
       err?.requestId,
+      err?.issues,
     );
     if (res.status === 401) options.onUnauthorized();
     if (res.status === 403) options.onForbidden(error.message);
     throw error;
   }
 
-  return { request, get: (path) => request('GET', path) };
+  return {
+    request,
+    get: (path) => request('GET', path),
+    post: (path, body) => request('POST', path, body),
+    put: (path, body) => request('PUT', path, body),
+    delete: (path) => request('DELETE', path),
+  };
 }

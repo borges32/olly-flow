@@ -8,9 +8,9 @@
 
 | # | Spec | Fase | Objetivo | Depende de | Status | Marco |
 |---|---|---|---|---|---|---|
-| 001 | [fundacao](../specs/001-fundacao/spec.md) | 0 — Fundação | Monorepo, Compose, OIDC, banco, contratos, CI | — | Implementada ([relatório](../specs/001-fundacao/report.md)) | |
-| 002 | [editor-workflows-rbac](../specs/002-editor-workflows-rbac/spec.md) | 1 — MVP | Canvas, CRUD de workflows, RBAC por projeto, esqueleto do motor | 001 | Aprovada | |
-| 003 | [expressoes-execucao-teste](../specs/003-expressoes-execucao-teste/spec.md) | 1 — MVP | Expressões N8N em sandbox, If, `$vars`, execução de teste, log | 002 | Aprovada | |
+| 001 | [fundacao](../specs/001-fundacao/spec.md) | 0 — Fundação | Monorepo, Compose, OIDC, banco, contratos, CI | — | Verificada ([relatório](../specs/001-fundacao/report.md)) | |
+| 002 | [editor-workflows-rbac](../specs/002-editor-workflows-rbac/spec.md) | 1 — MVP | Canvas, CRUD de workflows, RBAC por projeto, esqueleto do motor | 001 | Verificada ([relatório](../specs/002-editor-workflows-rbac/report.md)) | |
+| 003 | [expressoes-execucao-teste](../specs/003-expressoes-execucao-teste/spec.md) | 1 — MVP | Expressões N8N em sandbox, If, `$vars`, execução de teste, log | 002 | Implementada ([relatório](../specs/003-expressoes-execucao-teste/report.md)) | |
 | 004 | [credenciais-http-postgres](../specs/004-credenciais-http-postgres/spec.md) | 1 — MVP | Credenciais, anti-SSRF, HTTP, Postgres, retry/timeout | 003 | Aprovada | |
 | 005 | [webhook-codigo-js-mvp](../specs/005-webhook-codigo-js-mvp/spec.md) | 1 — MVP | Webhook, publicação, código JS, execuções, matriz RBAC, POC | 004 | Aprovada | 🏁 MVP + Go/No-Go |
 | 006 | [fila-workers-paralelismo](../specs/006-fila-workers-paralelismo/spec.md) | 2 — Execução avançada | Fila, workers, DAG paralelo, cancelamento, cotas | 005 + Go | Aprovada | |
@@ -21,6 +21,7 @@
 | 011 | [ai-agent](../specs/011-ai-agent/spec.md) | 3 — IA e governança | Chat model, Agent, tools, memória, aprovação humana, custo | 010 | Aprovada | 🏁 Agents em homologação |
 | 012 | [observabilidade-importador-homologacao](../specs/012-observabilidade-importador-homologacao/spec.md) | 4 — Hardening | OTel, Grafana, importador N8N, Helm, carga | 011 | Aprovada | |
 | 013 | [hardening-go-live](../specs/013-hardening-go-live/spec.md) | 4 — Hardening | Pentest, documentação, execução paralela ao N8N, go-live | 012 | Aprovada | 🚀 Go-live |
+| 014 | [primeiro-usuario](../specs/014-primeiro-usuario/spec.md) | 1 — MVP (apoio à UX) | Cadastro do primeiro usuário numa instalação nova | 002 | Rascunho | |
 
 As specs estão organizadas por escopo, não por calendário. A referência original era de 13 sprints de 2 semanas com uma equipe de 4 pessoas. Com implementação por agente de IA, o ritmo depende principalmente das revisões humanas entre specs.
 
@@ -37,20 +38,20 @@ Entre cada spec, antes de iniciar a próxima:
 
 | Antes de | Atividade | Responsável |
 |---|---|---|
-| 001 | Confirmar ADRs 0002–0004; exportar workflows de referência da POC para `fixtures/n8n/` | Tech lead + PO |
+| 001 | ~~Confirmar ADRs 0002–0004~~ (aceitas em 03/10/2026); exportar workflows de referência da POC para `fixtures/n8n/` | Tech lead + PO |
 | 002–005 | Revisar código e relatórios; validar UX do editor com usuários da POC | Tech lead + PO |
 | 006 | **Go/No-Go** (TCO vs. N8N Enterprise) registrado em ADR; ADR-0006 (infraestrutura) | Gestão + PO |
 | 009 | ADR-0005 (IdP) e ADR-0007 (Vault/KMS) decididas, com acessos de homologação | Infra + Segurança |
 | 011 | ADR-0008 (provedores e modelos de LLM aprovados) e chaves de homologação | Gestão + Segurança + Jurídico/LGPD |
 | 012 | Exportar **todos** os workflows da POC; agendar pentest; ambiente de homologação; metas de carga (NFR-G08) | PO + Segurança + Infra |
 | 013 | Relatório do pentest; data e janela do go-live; aprovação de riscos aceitos | Segurança + Gestão |
+| 014 | Decidir a relação com a NFR-G03 (credencial no IdP ou local) e resolver os pontos em aberto da spec | PO + Segurança |
 | Pós 013 | Deploy em produção, treinamento, reteste do pentest, hypercare, desligamento do N8N | Infra + PO + Segurança |
 
 ## Decisões pendentes
 
 | ADR | Assunto | Decidir até | Se não estiver decidida |
 |---|---|---|---|
-| 0002–0004 | Stack, sandbox JS, runner Python | Início da 001 | O agente segue a proposta |
 | 0005 | IdP institucional | 009 | Keycloak local + pendência registrada |
 | 0006 | Infraestrutura | 006 / 012 | Docker Compose; Helm testado em kind/k3d |
 | 0007 | Vault/KMS | 009 | Vault local em modo dev |

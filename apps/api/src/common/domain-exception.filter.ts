@@ -6,7 +6,7 @@ import {
   type ArgumentsHost,
   type ExceptionFilter,
 } from '@nestjs/common';
-import type { ApiErrorBody } from '@olly/shared-types';
+import type { ApiErrorBody, ApiIssue } from '@olly/shared-types';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { DomainError } from './errors.js';
 
@@ -30,18 +30,30 @@ export class DomainExceptionFilter implements ExceptionFilter {
     const http = host.switchToHttp();
     const request = http.getRequest<FastifyRequest>();
     const reply = http.getResponse<FastifyReply>();
-    const { status, code, message } = this.describe(exception);
+    const { status, code, message, issues } = this.describe(exception);
 
     if (status >= 500) {
       this.logger.error({ err: exception, requestId: request.id }, message);
     }
-    const body: ApiErrorBody = { error: { code, message, requestId: request.id } };
+    const body: ApiErrorBody = {
+      error: { code, message, requestId: request.id, ...(issues && { issues }) },
+    };
     void reply.status(status).send(body);
   }
 
-  private describe(exception: unknown): { status: number; code: string; message: string } {
+  private describe(exception: unknown): {
+    status: number;
+    code: string;
+    message: string;
+    issues?: ApiIssue[];
+  } {
     if (exception instanceof DomainError) {
-      return { status: exception.httpStatus, code: exception.code, message: exception.message };
+      return {
+        status: exception.httpStatus,
+        code: exception.code,
+        message: exception.message,
+        ...(exception.issues && { issues: exception.issues }),
+      };
     }
     if (exception instanceof HttpException) {
       const status = exception.getStatus();

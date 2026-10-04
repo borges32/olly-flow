@@ -1,12 +1,29 @@
+import type { ApiIssue } from '@olly/shared-types';
+
 /** Erros de domínio. O `DomainExceptionFilter` é o único ponto que os traduz para HTTP. */
 export abstract class DomainError extends Error {
   abstract readonly code: string;
   abstract readonly httpStatus: number;
+  /** Detalhes devolvidos ao cliente (nunca dados sensíveis). */
+  issues?: ApiIssue[];
 
-  constructor(message: string, options?: ErrorOptions) {
+  constructor(message: string, options?: ErrorOptions & { issues?: ApiIssue[] }) {
     super(message, options);
     this.name = new.target.name;
+    if (options?.issues) this.issues = options.issues;
   }
+}
+
+/** Corpo ou parâmetros da requisição fora do schema. */
+export class ValidationError extends DomainError {
+  readonly code = 'validation_failed';
+  readonly httpStatus = 400;
+}
+
+/** Corpo bem formado, mas que viola regras de negócio (ex.: workflow com ciclo). */
+export class UnprocessableError extends DomainError {
+  readonly code = 'unprocessable';
+  readonly httpStatus = 422;
 }
 
 export class UnauthenticatedError extends DomainError {
