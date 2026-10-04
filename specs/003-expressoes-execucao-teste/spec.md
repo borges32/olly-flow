@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| **Status** | Implementada |
+| **Status** | Verificada |
 | **Fase** | 1 — MVP |
 | **Depende de** | 002 |
 | **Requisitos de produto** | PR-02, PR-07, PR-11, PR-15, PR-17 (parcial) |
@@ -29,7 +29,8 @@ Como **editor**, quero executar o workflow no editor e ver o status e os dados d
 
 **Cenários de aceite:**
 1. **Dado** `Manual → Set → If`, **quando** clico em "Executar workflow", **então** cada nó mostra o status em tempo real e posso abrir os dados de entrada e saída em tabela, JSON ou schema.
-2. **Dado** um nó intermediário, **quando** escolho "Executar até este nó", **então** apenas os nós necessários são executados.
+2. **Dado** um nó intermediário, **quando** clico no botão de executar do nó (no canvas ou no painel), **então** apenas os nós necessários são executados: os nós anteriores que já têm dados da última execução, e não foram alterados desde então, são reaproveitados sem executar de novo.
+4. **Dado** que executei um nó, **quando** executo o nó seguinte, **então** posso avançar pelo fluxo um nó por vez, vendo a saída de cada um.
 3. **Dado** dados de saída de um nó, **quando** os fixo (pin), **então** as próximas execuções usam esses dados sem executar o nó.
 
 ### HU-3 — Desvio condicional (P1)
@@ -63,6 +64,7 @@ Como **auditor**, quero que toda execução fique registrada com o status e os d
 - **FR-009**: O nó `data.setVariable` DEVE gravar variáveis da execução, acessíveis via `$vars`, e repassar os itens inalterados.
 - **FR-010**: O nó `logic.if` DEVE avaliar, por item, condições tipadas (string, number, boolean, dateTime, array, object) combinadas por AND/OR, com saídas `true` e `false`.
 - **FR-011**: O sistema DEVE permitir executar um workflow em modo de teste a partir do editor, inclusive sem salvar e até um nó de destino.
+- **FR-020**: O editor DEVE permitir executar um único nó, um por vez, a partir de um botão no próprio nó, reaproveitando os dados da última execução dos nós anteriores. Nós anteriores sem dados, com dados truncados ou alterados desde a execução DEVEM ser executados também. Os dados dos nós posteriores ao nó executado DEVEM ser descartados da visualização.
 - **FR-012**: Durante a execução de teste, o sistema DEVE enviar eventos em tempo real por nó (início, fim, status, contagem de itens).
 - **FR-013**: Somente usuários com permissão de ler execuções do projeto DEVEM receber esses eventos.
 - **FR-014**: Toda execução DEVE ser registrada com status, modo, gatilho, usuário, versão, horários e erro. Cada nó DEVE ser registrado com status, horários, contagens de itens, dados de entrada e saída e erro.
@@ -110,3 +112,4 @@ Nenhum. Divergência registrada: no N8N, `$vars` são variáveis globais somente
 | 03/10/2026 | Criação a partir do prompt da Sprint 2 | Migração para SDD |
 | 03/10/2026 | Permissões RBAC explicitadas no plano (seção e tarefa T089), sem mudança de requisito | Decisão humana sobre permissões por spec |
 | 03/10/2026 | Status `Implementada`; sem mudança de requisito. Desvios de plano registrados em [report.md](report.md) | Implementação da spec |
+| 03/10/2026 | HU-2.2 detalhado e HU-2.4 e FR-020 (executar um nó por vez, reaproveitando dados anteriores, com botão no nó) | Teste de UX: a execução rodava o fluxo inteiro; esperado comportamento do N8N |

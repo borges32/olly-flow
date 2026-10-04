@@ -7,7 +7,7 @@ import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fa
 import { IoAdapter } from '@nestjs/platform-socket.io';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { Logger } from 'nestjs-pino';
-import { AppModule } from './app.module.js';
+import { AppModule, type AppOptions } from './app.module.js';
 import type { AppConfig } from './config/config.js';
 
 const REQUEST_ID = /^[A-Za-z0-9._-]{1,128}$/;
@@ -21,9 +21,12 @@ function requestId(req: IncomingMessage | Http2ServerRequest): string {
   return id;
 }
 
-export async function createApp(config: AppConfig): Promise<NestFastifyApplication> {
+export async function createApp(
+  config: AppConfig,
+  options: AppOptions = {},
+): Promise<NestFastifyApplication> {
   const app = await NestFactory.create<NestFastifyApplication>(
-    AppModule.forRoot(config),
+    AppModule.forRoot(config, options),
     new FastifyAdapter({ genReqId: requestId }),
     { bufferLogs: true },
   );

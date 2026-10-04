@@ -61,6 +61,7 @@
 - **Helper `pairedItem`:** nós 1:1 preenchem automaticamente; o If preserva o índice original.
 - **Pin data:** se `pinData[nodeId]` existir, o nó emite esses itens e não executa.
 - **`destinationNodeId`:** executa apenas os ancestrais do nó de destino e o próprio nó.
+- **Execução de um nó (FR-020):** `runData` traz, por nó, entrada, origem dos itens e saída de uma execução anterior. Esses nós não executam: o motor reaproveita os dados (inclusive para `$('Nó')` e *paired items*), entrega-os aos filhos e os registra como `reused`. Tipos com `rerunOnPartialExecution` (ex.: `data.setVariable`, por causa de `$vars`) executam de novo mesmo assim. O editor decide o que reaproveitar: um ancestral é reaproveitável se tem dados completos (não truncados) da última execução, não mudou desde então (tipo, parâmetros, desabilitado e conexões de entrada) e todos os seus ancestrais também são reaproveitáveis.
 
 ### §5 Nós
 - **`data.set`:** novo parâmetro `includeOtherFields` (padrão `false`); `keepOnlySet` é mantido como alias (`includeOtherFields = !keepOnlySet`).
@@ -88,7 +89,7 @@
 
 ### §7 Execução de teste e WebSocket
 - **`POST /workflows/:id/test-run`** (`workflow:execute`):
-  - corpo `{ definition, pinData?, destinationNodeId? }`;
+  - corpo `{ definition, pinData?, destinationNodeId?, reuse? }`; `reuse` é `{ [nodeId]: executionId }` (FR-020): a API lê de `node_executions` a entrada, a origem dos itens e a saída desses nós, só de execuções do mesmo workflow, com sucesso e sem truncamento, e os entrega ao motor como `runData`;
   - resposta 202 `{ executionId }`;
   - execução assíncrona no processo da API.
 - **Gateway `/executions`:** autentica o JWT no *handshake*. O evento `join { executionId }` verifica `execution:read` no projeto antes de entrar na sala.
@@ -99,7 +100,7 @@
 
 ### §8 Frontend
 - **Painel do nó:** aberto com clique duplo (ou Enter no nó selecionado), em três colunas Entrada | Parâmetros | Saída, com abas Tabela/JSON/Schema; a Entrada pode mostrar a saída de qualquer nó anterior; "Executar até este nó"; "Fixar dados" com edição de JSON. Substitui o painel lateral da spec 002.
-- **Canvas:** status por nó (executando, sucesso com contagem, erro) e marcador de pin.
+- **Canvas:** status por nó (executando, sucesso com contagem, erro) e marcador de pin. Botão **Executar este nó** (play) no nó, ao passar o mouse ou com o nó selecionado; o mesmo comando no painel do nó. Ao executar um nó, os dados dos nós posteriores a ele somem da visualização; os demais são mantidos.
 - **Editor de expressões:**
   - alternador Fixo/Expressão por campo;
   - campo de texto monoespaçado (template sem o `=`), sem Monaco (ver Histórico);
@@ -149,6 +150,7 @@ Nenhuma permissão nova é criada nesta spec.
 | FR-007 | Unidade | `expression-errors.test.ts` |
 | FR-008, FR-009, FR-010 | Unidade | Testes dos nós |
 | FR-011, FR-012, FR-013 | Integração | `test-run.int.test.ts`, `ws-auth.int.test.ts` |
+| FR-020 | Unitário, integração, E2E | `expressions.test.ts` (motor), `partial-run.test.ts`, `store.test.ts`, `test-run.int.test.ts`, `migrations.int.test.ts`, `test-run.spec.ts`, `readonly.spec.ts` |
 | FR-014, FR-015 | Integração | `execution-recorder.int.test.ts` |
 | FR-016, FR-017, FR-018 | E2E | `test-run.spec.ts`, `drag-field.spec.ts` |
 
@@ -169,3 +171,4 @@ Nenhuma permissão nova é criada nesta spec.
 | 03/10/2026 | Sala WebSocket `workflow:<id>` (`joinWorkflow`) além de `execution:<id>` | Execuções rápidas terminavam antes de o editor entrar na sala da execução, e os eventos se perdiam |
 | 03/10/2026 | `GET /executions/:id`; coluna `node_executions.input_sources`; `executions.project_id` | Catch-up do editor; reconstrução dos *paired items* no preview; autorização sem depender do workflow |
 | 03/10/2026 | `NodeContext.setVariable`; extensão `x-hidden` (alias `keepOnlySet` oculto) | Contrato para `data.setVariable`; compatibilidade com workflows da spec 002 |
+| 03/10/2026 | Execução de um nó por vez com reaproveitamento (`runData`), botão no nó, `reuse` no corpo do test-run, coluna `node_executions.reused` (migration 0004), `reused` no evento `nodeFinished` e em `GET /executions/:id`, `rerunOnPartialExecution` no contrato de nó | FR-020 (teste de UX) |

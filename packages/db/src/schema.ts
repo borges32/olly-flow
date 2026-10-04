@@ -102,6 +102,8 @@ export interface NodeExecutionsTable {
   status: string;
   attempts: Generated<number>;
   pinned: Generated<boolean>;
+  /** Saída reaproveitada de uma execução anterior (execução de um nó, spec 003 FR-020). */
+  reused: Generated<boolean>;
   started_at: Timestamp;
   finished_at: Timestamp | null;
   items_in: Generated<number>;
@@ -115,6 +117,19 @@ export interface NodeExecutionsTable {
   error: ColumnType<unknown, string | null | undefined, string | null>;
 }
 
+export interface CredentialsTable {
+  id: Generated<string>;
+  project_id: string;
+  name: string;
+  type: string;
+  /** Envelope cifrado (`packages/db/src/crypto.ts`); nunca sai da API. */
+  data_encrypted: Buffer;
+  key_version: number;
+  created_by: string | null;
+  created_at: GeneratedTimestamp;
+  updated_at: GeneratedTimestamp;
+}
+
 export interface Database {
   users: UsersTable;
   roles: RolesTable;
@@ -126,6 +141,7 @@ export interface Database {
   webhooks: WebhooksTable;
   executions: ExecutionsTable;
   node_executions: NodeExecutionsTable;
+  credentials: CredentialsTable;
 }
 
 export type User = Selectable<UsersTable>;
@@ -141,3 +157,4 @@ export type WorkflowVersion = Selectable<WorkflowVersionsTable>;
 export type Execution = Selectable<ExecutionsTable>;
 export type NodeExecution = Selectable<NodeExecutionsTable>;
 export type NewNodeExecution = Insertable<NodeExecutionsTable>;
+export type Credential = Selectable<CredentialsTable>;

@@ -18,7 +18,8 @@ import type {
   WorkflowVersionSummary,
 } from '@olly/shared-types';
 import type { AuditContext } from '../audit/audit.service.js';
-import { CurrentProjectId } from '../auth/current-user.decorator.js';
+import type { AuthenticatedUser } from '../auth/auth.types.js';
+import { CurrentProjectId, CurrentUser } from '../auth/current-user.decorator.js';
 import { Audit } from '../common/audit-context.decorator.js';
 import { ZodPipe } from '../common/zod.pipe.js';
 import { RequirePermission } from '../rbac/require-permission.decorator.js';
@@ -42,10 +43,11 @@ export class WorkflowsController {
   @Post('projects/:id/workflows')
   create(
     @Audit() audit: AuditContext,
+    @CurrentUser() user: AuthenticatedUser,
     @CurrentProjectId() projectId: string,
     @Body(new ZodPipe(createWorkflowSchema)) body: CreateWorkflowBody,
   ): Promise<WorkflowDetail> {
-    return this.workflows.create(audit, projectId, body);
+    return this.workflows.create(audit, user, projectId, body);
   }
 
   @RequirePermission('workflow:read', { project: 'id' })
@@ -67,10 +69,11 @@ export class WorkflowsController {
   @Put('workflows/:id')
   save(
     @Audit() audit: AuditContext,
+    @CurrentUser() user: AuthenticatedUser,
     @Param('id') id: string,
     @Body(new ZodPipe(saveWorkflowSchema)) body: SaveWorkflowBody,
   ): Promise<WorkflowDetail> {
-    return this.workflows.save(audit, id, body);
+    return this.workflows.save(audit, user, id, body);
   }
 
   @RequirePermission('workflow:delete', { workflow: 'id' })

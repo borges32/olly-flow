@@ -31,7 +31,12 @@ test('spec 002 — SC-002/FR-015: visualizador vê o canvas somente leitura e a 
   await expect(panel.getByRole('button', { name: 'Adicionar' })).toBeHidden();
 
   await page.keyboard.press('Escape');
+  await page.locator('.react-flow__edge').hover({ force: true });
+  await expect(page.getByRole('button', { name: 'Excluir conexão' })).toBeHidden();
   await setNode.click();
+  // Sem workflow:execute, não há botão de executar no nó (spec 003, FR-020).
+  await expect(page.getByRole('button', { name: 'Executar workflow' })).toBeHidden();
+  await expect(setNode.getByTestId('node-run')).toHaveCount(0);
   await page.keyboard.press('Delete');
   await expect(setNode).toBeVisible();
   await expect(page.getByTestId('dirty-indicator')).toBeHidden();

@@ -19,6 +19,14 @@ const env = {
 const ISSUER = env.OIDC_ISSUER_URL ?? 'http://localhost:8080/realms/olly';
 export const API_URL = `http://localhost:${env.API_PORT ?? '3000'}`;
 export const PASSWORD = 'olly123';
+/** Banco da plataforma no compose, usado como banco "externo" nos testes de integração (spec 004). */
+export const DB = {
+  host: 'localhost',
+  port: 5432,
+  database: env.POSTGRES_DB ?? 'olly',
+  user: env.POSTGRES_USER ?? 'olly',
+  password: env.POSTGRES_PASSWORD ?? 'olly',
+};
 
 export type TestUsername = 'admin' | 'editor' | 'executor' | 'viewer';
 

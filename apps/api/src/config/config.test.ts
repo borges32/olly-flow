@@ -6,6 +6,7 @@ const valid = {
   REDIS_URL: 'redis://localhost:6379',
   OIDC_ISSUER_URL: 'http://localhost:8080/realms/olly/',
   OIDC_AUDIENCE: 'olly-api',
+  OLLY_MASTER_KEY: Buffer.alloc(32, 7).toString('base64'),
 };
 
 describe('configuração da API (validação zod na inicialização)', () => {
@@ -37,5 +38,43 @@ describe('configuração da API (validação zod na inicialização)', () => {
       expect(String(error)).toMatch(/API_PORT/);
       expect(String(error)).not.toMatch(/segredo-do-banco/);
     }
+  });
+
+  it('spec 004 — FR-001: a API não sobe sem chave mestra válida, e o erro não mostra a chave', () => {
+    expect(() => loadConfig({ ...valid, OLLY_MASTER_KEY: undefined })).toThrow(/OLLY_MASTER_KEY/);
+    const short = Buffer.alloc(16, 9).toString('base64');
+    try {
+      loadConfig({ ...valid, OLLY_MASTER_KEY: short });
+      expect.unreachable();
+    } catch (error) {
+      expect(String(error)).toMatch(/OLLY_MASTER_KEY: deve ser uma chave de 32 bytes/);
+      expect(String(error)).not.toContain(short);
+    }
+  });
+
+  it('spec 004 — FR-008/NFR-001/NFR-002: allowlist, limites e S3 opcional', () => {
+    const config = loadConfig({
+      ...valid,
+      OLLY_HTTP_ALLOWLIST: ' 10.0.0.0/8, api.interna ,',
+      OLLY_HTTP_MAX_RESPONSE_MB: '2',
+    });
+    expect(config.http).toEqual({
+      allowlist: ['10.0.0.0/8', 'api.interna'],
+      maxResponseBytes: 2 * 1024 * 1024,
+    });
+    expect(config.postgres.poolMax).toBe(5);
+    expect(config.s3).toBeUndefined();
+    expect(loadConfig(valid).http).toEqual({ allowlist: [], maxResponseBytes: 50 * 1024 * 1024 });
+    const s3 = loadConfig({
+      ...valid,
+      S3_ENDPOINT: 'http://minio:9000',
+      S3_ACCESS_KEY: 'a',
+      S3_SECRET_KEY: 'b',
+    }).s3;
+    expect(s3).toMatchObject({
+      endpoint: 'http://minio:9000',
+      bucket: 'olly',
+      region: 'us-east-1',
+    });
   });
 });

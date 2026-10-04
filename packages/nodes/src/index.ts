@@ -7,3 +7,23 @@ export { setNode, SET_FIELD_TYPES, type SetFieldType } from './data/set/definiti
 export { setVariableNode } from './data/set-variable/definition.js';
 export { ifNode } from './logic/if/definition.js';
 export { CONDITION_TYPES, OPERATIONS, type ConditionType } from './logic/if/operators.js';
+export * from './credentials/definitions.js';
+export * from './credentials/registry.js';
+export * from './credentials/test.js';
+export * from './shared/http-guard.js';
+export { OAuth2TokenCache, applyHttpCredential } from './http/auth.js';
+export {
+  createHttpRequestNode,
+  DEFAULT_HTTP_MAX_RESPONSE_BYTES,
+  DEFAULT_HTTP_TIMEOUT_MS,
+} from './http/request/definition.js';
+export { PoolManager, DEFAULT_PG_POOL_MAX, connectionConfig } from './postgres/pool.js';
+export {
+  ColumnCache,
+  listSchemas,
+  listTables,
+  listColumns,
+  type ColumnInfo,
+} from './postgres/catalog.js';
+export { createPostgresQueryNode } from './postgres/query/definition.js';
+export { createPostgresWriteNode } from './postgres/write/definition.js';

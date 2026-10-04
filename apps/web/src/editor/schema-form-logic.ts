@@ -1,4 +1,4 @@
-import type { JSONSchema7, JSONSchema7Definition } from '@olly/nodes';
+import type { JSONSchema7, JSONSchema7Definition, LoadOptionsSource } from '@olly/nodes';
 
 /** `x-display-options`: equivalente ao `displayOptions` do N8N (ver docs/nos/README.md). */
 export interface DisplayOptions {
@@ -11,6 +11,12 @@ export type ParamSchema = JSONSchema7 & {
   'x-secret'?: boolean;
   /** Parâmetro legado: aceito, mas não exibido. */
   'x-hidden'?: boolean;
+  /** Campo sem modo expressão (ex.: SQL, identificadores; spec 004). */
+  'x-no-expression'?: boolean;
+  /** Área de texto em vez de linha única. */
+  'x-multiline'?: boolean;
+  /** Opções buscadas no catálogo do banco da credencial do nó. */
+  'x-load-options'?: LoadOptionsSource;
 };
 
 export function asSchema(def: JSONSchema7Definition | undefined): ParamSchema {

@@ -5,6 +5,7 @@ export const testRunSchema = z.object({
   definition: workflowDefinitionShapeSchema,
   pinData: z.record(z.string(), z.array(itemSchema)).optional(),
   destinationNodeId: z.string().min(1).optional(),
+  reuse: z.record(z.string().min(1), z.uuid()).optional(),
 });
 export type TestRunBody = z.infer<typeof testRunSchema>;
 

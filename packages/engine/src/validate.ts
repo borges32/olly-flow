@@ -8,7 +8,8 @@ export type IssueCode =
   | 'EDGE_UNKNOWN_NODE'
   | 'EDGE_UNKNOWN_PORT'
   | 'CYCLE'
-  | 'ORPHAN_NODE';
+  | 'ORPHAN_NODE'
+  | 'EXPRESSION_NOT_ALLOWED';
 
 export interface Issue {
   code: IssueCode;
@@ -68,6 +69,35 @@ export function findCycles(nodeIds: string[], edges: { from: string; to: string 
   return cycles;
 }
 
+type SchemaNode = {
+  properties?: Record<string, unknown>;
+  items?: unknown;
+  'x-no-expression'?: boolean;
+};
+
+/**
+ * Caminhos de parâmetros marcados com `x-no-expression` que receberam uma expressão (valor
+ * iniciado por `=`), percorrendo objetos e listas (spec 004, FR-012).
+ */
+export function expressionsInStaticParams(schema: unknown, value: unknown, path = ''): string[] {
+  if (typeof schema !== 'object' || schema === null) return [];
+  const s = schema as SchemaNode;
+  if (s['x-no-expression'] && typeof value === 'string' && value.startsWith('=')) return [path];
+  if (Array.isArray(value)) {
+    return value.flatMap((v, i) => expressionsInStaticParams(s.items, v, `${path}[${i}]`));
+  }
+  if (typeof value === 'object' && value !== null && s.properties) {
+    return Object.entries(s.properties).flatMap(([key, sub]) =>
+      expressionsInStaticParams(
+        sub,
+        (value as Record<string, unknown>)[key],
+        path ? `${path}.${key}` : key,
+      ),
+    );
+  }
+  return [];
+}
+
 /**
  * Validação estrutural ao salvar (FR-004). Erros impedem o salvamento; avisos não.
  * A forma do JSON é validada antes pelo schema zod de `@olly/shared-types`.
@@ -85,10 +115,18 @@ export function validateWorkflow(
   for (const node of def.nodes) {
     byId.set(node.id, [...(byId.get(node.id) ?? []), node.id]);
     byName.set(node.name, [...(byName.get(node.name) ?? []), node.id]);
-    if (!registry.get(node.type)) {
+    const type = registry.get(node.type);
+    if (!type) {
       errors.push({
         code: 'NODE_UNKNOWN_TYPE',
         message: `Nó "${node.name}": tipo desconhecido "${node.type}"`,
+        nodeIds: [node.id],
+      });
+    }
+    for (const path of expressionsInStaticParams(type?.paramsSchema, node.params)) {
+      errors.push({
+        code: 'EXPRESSION_NOT_ALLOWED',
+        message: `Nó "${node.name}": o parâmetro "${path}" não aceita expressões`,
         nodeIds: [node.id],
       });
     }

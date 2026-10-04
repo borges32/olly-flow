@@ -22,7 +22,7 @@ export interface WorkflowNode {
   position: [number, number];
   disabled?: boolean;
   settings?: {
-    retry?: { maxTries: number; waitMs: number; backoff?: 'fixed' | 'exponential' };
+    retry?: { maxTries: number; waitMs: number; backoff?: 'fixed' | 'exponential' }; // 1–10, 0–60 000 ms (spec 004)
     timeoutMs?: number;
     onError?: 'stop' | 'continue' | 'errorOutput';
     parallelItems?: { enabled: boolean; concurrency: number };
@@ -67,11 +67,13 @@ export interface NodeDefinition {
   paramsSchema: JSONSchema7;                      // gera o formulário; extensões x-display-options, x-secret
   credentialTypes?: string[];
   supportsParallelItems?: boolean;                // spec 006
+  rerunOnPartialExecution?: boolean;              // roda de novo ao executar um nó adiante (spec 003, FR-020)
+  // spec 004: paramsSchema aceita x-no-expression, x-multiline e x-load-options (docs/nos/README.md)
   execute(input: NodeExecuteInput, ctx: NodeContext): Promise<NodeOutput>;
 }
 ```
 
-`NodeContext` oferece, entre outros: `getParam(name, itemIndex)` (com expressões já resolvidas para o item; erros de expressão são lançados como `ExpressionError` na leitura), `setVariable(name, value)` (variável da execução, lida em `$vars`; spec 003), `getCredential()`, `signal` (`AbortSignal`), `logger` e `helpers` (paired items, binários). `NodeExecuteInput` traz `inputs` (itens por porta) e `items` (atalho para `inputs.main`).
+`NodeContext` oferece, entre outros: `getParam(name, itemIndex)` (com expressões já resolvidas para o item; erros de expressão são lançados como `ExpressionError` na leitura), `setVariable(name, value)` (variável da execução, lida em `$vars`; spec 003), `getCredential()` (spec 004: devolve `{ id, type, data, updatedAt }`, a credencial do nó decifrada e verificada contra o projeto do workflow), `signal` (`AbortSignal`, abortado pelo timeout do nó ou pelo cancelamento), `logger` e `helpers` (paired items, binários no object storage e `registerSecret(valor)`, que inclui um segredo derivado, como um token OAuth2, no mascaramento). `NodeExecuteInput` traz `inputs` (itens por porta) e `items` (atalho para `inputs.main`).
 
 `NodeRegistry` (`register`, `get(type, version?)`, `list()` sem `execute`) recusa nós cujo `paramsSchema` não seja um JSON Schema draft-07 válido com `type: "object"` na raiz. Palavras-chave desconhecidas são erro; as extensões aceitas são `x-display-options`, `x-secret` e `x-hidden` (ver [docs/nos/README.md](../nos/README.md)).
 
@@ -105,6 +107,8 @@ export interface NodeDefinition {
 | `audit:read` | 009 |
 | `mcp:manage` | 010 |
 
+**Spec 004:** listar credenciais e usá-las em nós (associar ao salvar, catálogo do Postgres) exige `credential:use`; criar, editar, excluir e testar exige `credential:manage`. Sem `credential:use`, a execução de teste de um workflow com credenciais só aceita a versão salva.
+
 **Responsabilidade por spec (decisão de 03/10/2026):** cada spec acrescenta as permissões que cria ao catálogo, ao seed e a esta tabela, e as declara na seção "Permissões RBAC" do seu `plan.md`. As permissões das specs 002 a 009 já estão no catálogo e no seed desde a spec 001; essas specs apenas as aplicam e testam.
 
 Catálogo e papéis padrão em `packages/shared-types/src/rbac.ts` (seed da spec 001): `admin` tem todas; `editor`, todas exceto `user:manage`, `project:manage` e `audit:read`; `executor`, `workflow:read`, `workflow:execute` e `execution:read`; `viewer`, `workflow:read` e `execution:read`. `mcp:manage` entra no catálogo e no seed na spec 010.
@@ -125,4 +129,4 @@ Matriz por papel: [`docs/rbac-matriz.md`](../rbac-matriz.md), gerada pelo teste 
 - Autenticação no handshake (`auth.token` = access token). Salas, com `execution:read` verificado no projeto a cada pedido (resposta `{ ok: false, error: 'not_found' }` sem permissão):
   - `join { executionId }` → sala `execution:<id>`;
   - `joinWorkflow { workflowId }` → sala `workflow:<id>`, que recebe os eventos de todas as execuções do workflow desde o início (o editor entra ao abrir, antes de conhecer o id da execução).
-- Eventos (tipos `ExecutionEvents` em `@olly/shared-types`): `executionStarted` · `nodeStarted` · `nodeFinished` (status, contagens, duração, dados truncados; `runIndex` a partir da spec 007) · `executionFinished` · `agentStep` (spec 011) · `testWebhookReceived` (spec 005).
+- Eventos (tipos `ExecutionEvents` em `@olly/shared-types`): `executionStarted` · `nodeStarted` · `nodeFinished` (status, contagens, duração, dados truncados, `pinned`, `reused`; `runIndex` a partir da spec 007) · `executionFinished` · `agentStep` (spec 011) · `testWebhookReceived` (spec 005).

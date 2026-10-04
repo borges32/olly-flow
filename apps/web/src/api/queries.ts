@@ -1,5 +1,6 @@
-import type { NodeDescription } from '@olly/nodes';
+import type { CredentialTypeDescription, NodeDescription } from '@olly/nodes';
 import type {
+  CredentialSummary,
   Paginated,
   ProjectMember,
   ProjectSummary,
@@ -17,6 +18,10 @@ export const queryKeys = {
   workflow: (id: string) => ['workflows', id] as const,
   nodeTypes: ['node-types'] as const,
   users: (search: string) => ['users', search] as const,
+  credentials: (projectId: string) => ['projects', projectId, 'credentials'] as const,
+  credentialTypes: ['credential-types'] as const,
+  postgresOptions: (credentialId: string, source: string, schema = '', table = '') =>
+    ['credentials', credentialId, 'postgres', source, schema, table] as const,
 };
 
 export function useProjects() {
@@ -75,5 +80,24 @@ export function useUserSearch(search: string, enabled: boolean) {
     queryKey: queryKeys.users(search),
     queryFn: () => api.get<UserSummary[]>(`/api/v1/users?search=${encodeURIComponent(search)}`),
     enabled,
+  });
+}
+
+/** Credenciais do projeto, sem segredos (spec 004). Exige `credential:use`. */
+export function useCredentials(projectId: string | undefined, enabled = true) {
+  const api = useApi();
+  return useQuery({
+    queryKey: queryKeys.credentials(projectId ?? ''),
+    queryFn: () => api.get<CredentialSummary[]>(`/api/v1/projects/${projectId ?? ''}/credentials`),
+    enabled: enabled && projectId !== undefined,
+  });
+}
+
+export function useCredentialTypes() {
+  const api = useApi();
+  return useQuery({
+    queryKey: queryKeys.credentialTypes,
+    queryFn: () => api.get<CredentialTypeDescription[]>('/api/v1/credential-types'),
+    staleTime: Infinity,
   });
 }

@@ -34,6 +34,7 @@
 - [x] T033 Painel do nó em três colunas, visões e status no canvas (FR-017) → plan §8
 - [x] T034 Pin data na UI (FR-016)
 - [x] T035 E2E `test-run.spec.ts` (SC-001)
+- [x] T036 Executar um nó por vez: `runData` no motor e na API, coluna `reused`, botão no nó, plano de reaproveitamento no editor + testes (FR-020) → plan §4, §8
 
 ## Fase 5 — HU-4: Ajuda na montagem de expressões (P2)
 

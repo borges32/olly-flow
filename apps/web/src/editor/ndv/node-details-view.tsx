@@ -83,13 +83,14 @@ function PinEditor({
 
 /**
  * Painel do nó em três colunas, como o NDV do N8N (FR-017, plan §8): Entrada | Parâmetros |
- * Saída, com dados da última execução de teste, pin data e "Executar até este nó".
+ * Saída, com dados da última execução de teste, pin data e "Executar este nó" (FR-020).
  */
 export function NodeDetailsView({
   node,
   description,
   workflowId,
   readOnly,
+  projectId,
   canExecute,
   onRunToNode,
   onClose,
@@ -98,6 +99,7 @@ export function NodeDetailsView({
   description: NodeDescription | undefined;
   workflowId: string;
   readOnly: boolean;
+  projectId: string;
   canExecute: boolean;
   onRunToNode: (nodeId: string) => void;
   onClose: () => void;
@@ -147,6 +149,14 @@ export function NodeDetailsView({
     (description?.outputs ?? []).map((p) => [p.name, p.displayName ?? p.name]),
   );
 
+  // Os dados de cada nó podem vir de execuções diferentes (FR-020): usa a do nó ou de um pai.
+  const previewExecutionId =
+    run.nodes[node.id]?.executionId ??
+    edges
+      .map((e) => (e.to === node.id ? run.nodes[e.from]?.executionId : undefined))
+      .find(Boolean) ??
+    run.executionId;
+
   const helpers = useMemo((): ExpressionHelpers => {
     const schemaOf = (items: Item[] | undefined): SchemaField[] => inferSchema(items ?? []);
     const nodeSchemas = Object.fromEntries(
@@ -163,10 +173,10 @@ export function NodeDetailsView({
           definition: useEditorStore.getState().definition(),
           nodeId: node.id,
           expression,
-          ...(run.executionId && { executionId: run.executionId }),
+          ...(previewExecutionId && { executionId: previewExecutionId }),
         }),
     };
-  }, [ancestors, inputData, run, api, workflowId, node.id]);
+  }, [ancestors, inputData, run, api, workflowId, node.id, previewExecutionId]);
 
   const store = useEditorStore.getState;
 
@@ -244,7 +254,12 @@ export function NodeDetailsView({
             />
             <div className="min-h-0 overflow-y-auto">
               <ExpressionContext.Provider value={helpers}>
-                <ParameterPanel node={node} description={description} readOnly={readOnly} />
+                <ParameterPanel
+                  node={node}
+                  description={description}
+                  readOnly={readOnly}
+                  projectId={projectId}
+                />
               </ExpressionContext.Provider>
             </div>
             {editingPin ? (
@@ -283,7 +298,7 @@ export function NodeDetailsView({
                           onRunToNode(node.id);
                         }}
                       >
-                        <Play /> Executar até este nó
+                        <Play /> Executar este nó
                       </Button>
                     )}
                     {!readOnly && pinned && (

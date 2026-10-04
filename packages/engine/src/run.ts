@@ -1,8 +1,22 @@
-import type { NodeContext, NodeDefinition, NodeLogger, NodeRegistry } from '@olly/nodes';
+import {
+  errorJson,
+  type NodeContext,
+  type NodeDefinition,
+  type NodeLogger,
+  type NodeRegistry,
+  type ResolvedCredential,
+} from '@olly/nodes';
 import type { ExpressionEvaluator } from '@olly/expressions';
-import type { Item, NodeOutput, WorkflowDefinition, WorkflowNode } from '@olly/shared-types';
+import type {
+  BinaryRef,
+  Item,
+  NodeOutput,
+  WorkflowDefinition,
+  WorkflowNode,
+} from '@olly/shared-types';
 import { resolveNodeParams, type ExpressionScope, type ParamResolver } from './expressions.js';
 import { fillPairedItems } from './paired.js';
+import { redactSecrets } from './redact.js';
 import { ExecutionState, type NodeRunStatus, type SourceRef } from './state.js';
 import { findCycles } from './validate.js';
 
@@ -18,6 +32,10 @@ export interface NodeRunRecord {
   output?: NodeOutput;
   error?: { name: string; message: string };
   pinned: boolean;
+  /** Saída reaproveitada de uma execução anterior: o nó não executou (FR-020). */
+  reused: boolean;
+  /** Tentativas feitas (spec 004, FR-017): 1 sem retry. */
+  attempts: number;
   itemsIn: number;
   itemsOut: number;
 }
@@ -31,6 +49,35 @@ export interface RunCallbacks {
   onExecutionFinish?(result: RunResult): void | Promise<void>;
 }
 
+/** Dados de um nó numa execução anterior, para reaproveitar (spec 003, FR-020). */
+export interface ReusedNodeRun {
+  inputs: Record<string, Item[]>;
+  inputSources: Record<string, SourceRef[]>;
+  output: NodeOutput;
+}
+
+/** Credencial do nó e os valores que não podem aparecer em dados gravados (spec 004). */
+export interface CredentialAccess {
+  credential: ResolvedCredential;
+  secrets: string[];
+}
+
+/** Resolve a credencial de um nó (`node.credentialId`), verificando o projeto (API). */
+export type CredentialResolver = (node: WorkflowNode) => Promise<CredentialAccess>;
+
+/** Armazenamento de binários (object storage), fornecido pela API (spec 004, FR-010). */
+export interface BinaryStore {
+  put(data: Uint8Array, meta: Omit<BinaryRef, 'id' | 'size'>): Promise<BinaryRef>;
+  get(ref: BinaryRef): Promise<Uint8Array>;
+}
+
+export class NodeTimeoutError extends Error {
+  override name = 'NodeTimeoutError';
+  constructor(readonly timeoutMs: number) {
+    super(`Tempo limite do nó excedido (${timeoutMs} ms)`);
+  }
+}
+
 export interface RunOptions {
   /** Itens entregues ao gatilho. Sem itens, `trigger.manual` emite um item vazio. */
   triggerItems?: Item[];
@@ -40,6 +87,12 @@ export interface RunOptions {
   destinationNodeId?: string;
   /** Saídas fixadas por id do nó: o nó emite estes itens e não executa (FR-016). */
   pinData?: Record<string, Item[]>;
+  /**
+   * Execução de um nó (FR-020): estes nós não executam; entrada, origem dos itens e saída vêm
+   * de uma execução anterior. Não vale para o nó de destino, nós fixados e tipos com
+   * `rerunOnPartialExecution`.
+   */
+  runData?: Record<string, ReusedNodeRun>;
   executionId?: string;
   mode?: 'test' | 'production';
   workflowId?: string;
@@ -49,6 +102,8 @@ export interface RunOptions {
   /** Variáveis visíveis em `$env` (já filtradas: só `OLLY_EXPOSED_*`). */
   env?: Record<string, string>;
   timezone?: string;
+  credentials?: CredentialResolver;
+  binary?: BinaryStore;
   signal?: AbortSignal;
   logger?: NodeLogger;
   callbacks?: RunCallbacks;
@@ -59,6 +114,7 @@ export interface NodeRunResult {
   output?: NodeOutput;
   error?: string;
   pinned?: boolean;
+  reused?: boolean;
 }
 
 export interface RunResult {
@@ -79,12 +135,28 @@ function unavailable(feature: string): never {
   throw new Error(`${feature} ainda não está disponível no motor`);
 }
 
-function createContext(
-  node: WorkflowNode,
-  options: RunOptions,
-  getParam: ParamResolver,
-  vars: Record<string, unknown>,
-): NodeContext {
+interface ContextDeps {
+  node: WorkflowNode;
+  type: NodeDefinition;
+  options: RunOptions;
+  getParam: ParamResolver;
+  vars: Record<string, unknown>;
+  secrets: Set<string>;
+  signal: AbortSignal;
+  logger: NodeLogger;
+}
+
+function createContext({
+  node,
+  type,
+  options,
+  getParam,
+  vars,
+  secrets,
+  signal,
+  logger,
+}: ContextDeps): NodeContext {
+  const binary = () => options.binary ?? unavailable('Armazenamento de binários');
   return {
     executionId: options.executionId ?? 'local',
     workflowId: options.workflowId ?? 'local',
@@ -93,18 +165,108 @@ function createContext(
     setVariable: (name, value) => {
       vars[name] = structuredClone(value);
     },
-    getCredential: () => unavailable('Credenciais'),
-    signal: options.signal ?? new AbortController().signal,
-    logger: options.logger ?? noopLogger,
+    getCredential: async () => {
+      if (!node.credentialId) throw new Error(`Nó "${node.name}": selecione uma credencial`);
+      if (!options.credentials) return unavailable('Credenciais');
+      const access = await options.credentials(node);
+      for (const secret of access.secrets) secrets.add(secret);
+      const allowed = type.credentialTypes;
+      if (allowed && !allowed.includes(access.credential.type)) {
+        throw new Error(
+          `Nó "${node.name}": credencial do tipo ${access.credential.type} não serve para este nó`,
+        );
+      }
+      return access.credential;
+    },
+    signal,
+    logger,
     helpers: {
       pairedItem: (item, itemIndex, input) => ({
         ...item,
         pairedItem: input === undefined ? { item: itemIndex } : { item: itemIndex, input },
       }),
-      getBinary: () => unavailable('Binários'),
-      putBinary: () => unavailable('Binários'),
+      getBinary: (ref) => binary().get(ref),
+      putBinary: (data, meta) => binary().put(data, meta),
+      registerSecret: (value) => {
+        secrets.add(value);
+      },
     },
   };
+}
+
+/** Logger que mascara os segredos conhecidos antes de registrar (FR-003). */
+function redactingLogger(logger: NodeLogger, secrets: Set<string>): NodeLogger {
+  const wrap =
+    (fn: NodeLogger['info']): NodeLogger['info'] =>
+    (message, data) => {
+      fn(redactSecrets(message, secrets), data && redactSecrets(data, secrets));
+    };
+  return {
+    debug: wrap(logger.debug.bind(logger)),
+    info: wrap(logger.info.bind(logger)),
+    warn: wrap(logger.warn.bind(logger)),
+    error: wrap(logger.error.bind(logger)),
+  };
+}
+
+const abortReason = (signal: AbortSignal) =>
+  signal.reason instanceof Error ? signal.reason : new Error('Execução cancelada');
+
+/** Rejeita quando o sinal aborta: o timeout vale mesmo para nó que ignora o sinal (FR-018). */
+function rejectOnAbort(signal: AbortSignal): Promise<never> {
+  return new Promise((_, reject) => {
+    if (signal.aborted) reject(abortReason(signal));
+    else
+      signal.addEventListener('abort', () => {
+        reject(abortReason(signal));
+      });
+  });
+}
+
+/** Uma tentativa com sinal próprio: aborta no timeout do nó ou no cancelamento da execução. */
+async function runAttempt<T>(
+  fn: (signal: AbortSignal) => Promise<T>,
+  timeoutMs: number | undefined,
+  parent: AbortSignal | undefined,
+): Promise<T> {
+  const controller = new AbortController();
+  const onParentAbort = () => {
+    controller.abort(parent?.reason);
+  };
+  parent?.addEventListener('abort', onParentAbort);
+  const timer =
+    timeoutMs && timeoutMs > 0
+      ? setTimeout(() => {
+          controller.abort(new NodeTimeoutError(timeoutMs));
+        }, timeoutMs)
+      : undefined;
+  try {
+    parent?.throwIfAborted();
+    return await Promise.race([fn(controller.signal), rejectOnAbort(controller.signal)]);
+  } finally {
+    clearTimeout(timer);
+    parent?.removeEventListener('abort', onParentAbort);
+    // Libera operações que ainda escutam o sinal (ex.: requisição pendurada após o timeout).
+    if (!controller.signal.aborted) controller.abort(new Error('Tentativa encerrada'));
+  }
+}
+
+function sleep(ms: number, signal: AbortSignal | undefined): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(abortReason(signal));
+      return;
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal ? abortReason(signal) : new Error('Execução cancelada'));
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
 }
 
 /** Ordem topológica estável (Kahn), desempatando pela ordem dos nós na definição. */
@@ -226,6 +388,74 @@ export async function runWorkflow(
   });
   const cb = options.callbacks ?? {};
   let failure: RunResult['error'];
+  const secrets = new Set<string>();
+  const logger = redactingLogger(options.logger ?? noopLogger, secrets);
+  const finish = (record: NodeRunRecord) => cb.onNodeFinish?.(redactSecrets(record, secrets));
+
+  /**
+   * Resolve as expressões e executa o nó com retry, timeout e `onError` (spec 004, FR-017,
+   * FR-018, plan §8). Com `onError: continue`, a falha vira um item `{ json: { error } }`.
+   */
+  const executeWithResilience = async (
+    node: WorkflowNode,
+    type: NodeDefinition,
+    inputs: Record<string, Item[]>,
+    onAttempt: (attempt: number) => void,
+  ): Promise<NodeOutput> => {
+    const { retry, timeoutMs, onError } = node.settings ?? {};
+    const maxTries = Math.max(1, retry?.maxTries ?? 1);
+    const items = inputs.main ?? [];
+    for (let attempt = 1; ; attempt++) {
+      onAttempt(attempt);
+      try {
+        return await runAttempt(
+          async (signal) => {
+            const getParam = await resolveNodeParams(
+              scoped,
+              registry,
+              state,
+              node,
+              items,
+              expressionScope(),
+              options.evaluator,
+            );
+            const ctx = createContext({
+              node,
+              type,
+              options,
+              getParam,
+              vars,
+              secrets,
+              signal,
+              logger,
+            });
+            return type.execute({ inputs, items }, ctx);
+          },
+          timeoutMs,
+          options.signal,
+        );
+      } catch (error) {
+        if (options.signal?.aborted) throw error;
+        if (attempt < maxTries) {
+          const wait = retry?.waitMs ?? 0;
+          await sleep(
+            retry?.backoff === 'exponential' ? wait * 2 ** (attempt - 1) : wait,
+            options.signal,
+          );
+          continue;
+        }
+        if (onError !== 'continue') throw error;
+        logger.warn(`Nó "${node.name}" falhou; seguindo (onError: continue)`, {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return {
+          [type.outputs[0]?.name ?? 'main']: [
+            { json: redactSecrets(errorJson(error), secrets), pairedItem: { item: 0 } },
+          ],
+        };
+      }
+    }
+  };
 
   try {
     for (const nodeId of topologicalOrder(scoped)) {
@@ -236,6 +466,7 @@ export async function runWorkflow(
       if (!type) throw new WorkflowRunError(`Nó "${node.name}": tipo desconhecido "${node.type}"`);
 
       const startedAt = new Date();
+      let attempts = 1;
       const record = (
         status: NodeRunRecord['status'],
         extra: Partial<NodeRunRecord> = {},
@@ -248,16 +479,36 @@ export async function runWorkflow(
         inputs: run.inputs,
         inputSources: run.sources,
         pinned: run.pinned === true,
+        reused: run.reused === true,
+        attempts,
         itemsIn: countItems(run.inputs),
         itemsOut: countItems(run.output),
         ...extra,
       });
 
+      const reused =
+        nodeId !== options.destinationNodeId &&
+        !options.pinData?.[nodeId] &&
+        !type.rerunOnPartialExecution
+          ? options.runData?.[nodeId]
+          : undefined;
+      if (reused) {
+        // Como se tivesse executado agora: os filhos e `$('Nó')` enxergam os dados anteriores.
+        run.inputs = structuredClone(reused.inputs);
+        run.sources = structuredClone(reused.inputSources);
+        run.output = structuredClone(reused.output);
+        run.status = 'success';
+        run.reused = true;
+        state.deliver(nodeId, run.output);
+        await finish(record('success', { output: run.output }));
+        continue;
+      }
+
       const hasData = Object.values(run.inputs).some((items) => items.length > 0);
       if (nodeId !== start.id && !hasData) {
         run.status = 'skipped';
         run.output = {};
-        await cb.onNodeFinish?.(record('skipped'));
+        await finish(record('skipped'));
         continue;
       }
 
@@ -273,36 +524,26 @@ export async function runWorkflow(
         } else if (node.disabled) {
           output = passThrough(type, run.inputs);
         } else {
-          const items = run.inputs.main ?? [];
-          const getParam = await resolveNodeParams(
-            scoped,
-            registry,
-            state,
-            node,
-            items,
-            expressionScope(),
-            options.evaluator,
-          );
-          output = await type.execute(
-            { inputs: run.inputs, items },
-            createContext(node, options, getParam, vars),
-          );
+          output = await executeWithResilience(node, type, run.inputs, (n) => {
+            attempts = n;
+          });
         }
         output = fillPairedItems(output, countItems(run.inputs));
         run.status = 'success';
         run.output = output;
         state.deliver(nodeId, output);
         await cb.onNodeSuccess?.(nodeId, output);
-        await cb.onNodeFinish?.(record('success', { output }));
+        await finish(record('success', { output }));
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err));
+        // Mensagens de erro também passam pelo mascaramento (FR-003); a classe é preservada.
+        error.message = redactSecrets(error.message, secrets);
+        if (error.stack) error.stack = redactSecrets(error.stack, secrets);
         run.status = 'error';
         run.error = error;
         failure = { nodeId, message: error.message };
         await cb.onNodeError?.(nodeId, error);
-        await cb.onNodeFinish?.(
-          record('error', { error: { name: error.name, message: error.message } }),
-        );
+        await finish(record('error', { error: { name: error.name, message: error.message } }));
         break;
       }
     }
@@ -318,8 +559,9 @@ export async function runWorkflow(
         {
           status: s.status,
           ...(s.output && { output: s.output }),
-          ...(s.error && { error: s.error.message }),
+          ...(s.error && { error: redactSecrets(s.error.message, secrets) }),
           ...(s.pinned && { pinned: true }),
+          ...(s.reused && { reused: true }),
         },
       ]),
     ),

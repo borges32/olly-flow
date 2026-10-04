@@ -1,9 +1,10 @@
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
 import type { NodeDescription } from '@olly/nodes';
 import type { WorkflowNode } from '@olly/shared-types';
-import { AlertTriangle, Check, Loader2, Minus, Pin, X } from 'lucide-react';
+import { AlertTriangle, Check, Loader2, Minus, Pin, Play, X } from 'lucide-react';
 import { memo } from 'react';
 import { cn } from '@/lib/utils';
+import { useNodeActions } from './node-actions';
 import { NodeIcon } from './node-icon';
 import type { NodeRunView } from './store';
 
@@ -36,7 +37,11 @@ function RunStatus({ run }: { run: NodeRunView }) {
           data-testid="node-status"
           data-status="success"
           className={cn(common, 'text-emerald-600 dark:text-emerald-400')}
-          title={`${run.itemsOut} itens em ${run.durationMs ?? 0} ms`}
+          title={
+            run.reused
+              ? `${run.itemsOut} itens (dados da execução anterior)`
+              : `${run.itemsOut} itens em ${run.durationMs ?? 0} ms`
+          }
         >
           <Check className="size-3" /> {run.itemsOut} {run.itemsOut === 1 ? 'item' : 'itens'}
         </span>
@@ -75,6 +80,7 @@ export const WorkflowNodeView = memo(function WorkflowNodeView({
   selected,
 }: NodeProps<OllyFlowNode>) {
   const { node, description, errors, run, pinned } = data;
+  const actions = useNodeActions();
   const inputs = description?.inputs ?? [];
   const outputs = description?.outputs ?? [];
   const hasError = errors.length > 0;
@@ -85,7 +91,7 @@ export const WorkflowNodeView = memo(function WorkflowNodeView({
       data-y={node.position[1]}
       title={hasError ? errors.join('\n') : undefined}
       className={cn(
-        'relative flex min-w-44 items-center gap-2 rounded-lg border-2 bg-card px-3 py-2 text-card-foreground shadow-sm',
+        'group relative flex min-w-44 items-center gap-2 rounded-lg border-2 bg-card px-3 py-2 text-card-foreground shadow-sm',
         selected ? 'border-primary' : 'border-border',
         hasError && 'border-destructive',
         node.disabled && 'opacity-50',
@@ -125,6 +131,33 @@ export const WorkflowNodeView = memo(function WorkflowNodeView({
         </span>
       )}
       {run && <RunStatus run={run} />}
+      {actions.canExecute && (
+        // Executa só este nó, reaproveitando os anteriores (FR-020), como o "Execute step" do N8N.
+        <div
+          className={cn(
+            'nodrag nopan absolute -top-9 left-1/2 -translate-x-1/2 rounded-md border bg-card p-0.5 shadow-sm',
+            selected ? 'flex' : 'hidden group-hover:flex',
+          )}
+        >
+          <button
+            type="button"
+            data-testid="node-run"
+            aria-label={`Executar o nó ${node.name}`}
+            title="Executar este nó"
+            disabled={actions.running}
+            className="flex size-6 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+            onClick={(e) => {
+              e.stopPropagation();
+              actions.runNode(node.id);
+            }}
+            onDoubleClick={(e) => {
+              e.stopPropagation();
+            }}
+          >
+            <Play className="size-3.5" />
+          </button>
+        </div>
+      )}
       {hasError && (
         <span
           data-testid="node-error"

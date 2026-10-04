@@ -110,6 +110,18 @@
 ### §9 Testes
 - Testcontainers: PostgreSQL "externo" para os nós e servidor HTTP local (fastify) liberado via allowlist.
 
+### §10 Decisões de implementação (04/10/2026)
+- **Contrato de nó:** `ctx.getCredential()` devolve `{ id, type, data, updatedAt }` (antes, só os dados): o `http.request` aceita vários tipos e o `PoolManager` usa `id:updatedAt`. `NodeHelpers.registerSecret(valor)` registra segredos derivados (ex.: token OAuth2).
+- **Mascaramento de segredos (defesa em profundidade, FR-003):** o motor recebe da API um resolvedor de credenciais; os valores `x-secret` da credencial, o `usuário:senha` em base64 do Basic e os segredos registrados viram `***` em tudo que o `ExecutionRecorder` grava ou transmite (entrada, saída, erro). Os dados entre os nós não mudam (constituição VIII.2).
+- **Configuração dos nós:** `createBuiltinNodes({ http, postgres })` recebe allowlist, limite de resposta, armazenamento de binários e `PoolManager`; a API monta o registro com a sua configuração. `builtinNodes` continua existindo com os padrões (allowlist vazia).
+- **Extensões de `paramsSchema`:** `x-no-expression` (campo que não aceita expressão: o editor não oferece o modo expressão e o salvamento recusa valor iniciado por `=`), `x-multiline` (área de texto) e `x-load-options` (`postgresSchemas` | `postgresTables` | `postgresColumns`: o editor busca as opções nos endpoints de catálogo da credencial do nó).
+- **Uso de credencial (FR-007):** ao salvar, um nó que passa a referenciar uma credencial (nó novo ou `credentialId` alterado) exige `credential:use` no projeto, e a credencial precisa existir no mesmo projeto do workflow e ter um tipo aceito pelo nó (422 caso contrário). Na execução de teste sem `credential:use`, um workflow que usa credenciais só roda se a definição enviada for igual à versão salva (nós sem posição, conexões e pin data), para que quem não pode usar a credencial não consiga mudar o destino dos segredos. Na execução, a credencial precisa ser do projeto do workflow.
+- **Teste de credencial:** Postgres conecta e roda `SELECT 1`; OAuth2 obtém um token; Bearer, Basic, header e query não têm endpoint próprio, então o teste pede uma URL (`{ url }` no corpo) e faz um GET autenticado por ela, pelo `http-guard`.
+- **Binários:** `BinaryStore` (S3 compatível, `@aws-sdk/client-s3`) na API, entregue ao motor; `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` e `S3_BUCKET` passam a ser lidas pela API. Sem configuração S3, `putBinary` falha com mensagem clara.
+- **Aviso de `maxRows`:** vai para o log da execução (pino, com `executionId` e `nodeId`), porque o contrato de saída não tem campo de aviso.
+- **Limites de retry no contrato:** `retry.maxTries` ≤ 10 e `retry.waitMs` ≤ 60 000 em `workflowNodeSettingsSchema`. Sem cancelamento de execução até a spec 006, valores sem teto prenderiam a execução de teste na API.
+- **`onError: continue`:** erro do nó inteiro emite um item `{ json: { error } }`. Os nós HTTP e Postgres (modo por item, sem transação) tratam erro por item: o item com erro vira `{ json: { error } }` ligado ao item de origem, e os demais seguem, como no N8N.
+
 ## Modelo de dados
 
 `credentials`, conforme [modelo-dados.md](../../docs/arquitetura/modelo-dados.md).
@@ -169,3 +181,4 @@ Executor e visualizador não recebem nenhuma das duas. Nenhuma permissão nova �
 | Data | Alteração | Motivo |
 |---|---|---|
 | 03/10/2026 | Seção "Permissões RBAC" e tarefa T089 | Decisão humana: cada spec acrescenta e garante as permissões que cria |
+| 04/10/2026 | Detalhes de implementação definidos no início da implementação (ver §10) | Lacunas do plano encontradas ao implementar |

@@ -8,6 +8,11 @@ Cada nó vive em `packages/nodes/src/<categoria>/<nome>/` (`definition.ts`, `exe
 | `data.set` | Definir campos | 002 (expressões: 003) | [data.set.md](data.set.md) |
 | `data.setVariable` | Definir variável | 003 | [data.setVariable.md](data.setVariable.md) |
 | `logic.if` | Se (If) | 003 | [logic.if.md](logic.if.md) |
+| `http.request` | Requisição HTTP | 004 | [http.request.md](http.request.md) |
+| `postgres.query` | PostgreSQL: consulta | 004 | [postgres.query.md](postgres.query.md) |
+| `postgres.write` | PostgreSQL: gravar | 004 | [postgres.write.md](postgres.write.md) |
+
+Os nós de integração recebem as dependências da API por `createBuiltinNodes({ httpGuard, httpMaxResponseBytes, pools })`: filtro anti-SSRF com a allowlist, limite de resposta e pools Postgres. Credenciais: [docs/credenciais.md](../credenciais.md).
 
 ## Convenções de `paramsSchema`
 
@@ -31,8 +36,11 @@ Use `title` (rótulo), `description` (ajuda abaixo do campo) e `default` (valor 
 | Palavra-chave | Uso |
 |---|---|
 | `x-display-options` | Exibição condicional, equivalente ao `displayOptions` do N8N: `{ "show": { "campo": [valores] }, "hide": { "campo": [valores] } }`. Os campos citados são **irmãos** no mesmo objeto. O campo aparece quando todas as condições de `show` batem e nenhuma de `hide`. Um irmão sem valor usa o `default` do seu schema. |
-| `x-secret` | Marca um valor sensível (uso a partir da spec 004). |
+| `x-secret` | Marca um valor sensível. Nos tipos de credencial, o campo nunca sai da API e é mascarado nos dados de execução (spec 004). |
 | `x-hidden` | Parâmetro aceito, mas não exibido no editor (ex.: aliases legados). |
+| `x-no-expression` | Campo sem modo expressão: o editor não oferece o alternador e o salvamento recusa valor iniciado por `=` (erro `EXPRESSION_NOT_ALLOWED`). Ex.: SQL do `postgres.query` (spec 004). |
+| `x-multiline` | Área de texto em vez de linha única (spec 004). |
+| `x-load-options` | Opções buscadas no catálogo do banco da credencial do nó: `postgresSchemas`, `postgresTables` (do `schema` irmão) ou `postgresColumns` (de `schema` e `table`). Sem credencial, o campo vira texto (spec 004). |
 
 Exemplo:
 
@@ -52,7 +60,7 @@ Exemplo:
 
 ## Expressões nos parâmetros
 
-Qualquer parâmetro string pode ser uma expressão (`=...`), inclusive dentro de listas e objetos; o editor oferece o alternador **Fixo | Expressão** em todo campo escalar. O nó recebe o valor já resolvido para cada item via `ctx.getParam(nome, índice)`. Ver [docs/expressoes.md](../expressoes.md).
+Qualquer parâmetro string pode ser uma expressão (`=...`), inclusive dentro de listas e objetos, exceto os marcados com `x-no-expression`; o editor oferece o alternador **Fixo | Expressão** nos demais campos escalares. O nó recebe o valor já resolvido para cada item via `ctx.getParam(nome, índice)`. Ver [docs/expressoes.md](../expressoes.md).
 
 ## Comportamentos comuns a todos os nós
 
@@ -61,3 +69,13 @@ Qualquer parâmetro string pode ser uma expressão (`=...`), inclusive dentro de
 - **`pairedItem`:** nós que não informam a origem de cada item recebem-na automaticamente quando ela é inequívoca (um item de entrada, ou mesma quantidade de itens). Nós que filtram ou reordenam (If) devem preenchê-la.
 - **Ramo sem itens:** o nó não executa e propaga "sem dados" para os seguintes.
 - **Nome:** único no workflow. Ao colar, nomes repetidos ganham sufixo numérico (`Definir campos1`).
+
+## Configurações do nó (spec 004)
+
+Aba **Configurações** do painel do nó, gravada em `node.settings`:
+
+| Configuração | Efeito |
+|---|---|
+| `retry` `{ maxTries (1–10), waitMs (0–60 000), backoff: fixed \| exponential }` | Executa o nó de novo após falha; no exponencial, a espera dobra a cada tentativa (`waitMs * 2^n`). As tentativas ficam em `node_executions.attempts` |
+| `timeoutMs` | Aborta o nó após o tempo; o sinal (`ctx.signal`) interrompe a operação HTTP ou SQL em andamento |
+| `onError` | `stop` (padrão): falha a execução. `continue`: o nó emite `{ json: { error: { message, description?, httpCode? } } }` e o fluxo segue. Os nós HTTP e Postgres tratam o erro por item (o item que falha vira o item de erro). `errorOutput` fica para a spec 007 |

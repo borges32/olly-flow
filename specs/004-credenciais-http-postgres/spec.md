@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| **Status** | Aprovada |
+| **Status** | Validado |
 | **Fase** | 1 — MVP |
 | **Depende de** | 003 |
 | **Requisitos de produto** | PR-03, PR-04, PR-05, PR-18 |

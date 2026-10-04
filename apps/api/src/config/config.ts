@@ -28,6 +28,24 @@ const envSchema = z.object({
       'fuso horário desconhecido',
     )
     .default('America/Sao_Paulo'),
+  // Spec 004: credenciais, HTTP e Postgres.
+  OLLY_KEY_PROVIDER: z.enum(['env']).default('env'),
+  // Provedor `env`: KEK base64 de 32 bytes. Obrigatória (a API não sobe sem ela).
+  OLLY_MASTER_KEY: z
+    .string()
+    .refine(
+      (v) => Buffer.from(v, 'base64').length === 32,
+      'deve ser uma chave de 32 bytes em base64',
+    ),
+  OLLY_HTTP_ALLOWLIST: z.string().default(''),
+  OLLY_HTTP_MAX_RESPONSE_MB: z.coerce.number().positive().max(1024).default(50),
+  OLLY_PG_POOL_MAX: z.coerce.number().int().min(1).max(100).default(5),
+  // Object storage dos binários (FR-010). Sem S3_ENDPOINT, respostas binárias falham com aviso.
+  S3_ENDPOINT: z.url({ protocol: /^https?$/ }).optional(),
+  S3_REGION: z.string().min(1).default('us-east-1'),
+  S3_ACCESS_KEY: z.string().min(1).optional(),
+  S3_SECRET_KEY: z.string().min(1).optional(),
+  S3_BUCKET: z.string().min(1).default('olly'),
 });
 
 export interface AppConfig {
@@ -44,6 +62,10 @@ export interface AppConfig {
     nodeDataMaxBytes: number;
     timezone: string;
   };
+  credentials: { keyProvider: 'env'; masterKey: string };
+  http: { allowlist: string[]; maxResponseBytes: number };
+  postgres: { poolMax: number };
+  s3?: { endpoint: string; region: string; accessKey: string; secretKey: string; bucket: string };
 }
 
 export const APP_CONFIG = Symbol('APP_CONFIG');
@@ -84,5 +106,24 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
       nodeDataMaxBytes: e.OLLY_NODE_DATA_MAX_BYTES,
       timezone: e.OLLY_TIMEZONE,
     },
+    credentials: { keyProvider: e.OLLY_KEY_PROVIDER, masterKey: e.OLLY_MASTER_KEY },
+    http: {
+      allowlist: e.OLLY_HTTP_ALLOWLIST.split(',')
+        .map((x) => x.trim())
+        .filter(Boolean),
+      maxResponseBytes: Math.floor(e.OLLY_HTTP_MAX_RESPONSE_MB * 1024 * 1024),
+    },
+    postgres: { poolMax: e.OLLY_PG_POOL_MAX },
+    ...(e.S3_ENDPOINT &&
+      e.S3_ACCESS_KEY &&
+      e.S3_SECRET_KEY && {
+        s3: {
+          endpoint: e.S3_ENDPOINT,
+          region: e.S3_REGION,
+          accessKey: e.S3_ACCESS_KEY,
+          secretKey: e.S3_SECRET_KEY,
+          bucket: e.S3_BUCKET,
+        },
+      }),
   };
 }

@@ -10,6 +10,7 @@ import { Toaster } from '@/components/ui/toaster';
 import { EditorPage } from '@/editor/editor-page';
 import { AdminPage } from '@/pages/admin-page';
 import { AuthCallbackPage } from '@/pages/auth-callback-page';
+import { CredentialsPage } from '@/pages/credentials-page';
 import { HomePage } from '@/pages/home-page';
 import { NotFoundPage } from '@/pages/not-found-page';
 import { WorkflowsPage } from '@/pages/workflows-page';
@@ -36,7 +37,7 @@ const router = createBrowserRouter([
           { path: 'workflows', element: <WorkflowsPage /> },
           { path: 'workflows/:id', element: <EditorPage /> },
           { path: 'executions', element: <PlaceholderPage title="Execuções" spec="003" /> },
-          { path: 'credentials', element: <PlaceholderPage title="Credenciais" spec="004" /> },
+          { path: 'credentials', element: <CredentialsPage /> },
           { path: 'admin', element: <AdminPage /> },
           { path: '*', element: <NotFoundPage /> },
         ],

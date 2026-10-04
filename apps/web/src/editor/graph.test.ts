@@ -67,3 +67,13 @@ describe('spec 002 — FR-008: nomes únicos ao colar', () => {
     ).toEqual({ fields: [], keep: false });
   });
 });
+
+describe('ícones do catálogo de nós', () => {
+  it('todo nó da plataforma tem ícone próprio no editor', async () => {
+    const { builtinNodes } = await import('@olly/nodes');
+    const { KNOWN_ICONS } = await import('./node-icons');
+    expect(builtinNodes.map((n) => n.icon).filter((icon) => !KNOWN_ICONS.includes(icon))).toEqual(
+      [],
+    );
+  });
+});

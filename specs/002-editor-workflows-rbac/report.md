@@ -178,3 +178,9 @@ pnpm dev
 - Validação estrutural em tempo real no editor, reaproveitando `validateWorkflow` do `@olly/engine` no navegador.
 - Convite de usuários antes do primeiro login, ou sincronização com o diretório (spec 009).
 - Diff entre versões (`GET /workflows/:id/versions` já lista o histórico; previsto na spec 009).
+
+## Correções pós-verificação
+
+| Data | Defeito (encontrado no teste de UX) | Correção | Teste |
+|---|---|---|---|
+| 03/10/2026 | FR-007: excluir uma conexão só era possível clicando exatamente na linha e teclando Delete, sem nenhuma indicação visual | Conexão destacada quando selecionada ou sob o mouse, com botão "Excluir conexão" no meio (oculto no modo somente leitura); a exclusão entra no desfazer | `apps/web/e2e/editor.spec.ts` › "FR-007: excluir uma conexão…"; `readonly.spec.ts`; `apps/web/src/editor/store.test.ts` › "FR-007: excluir conexão" |

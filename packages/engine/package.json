@@ -2,7 +2,7 @@
   "name": "@olly/engine",
   "version": "0.0.0",
   "private": true,
-  "description": "Motor de execu\u00e7\u00e3o: valida\u00e7\u00e3o estrutural, estado da execu\u00e7\u00e3o e execu\u00e7\u00e3o sequencial",
+  "description": "Motor de execução: validação estrutural, estado da execução e execução sequencial",
   "type": "module",
   "exports": {
     ".": {
@@ -17,7 +17,8 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json",
     "lint": "eslint .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:integration": "vitest run -c vitest.integration.config.ts"
   },
   "dependencies": {
     "@olly/expressions": "workspace:*",
@@ -25,7 +26,10 @@
     "@olly/shared-types": "workspace:*"
   },
   "devDependencies": {
+    "@testcontainers/postgresql": "^11.14.0",
     "@types/node": "^22.20.5",
+    "@types/pg": "^8.23.1",
+    "pg": "^8.23.1",
     "typescript": "~5.9.3",
     "vitest": "^4.1.11"
   }

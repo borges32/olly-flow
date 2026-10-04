@@ -23,6 +23,7 @@ import {
   uniqueName,
   type Clipboard,
 } from './graph';
+import { downstreamOf } from './partial-run';
 
 const HISTORY_LIMIT = 100;
 
@@ -40,10 +41,16 @@ export interface NodeRunView {
   itemsOut: number;
   durationMs?: number;
   pinned: boolean;
+  /** Saída reaproveitada de uma execução anterior (FR-020). */
+  reused: boolean;
   dataTruncated: boolean;
   error: NodeExecutionError | null;
   input?: Record<string, Item[]>;
   output?: NodeOutput;
+  /** Execução que produziu estes dados; pode ser anterior à corrente (FR-020). */
+  executionId?: string;
+  /** `nodeSignature` do nó quando executou: diferente da atual → dados velhos. */
+  signature?: string;
 }
 
 export interface RunState {
@@ -51,9 +58,23 @@ export interface RunState {
   status: 'idle' | 'running' | 'success' | 'error';
   nodes: Record<string, NodeRunView>;
   error: string | null;
+  /** Assinaturas dos nós no início da execução corrente. */
+  signatures: Record<string, string>;
 }
 
-const IDLE_RUN: RunState = { executionId: null, status: 'idle', nodes: {}, error: null };
+const IDLE_RUN: RunState = {
+  executionId: null,
+  status: 'idle',
+  nodes: {},
+  error: null,
+  signatures: {},
+};
+
+export interface RunStart {
+  /** Execução de um nó: mantém os dados dos nós que não dependem dele (FR-020). */
+  destinationNodeId?: string;
+  signatures?: Record<string, string>;
+}
 
 export interface Selection {
   nodeIds: string[];
@@ -93,10 +114,13 @@ export interface EditorState {
   connect(edge: Omit<Edge, 'id'>): void;
   updateNode(
     id: string,
-    patch: Partial<Pick<WorkflowNode, 'name' | 'params' | 'disabled'>>,
+    patch: Partial<
+      Pick<WorkflowNode, 'name' | 'params' | 'disabled' | 'credentialId' | 'settings'>
+    >,
     coalesceKey?: string,
   ): void;
   removeSelection(): void;
+  removeEdge(edgeId: string): void;
   setSelection(selection: Selection): void;
   copy(): void;
   paste(): void;
@@ -104,7 +128,7 @@ export interface EditorState {
   redo(): void;
   setPinData(nodeId: string, items: Item[] | null): void;
   definition(): WorkflowDefinition;
-  runStarted(executionId: string): void;
+  runStarted(executionId: string, start?: RunStart): void;
   nodeStarted(executionId: string, nodeId: string): void;
   nodeFinished(event: NodeFinishedEvent): void;
   runFinished(event: ExecutionFinishedEvent): void;
@@ -239,10 +263,14 @@ export const useEditorStore = create<EditorState>()((set, get) => {
     },
 
     updateNode: (id, patch, coalesceKey) => {
-      commit(
-        { nodes: get().nodes.map((n) => (n.id === id ? { ...n, ...patch } : n)) },
-        coalesceKey,
-      );
+      const apply = (n: WorkflowNode): WorkflowNode => {
+        const next = { ...n, ...patch };
+        // `undefined` remove o campo (ex.: tirar a credencial do nó).
+        if ('credentialId' in patch && patch.credentialId === undefined) delete next.credentialId;
+        if ('settings' in patch && patch.settings === undefined) delete next.settings;
+        return next;
+      };
+      commit({ nodes: get().nodes.map((n) => (n.id === id ? apply(n) : n)) }, coalesceKey);
     },
 
     removeSelection: () => {
@@ -253,6 +281,15 @@ export const useEditorStore = create<EditorState>()((set, get) => {
         ...removeElements(nodes, edges, selection.nodeIds, selection.edgeIds),
         pinData: Object.fromEntries(Object.entries(pinData).filter(([id]) => !removed.has(id))),
         selection: { nodeIds: [], edgeIds: [] },
+      });
+    },
+
+    removeEdge: (edgeId) => {
+      const { edges, selection } = get();
+      if (!edges.some((e) => e.id === edgeId)) return;
+      commit({
+        edges: edges.filter((e) => e.id !== edgeId),
+        selection: { ...selection, edgeIds: selection.edgeIds.filter((id) => id !== edgeId) },
       });
     },
 
@@ -273,8 +310,22 @@ export const useEditorStore = create<EditorState>()((set, get) => {
       };
     },
 
-    runStarted: (executionId) => {
-      set({ run: { executionId, status: 'running', nodes: {}, error: null } });
+    runStarted: (executionId, start = {}) => {
+      const { run, edges } = get();
+      let nodes: Record<string, NodeRunView> = {};
+      if (start.destinationNodeId) {
+        const stale = downstreamOf(start.destinationNodeId, edges);
+        nodes = Object.fromEntries(Object.entries(run.nodes).filter(([id]) => !stale.has(id)));
+      }
+      set({
+        run: {
+          executionId,
+          status: 'running',
+          nodes,
+          error: null,
+          signatures: start.signatures ?? {},
+        },
+      });
     },
 
     nodeStarted: (executionId, nodeId) => {
@@ -290,6 +341,7 @@ export const useEditorStore = create<EditorState>()((set, get) => {
               itemsIn: 0,
               itemsOut: 0,
               pinned: false,
+              reused: false,
               dataTruncated: false,
               error: null,
             },
@@ -312,10 +364,15 @@ export const useEditorStore = create<EditorState>()((set, get) => {
               itemsOut: e.itemsOut,
               durationMs: e.durationMs,
               pinned: e.pinned,
+              reused: e.reused,
               dataTruncated: e.dataTruncated,
               error: e.error,
               input: e.data.input,
               output: e.data.output,
+              executionId: e.executionId,
+              ...(run.signatures[e.nodeId] !== undefined && {
+                signature: run.signatures[e.nodeId],
+              }),
             },
           },
         },
@@ -347,10 +404,13 @@ export const useEditorStore = create<EditorState>()((set, get) => {
             durationMs: new Date(n.finishedAt).getTime() - new Date(n.startedAt).getTime(),
           }),
           pinned: n.pinned,
+          reused: n.reused,
           dataTruncated: n.dataTruncated,
           error: n.error,
           ...(n.input && { input: n.input }),
           ...(n.output && { output: n.output }),
+          executionId: detail.id,
+          ...(run.signatures[n.nodeId] !== undefined && { signature: run.signatures[n.nodeId] }),
         };
       }
       const status =

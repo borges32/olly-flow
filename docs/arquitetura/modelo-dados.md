@@ -15,8 +15,8 @@
 | `workflow_versions` | Definição completa (JSONB) por versão | 002 | Mensagem de versão (009) |
 | `webhooks` | Rotas `path` + método → workflow/nó | 002 / 005 | Ativadas na publicação |
 | `executions` | Execução de workflow | 003 | **Particionada por mês** (`olly_ensure_partitions`). `project_id` copiado do workflow. `trace_id` (012), `parent_execution_id` (008) |
-| `node_executions` | Execução de cada nó (por `run_index`) | 003 | **Particionada por mês**. `input_sources` (origem dos itens, para *paired items*), `pinned`, `data_truncated`. Dados mascarados na spec 009 |
-| `credentials` | Credenciais cifradas (`data_encrypted`, `key_version`) | 004 | |
+| `node_executions` | Execução de cada nó (por `run_index`) | 003 | **Particionada por mês**. `input_sources` (origem dos itens, para *paired items*), `pinned`, `reused` (saída reaproveitada de execução anterior, FR-020), `data_truncated`. Dados mascarados na spec 009 |
+| `credentials` | Credenciais cifradas por projeto (`data_encrypted` = envelope AES-256-GCM, `key_version` da chave mestra); nome único no projeto | 004 | Ver [docs/credenciais.md](../credenciais.md) |
 | `execution_payloads` | Payload do gatilho para o worker | 006 | Ou object storage se grande |
 | `execution_state` | Estado serializado para retomada (`waiting`) | 008 | Usado por Wait e aprovação humana |
 | `group_role_mappings` | Grupo do IdP → papel (global ou por projeto) | 009 | |
@@ -62,10 +62,11 @@ CREATE TABLE webhooks (                       -- estrutura na spec 002; uso na 0
   method TEXT NOT NULL, path TEXT NOT NULL, active BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT now(), UNIQUE (method, path)
 );
-CREATE TABLE credentials (
-  id UUID PRIMARY KEY, project_id UUID REFERENCES projects(id), name TEXT, type TEXT,
-  data_encrypted BYTEA NOT NULL, key_version INT NOT NULL,
-  created_by UUID REFERENCES users(id), created_at TIMESTAMPTZ DEFAULT now(), updated_at TIMESTAMPTZ
+CREATE TABLE credentials (                    -- 0005_credentials
+  id UUID PRIMARY KEY, project_id UUID NOT NULL REFERENCES projects(id), name TEXT NOT NULL,
+  type TEXT NOT NULL, data_encrypted BYTEA NOT NULL, key_version INT NOT NULL,
+  created_by UUID REFERENCES users(id), created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now(), UNIQUE (project_id, name)
 );
 CREATE TABLE executions (
   id UUID, workflow_id UUID, project_id UUID, workflow_version INT, mode TEXT, trigger_type TEXT,
@@ -75,7 +76,7 @@ CREATE TABLE executions (
 ) PARTITION BY RANGE (started_at);         -- partições mensais: olly_ensure_partitions(meses)
 CREATE TABLE node_executions (
   execution_id UUID, node_id TEXT, node_name TEXT, run_index INT, status TEXT, attempts INT,
-  pinned BOOLEAN, started_at TIMESTAMPTZ NOT NULL, finished_at TIMESTAMPTZ, items_in INT, items_out INT,
+  pinned BOOLEAN, reused BOOLEAN, started_at TIMESTAMPTZ NOT NULL, finished_at TIMESTAMPTZ, items_in INT, items_out INT,
   input_data JSONB, input_sources JSONB, output_data JSONB, data_truncated BOOLEAN, data_ref TEXT, error JSONB,
   PRIMARY KEY (execution_id, node_id, run_index, started_at)
 ) PARTITION BY RANGE (started_at);

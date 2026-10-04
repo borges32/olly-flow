@@ -6,7 +6,6 @@ import {
   ReactFlowProvider,
   useReactFlow,
   type Connection,
-  type Edge as FlowEdge,
   type EdgeChange,
   type NodeChange,
 } from '@xyflow/react';
@@ -38,10 +37,13 @@ import { IssuesPanel } from './issues-panel';
 import { NODE_DRAG_MIME, NodePalette } from './node-palette';
 import { NodeDetailsView } from './ndv/node-details-view';
 import { useEditorStore } from './store';
+import { NodeActionsContext, type NodeActions } from './node-actions';
 import { useTestRun } from './use-test-run';
+import { WorkflowEdgeView, type OllyFlowEdge } from './workflow-edge';
 import { WorkflowNodeView, type OllyFlowNode } from './workflow-node';
 
 const nodeTypes = { olly: WorkflowNodeView };
+const edgeTypes = { olly: WorkflowEdgeView };
 const NEW_NODE_GAP = 260;
 
 /** Editor visual de workflow (spec 002, FR-007/FR-008/FR-015). */
@@ -90,6 +92,7 @@ function Editor({ workflow, types }: { workflow: WorkflowDetail; types: NodeDesc
   const canExecute = useCan('workflow:execute', workflow.projectId);
   const runTest = useTestRun(workflow.id);
   const [ndvNodeId, setNdvNodeId] = useState<string | null>(null);
+  const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
 
   const state = useEditorStore();
   const { nodes, edges, selection, errors, warnings, dirty, name, run, pinData } = state;
@@ -124,17 +127,19 @@ function Editor({ workflow, types }: { workflow: WorkflowDetail; types: NodeDesc
       })),
     [nodes, typesByName, errorsByNode, selection.nodeIds, measured, run.nodes, pinData],
   );
-  const flowEdges = useMemo<FlowEdge[]>(
+  const flowEdges = useMemo<OllyFlowEdge[]>(
     () =>
       edges.map((e) => ({
         id: e.id,
+        type: 'olly',
         source: e.from,
         sourceHandle: e.fromPort,
         target: e.to,
         targetHandle: e.toPort,
         selected: selection.edgeIds.includes(e.id),
+        data: { hovered: hoveredEdgeId === e.id, readOnly, onHover: setHoveredEdgeId },
       })),
-    [edges, selection.edgeIds],
+    [edges, selection.edgeIds, hoveredEdgeId, readOnly],
   );
 
   const onNodesChange = useCallback((changes: NodeChange<OllyFlowNode>[]) => {
@@ -160,7 +165,7 @@ function Editor({ workflow, types }: { workflow: WorkflowDetail; types: NodeDesc
       store.setSelection({ nodeIds: [...selected], edgeIds: store.selection.edgeIds });
   }, []);
 
-  const onEdgesChange = useCallback((changes: EdgeChange[]) => {
+  const onEdgesChange = useCallback((changes: EdgeChange<OllyFlowEdge>[]) => {
     const store = useEditorStore.getState();
     const selected = new Set(store.selection.edgeIds);
     let changed = false;
@@ -346,6 +351,14 @@ function Editor({ workflow, types }: { workflow: WorkflowDetail; types: NodeDesc
 
   const ndvNode = ndvNodeId ? nodes.find((n) => n.id === ndvNodeId) : undefined;
   const running = run.status === 'running';
+  const nodeActions = useMemo<NodeActions>(
+    () => ({
+      canExecute,
+      running,
+      runNode: (nodeId) => void runTest(nodeId),
+    }),
+    [canExecute, running, runTest],
+  );
 
   return (
     <div className="-m-6 flex h-[calc(100svh-3.5rem)] flex-col">
@@ -422,34 +435,43 @@ function Editor({ workflow, types }: { workflow: WorkflowDetail; types: NodeDesc
           }}
           onDrop={onDrop}
         >
-          <ReactFlow<OllyFlowNode>
-            nodes={flowNodes}
-            edges={flowEdges}
-            nodeTypes={nodeTypes}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            onNodeDragStart={() => {
-              state.checkpoint();
-            }}
-            onNodeDoubleClick={(_e, n) => {
-              setNdvNodeId(n.id);
-            }}
-            isValidConnection={(c) => c.source !== c.target}
-            nodesDraggable={!readOnly}
-            nodesConnectable={!readOnly}
-            deleteKeyCode={null}
-            // Clique duplo abre o painel do nó (como no N8N), não dá zoom.
-            zoomOnDoubleClick={false}
-            colorMode={theme}
-            fitView
-            fitViewOptions={{ padding: 0.3, maxZoom: 1 }}
-            proOptions={{ hideAttribution: true }}
-          >
-            <Background />
-            <Controls showInteractive={false} />
-            <MiniMap pannable zoomable />
-          </ReactFlow>
+          <NodeActionsContext.Provider value={nodeActions}>
+            <ReactFlow<OllyFlowNode, OllyFlowEdge>
+              nodes={flowNodes}
+              edges={flowEdges}
+              nodeTypes={nodeTypes}
+              edgeTypes={edgeTypes}
+              onEdgeMouseEnter={(_e, edge) => {
+                setHoveredEdgeId(edge.id);
+              }}
+              onEdgeMouseLeave={() => {
+                setHoveredEdgeId(null);
+              }}
+              onNodesChange={onNodesChange}
+              onEdgesChange={onEdgesChange}
+              onConnect={onConnect}
+              onNodeDragStart={() => {
+                state.checkpoint();
+              }}
+              onNodeDoubleClick={(_e, n) => {
+                setNdvNodeId(n.id);
+              }}
+              isValidConnection={(c) => c.source !== c.target}
+              nodesDraggable={!readOnly}
+              nodesConnectable={!readOnly}
+              deleteKeyCode={null}
+              // Clique duplo abre o painel do nó (como no N8N), não dá zoom.
+              zoomOnDoubleClick={false}
+              colorMode={theme}
+              fitView
+              fitViewOptions={{ padding: 0.3, maxZoom: 1 }}
+              proOptions={{ hideAttribution: true }}
+            >
+              <Background />
+              <Controls showInteractive={false} />
+              <MiniMap pannable zoomable />
+            </ReactFlow>
+          </NodeActionsContext.Provider>
           {nodes.length === 0 && (
             <p className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
               {readOnly ? 'Workflow vazio.' : 'Adicione um nó pela paleta à esquerda.'}
@@ -472,6 +494,7 @@ function Editor({ workflow, types }: { workflow: WorkflowDetail; types: NodeDesc
           description={typesByName.get(ndvNode.type)}
           workflowId={workflow.id}
           readOnly={readOnly}
+          projectId={workflow.projectId}
           canExecute={canExecute}
           onRunToNode={(nodeId) => void runTest(nodeId)}
           onClose={() => {

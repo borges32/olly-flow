@@ -37,6 +37,15 @@ export function canInProject(
   return ability.can(permission, subject('Project', { id: projectId }));
 }
 
+/** Permissão no projeto sem montar as regras CASL (ex.: decisões dentro de um serviço). */
+export function hasProjectPermission(
+  user: AuthenticatedUser,
+  permission: Permission,
+  projectId: string,
+): boolean {
+  return user.isAdmin || (user.permissions.projects[projectId] ?? []).includes(permission);
+}
+
 /** Pode em algum projeto (há ao menos uma regra para a permissão). */
 export function canInAnyProject(ability: AppAbility, permission: Permission): boolean {
   return ability.can(permission, 'Project');

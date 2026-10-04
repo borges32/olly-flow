@@ -1,13 +1,13 @@
 # Relatório — Spec 003: Expressões, variáveis e execução de teste
 
-**Status:** Implementada (com pendências humanas, sem comandos falhando)
+**Status:** Verificada (revisão humana em 04/10/2026)
 **Data:** 03/10/2026
 
 ## Resumo
 
 - **Expressões `{{ }}` compatíveis com o N8N:** isolated-vm num processo separado (`apps/task-runner`), avaliação em lote por nó, *paired items*, `$vars`, `$env` filtrado e Luxon.
 - **Nós:** `logic.if` (condições tipadas E/OU), `data.setVariable` e `data.set` com expressões e `includeOtherFields`.
-- **Execução de teste pelo editor:** sem salvar, até um nó e com pin data; eventos em tempo real por WebSocket com autorização por sala.
+- **Execução de teste pelo editor:** sem salvar, com pin data, e um nó por vez pelo botão de executar no próprio nó, reaproveitando os dados anteriores (FR-020, como o "Execute step" do N8N); eventos em tempo real por WebSocket com autorização por sala.
 - **Log de execuções:** particionado por mês, com truncamento.
 - **Painel do nó em três colunas:** Entrada, Parâmetros e Saída, com visões de tabela, JSON e schema.
 - **Editor de expressões:** autocomplete, pré-visualização e arrastar campos.
@@ -35,6 +35,7 @@
 | T033 | ✅ | O painel do nó (NDV) substitui o painel lateral da spec 002 |
 | T034 | ✅ | |
 | T035 | ✅ | |
+| T036 | ✅ | Acrescentada após o teste de UX (FR-020); ver "Correções após o relatório" |
 | T040 | ✅ | Rota `POST /workflows/:id/expressions/preview` |
 | T041 | ✅ | Sem Monaco (ver "Desvios") |
 | T042 | ✅ | |
@@ -68,6 +69,7 @@ Os testes citam `spec 003` no título.
 | FR-016 | Sim | `engine/src/expressions.test.ts`; `test-run.int.test.ts`; `apps/web/src/editor/store.test.ts`; `test-run.spec.ts` |
 | FR-017 | Sim | `test-run.spec.ts` (tabela, JSON, schema, portas do If); `expression-utils.test.ts` (schema) |
 | FR-018 | Sim | `apps/web/e2e/drag-field.spec.ts`; `apps/api/src/executions/preview.int.test.ts`; `apps/web/src/editor/expression-utils.test.ts` |
+| FR-020 | Sim | `engine/src/expressions.test.ts` › "FR-020…" (reaproveita, não reaproveita destino/fixado, `rerunOnPartialExecution`); `test-run.int.test.ts` › "FR-020…" (reuse, outro workflow, truncado, 400); `migrations.int.test.ts` (0004); `apps/web/src/editor/partial-run.test.ts`; `store.test.ts`; `apps/web/e2e/test-run.spec.ts` › "FR-020/HU-2.4…"; `readonly.spec.ts` (sem botão para quem não executa) |
 | FR-019 | Sim | `packages/expressions/src/compat.test.ts`; `packages/engine/src/fixtures.test.ts` |
 | NFR-001 | Sim | `sandbox.test.ts` › "SC-003/NFR-001…" (timeout de 100 ms) e "FR-006/NFR-001…" (limite de memória) |
 | NFR-002 | Sim | `sandbox.test.ts` › "NFR-002": 3000 expressões em **82 ms** (isolado) e ≈ 350 ms com os testes de todos os pacotes em paralelo; meta < 1 s |
@@ -84,17 +86,17 @@ Os testes citam `spec 003` no título.
 
 ## Comandos de verificação
 
-Executados em 03/10/2026, a partir de estado limpo e repetidos após os últimos ajustes.
+Executados em 03/10/2026 e repetidos após a execução de um nó por vez (FR-020).
 
 | Comando | Resultado |
 |---|---|
 | `pnpm install --frozen-lockfile` | ✅ |
 | `pnpm lint` | ✅ |
 | `pnpm typecheck` | ✅ |
-| `pnpm test` | ✅ 327 testes (expressions 106, nodes 66, engine 34, task-runner 6, api 16, web 39, shared-types 12, repositório 48); estável em duas rodadas forçadas (`--force`) |
-| `pnpm test:integration` | ✅ 94 testes (db 16, api 78) |
+| `pnpm test` | ✅ 340 testes (expressions 106, nodes 66, engine 37, task-runner 6, api 16, web 49, shared-types 12, repositório 48) |
+| `pnpm test:integration` | ✅ 98 testes (db 17, api 81) |
 | `pnpm build` | ✅ |
-| `pnpm test:e2e` | ✅ 18 testes; os 5 da spec 003 também passam contra a stack em containers (`pnpm app:up`) |
+| `pnpm test:e2e` | ✅ 19 testes |
 | `docker compose up -d && pnpm smoke` | ✅ |
 | `pnpm audit --audit-level=high` | ✅ 0 altas; 1 moderada (`uuid`, via Testcontainers, só em testes) |
 
@@ -169,7 +171,7 @@ pnpm app:reset          # ou: docker compose up -d --wait && pnpm build && pnpm 
    - digite `{{ $json.` para ver as sugestões;
    - no **If**, use a condição `={{ $json.idade }}` `number` `gte` `18`.
 3. Clique em **Executar workflow**: os nós mostram o status e a contagem de itens. Abra o If e veja **Verdadeiro (1)** / **Falso (1)** em Tabela, JSON e Schema.
-4. No nó do meio, **Executar até este nó** executa só os nós até ele.
+4. Execução passo a passo (FR-020): passe o mouse sobre **Definir campos** e clique no botão de executar (▶) acima do nó. Só ele executa; o If fica sem status. Depois, clique no ▶ do If: ele executa sobre a saída anterior, e o status de **Definir campos** indica "dados da execução anterior". Alterar um nó faz ele, e os seguintes, executarem de novo. O mesmo comando está no painel do nó (**Executar este nó**).
 5. Teste uma expressão com laço (`={{ (() => { while (true) {} })() }}`): a execução falha com "Tempo limite da expressão excedido", e a API segue respondendo.
 6. Log: `GET /api/v1/executions/:id`, ou no banco: `SELECT node_name, status, items_out FROM node_executions ORDER BY started_at DESC LIMIT 10`.
 
@@ -179,3 +181,10 @@ pnpm app:reset          # ou: docker compose up -d --wait && pnpm build && pnpm 
 - Funções de extensão do N8N nas expressões, quando os workflows da POC indicarem quais são usadas.
 - Destaque de sintaxe no campo de expressão.
 - Validação estrutural em tempo real no editor.
+
+## Correções após o relatório
+
+| Data | Defeito | Correção | Teste |
+|---|---|---|---|
+| 03/10/2026 | Teste de UX: a execução de teste rodava o fluxo inteiro; faltava executar um nó por vez, como no N8N | Spec e plano atualizados (HU-2.2, HU-2.4, FR-020, T036). Botão de executar no nó (canvas) e "Executar este nó" no painel. O editor envia `reuse` (nó → execução) com os anteriores que têm dados completos e não mudaram; a API lê os dados gravados e o motor os reaproveita (`runData`), registrando `node_executions.reused` (migration `0004_node_reused`). `data.setVariable` roda de novo (`rerunOnPartialExecution`) para manter `$vars`. Os dados dos nós posteriores somem da tela | Ver FR-020 em "Requisitos" |
+| 03/10/2026 | "Definir variável" e "Se (If)" apareciam com o ícone genérico no canvas e na paleta | Ícones `variable` e `git-branch` no mapa do editor (`apps/web/src/editor/node-icons.ts`) | `apps/web/src/editor/graph.test.ts` › "todo nó da plataforma tem ícone próprio no editor" |

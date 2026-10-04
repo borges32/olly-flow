@@ -250,9 +250,14 @@ describe('spec 002 — FR-006: catálogo de tipos de nó', () => {
     expect(types.map((t) => t.type)).toEqual([
       'data.set',
       'data.setVariable',
+      // Spec 004.
+      'http.request',
       'logic.if',
+      'postgres.query',
+      'postgres.write',
       'trigger.manual',
     ]);
+    expect(types.find((t) => t.type === 'http.request')?.credentialTypes).toContain('httpBearer');
     const set = types.find((t) => t.type === 'data.set');
     expect(set).toMatchObject({
       inputs: [{ name: 'main' }],

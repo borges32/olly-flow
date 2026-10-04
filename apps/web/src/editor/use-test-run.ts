@@ -11,6 +11,7 @@ import { useApi } from '@/api/api-provider';
 import { ApiError } from '@/api/client';
 import { executionSocket } from '@/api/execution-socket';
 import { useAuth } from '@/auth/auth-provider';
+import { nodeSignatures, planReuse } from './partial-run';
 import { useEditorStore } from './store';
 
 type Buffered = (executionId: string) => void;
@@ -18,6 +19,8 @@ const MAX_BUFFERED_EXECUTIONS = 20;
 
 /**
  * Execução de teste a partir do editor (FR-011) com acompanhamento em tempo real (FR-012).
+ * Com um nó de destino, executa só esse nó (FR-020): os anteriores reaproveitam os dados da
+ * última execução quando possível.
  * O editor entra na sala do workflow ao abrir; eventos de uma execução cujo id ainda não
  * voltou do POST ficam guardados e são aplicados assim que ele chega.
  */
@@ -97,13 +100,20 @@ export function useTestRun(workflowId: string) {
     async (destinationNodeId?: string) => {
       const store = useEditorStore.getState();
       if (store.run.status === 'running') return;
+      const definition = store.definition();
+      const pinData = definition.pinData ?? {};
+      const signatures = nodeSignatures(definition.nodes, definition.edges, pinData);
+      const reuse = destinationNodeId
+        ? planReuse(destinationNodeId, definition.nodes, definition.edges, pinData, store.run.nodes)
+        : {};
       let executionId: string;
       try {
         ({ executionId } = await api.post<TestRunResponse>(
           `/api/v1/workflows/${workflowId}/test-run`,
           {
-            definition: store.definition(),
+            definition,
             ...(destinationNodeId && { destinationNodeId }),
+            ...(Object.keys(reuse).length > 0 && { reuse }),
           },
         ));
       } catch (error) {
@@ -126,7 +136,10 @@ export function useTestRun(workflowId: string) {
         return;
       }
       store.setIssues([]);
-      store.runStarted(executionId);
+      store.runStarted(executionId, {
+        signatures,
+        ...(destinationNodeId && { destinationNodeId }),
+      });
       for (const apply of buffer.current.get(executionId) ?? []) apply(executionId);
       buffer.current.delete(executionId);
       // Rede de segurança: sem a sala do workflow (ex.: reconexão), confere pelo log.

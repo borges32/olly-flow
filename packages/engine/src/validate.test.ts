@@ -1,7 +1,7 @@
 import { createNodeRegistry } from '@olly/nodes';
 import type { Edge, WorkflowDefinition, WorkflowNode } from '@olly/shared-types';
 import { describe, expect, it } from 'vitest';
-import { validateWorkflow } from './validate.js';
+import { expressionsInStaticParams, validateWorkflow } from './validate.js';
 
 const registry = createNodeRegistry();
 
@@ -100,5 +100,42 @@ describe('spec 002 — FR-004/FR-005: validação estrutural ao salvar', () => {
 
   it('FR-004: workflow com um único nó não gera aviso de órfão', () => {
     expect(validateWorkflow(def([node('t', 'trigger.manual')], []), registry).warnings).toEqual([]);
+  });
+});
+
+describe('spec 004 — FR-012: parâmetro sem expressão', () => {
+  it('FR-012: SQL do postgres.query iniciado por "=" é erro ao salvar', () => {
+    const def = (query: string): WorkflowDefinition => ({
+      nodes: [
+        { id: 'q', type: 'postgres.query', name: 'Consulta', params: { query }, position: [0, 0] },
+      ],
+      edges: [],
+      settings: {},
+    });
+    expect(validateWorkflow(def("={{ 'DROP TABLE x' }}"), registry).errors).toEqual([
+      {
+        code: 'EXPRESSION_NOT_ALLOWED',
+        message: 'Nó "Consulta": o parâmetro "query" não aceita expressões',
+        nodeIds: ['q'],
+      },
+    ]);
+    expect(validateWorkflow(def('SELECT $1'), registry).errors).toEqual([]);
+  });
+
+  it('FR-012/FR-015: campos aninhados (colunas do postgres.write) também são verificados', () => {
+    expect(
+      expressionsInStaticParams(
+        {
+          properties: {
+            columns: {
+              properties: {
+                values: { items: { properties: { column: { 'x-no-expression': true } } } },
+              },
+            },
+          },
+        },
+        { columns: { values: [{ column: 'ok' }, { column: '={{ $json.c }}' }] } },
+      ),
+    ).toEqual(['columns.values[1].column']);
   });
 });

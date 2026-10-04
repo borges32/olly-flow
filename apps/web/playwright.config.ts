@@ -28,7 +28,8 @@ export default defineConfig({
     {
       command: 'node ../api/dist/main.js',
       url: 'http://localhost:3000/health',
-      env: { ...env, LOG_LEVEL: 'warn' },
+      // Spec 004: o servidor HTTP local dos testes de integração precisa passar no anti-SSRF.
+      env: { ...env, LOG_LEVEL: 'warn', OLLY_HTTP_ALLOWLIST: '127.0.0.1' },
       reuseExistingServer: !isCI,
       timeout: 60_000,
     },

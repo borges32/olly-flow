@@ -8,6 +8,7 @@ import { startTestDatabase, type TestDatabase } from './testing.js';
 
 const TABLES = [
   'audit_log',
+  'credentials',
   'executions',
   'node_executions',
   'project_members',
@@ -41,7 +42,13 @@ afterAll(async () => {
 describe('FR-009: migrations versionadas e reversíveis', () => {
   it('FR-009/SC-003: up cria as tabelas da fundação', async () => {
     const applied = await migrateToLatest(t.db);
-    expect(applied).toEqual(['Up 0001_fundacao', 'Up 0002_workflows', 'Up 0003_executions']);
+    expect(applied).toEqual([
+      'Up 0001_fundacao',
+      'Up 0002_workflows',
+      'Up 0003_executions',
+      'Up 0004_node_reused',
+      'Up 0005_credentials',
+    ]);
     expect(await publicTables()).toEqual(TABLES);
   });
 
@@ -51,7 +58,13 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
 
   it('FR-009/SC-003: down reverte tudo e up reaplica sem erro', async () => {
     const reverted = await migrateDown(t.db, { all: true });
-    expect(reverted).toEqual(['Down 0003_executions', 'Down 0002_workflows', 'Down 0001_fundacao']);
+    expect(reverted).toEqual([
+      'Down 0005_credentials',
+      'Down 0004_node_reused',
+      'Down 0003_executions',
+      'Down 0002_workflows',
+      'Down 0001_fundacao',
+    ]);
     expect(await publicTables()).toEqual([]);
     const { rows } = await sql<{ n: number }>`
       SELECT count(*)::int AS n FROM pg_proc WHERE proname = 'audit_log_immutable'`.execute(t.db);
@@ -61,12 +74,36 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
     expect(await publicTables()).toEqual(TABLES);
   });
 
-  it('FR-001/FR-002 (spec 002): down de 0003 e 0002 remove só as tabelas delas', async () => {
+  it('FR-001 (spec 004): down de 0005 remove só a tabela credentials', async () => {
+    expect(await migrateDown(t.db)).toEqual(['Down 0005_credentials']);
+    expect(await publicTables()).toEqual(TABLES.filter((n) => n !== 'credentials'));
+    await migrateToLatest(t.db);
+  });
+
+  it('FR-020 (spec 003): down de 0004 remove só a coluna reused', async () => {
     await migrateDown(t.db);
-    expect(await publicTables()).toEqual(TABLES.filter((n) => !n.includes('executions')));
+    const reusedColumns = async () => {
+      const { rows } = await sql<{ n: number }>`
+        SELECT count(*)::int AS n FROM information_schema.columns
+        WHERE table_name = 'node_executions' AND column_name = 'reused'`.execute(t.db);
+      return rows[0]?.n;
+    };
+    expect(await reusedColumns()).toBe(1);
+    expect(await migrateDown(t.db)).toEqual(['Down 0004_node_reused']);
+    expect(await reusedColumns()).toBe(0);
+    expect(await publicTables()).toEqual(TABLES.filter((n) => n !== 'credentials'));
+    await migrateToLatest(t.db);
+  });
+
+  it('FR-001/FR-002 (spec 002): down de 0003 e 0002 remove só as tabelas delas', async () => {
+    const base = TABLES.filter((n) => n !== 'credentials');
+    await migrateDown(t.db);
+    await migrateDown(t.db);
+    await migrateDown(t.db);
+    expect(await publicTables()).toEqual(base.filter((n) => !n.includes('executions')));
     await migrateDown(t.db);
     expect(await publicTables()).toEqual(
-      TABLES.filter((n) => !n.includes('executions') && !n.startsWith('w')),
+      base.filter((n) => !n.includes('executions') && !n.startsWith('w')),
     );
     await migrateToLatest(t.db);
   });

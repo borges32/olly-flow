@@ -112,6 +112,30 @@ test.describe('spec 002 — editor visual', () => {
     await page.getByRole('button', { name: /fit view/i }).click();
   });
 
+  test('FR-007: excluir uma conexão pelo botão na própria conexão, com desfazer', async ({
+    page,
+  }) => {
+    const wf = await createWorkflow(admin, projectId, 'Excluir conexão', manualSetDefinition);
+    await loginViaUi(page, 'editor', `/workflows/${wf.id}`);
+    const edge = page.locator('.react-flow__edge');
+    await expect(edge).toHaveCount(1);
+
+    await edge.hover({ force: true });
+    await page.getByRole('button', { name: 'Excluir conexão' }).click();
+    await expect(edge).toHaveCount(0);
+    await expect(page.getByTestId('dirty-indicator')).toBeVisible();
+
+    await page.keyboard.press('Control+z');
+    await expect(edge).toHaveCount(1);
+
+    // Também pela seleção + Delete, com a conexão selecionada destacada.
+    await edge.click({ force: true });
+    await expect(edge).toHaveClass(/selected/);
+    await expect(page.getByRole('button', { name: 'Excluir conexão' })).toBeVisible();
+    await page.keyboard.press('Delete');
+    await expect(edge).toHaveCount(0);
+  });
+
   test('FR-005/HU-1.3: ciclo ao salvar destaca os nós envolvidos', async ({ page }) => {
     const [trigger, first] = manualSetDefinition.nodes;
     if (!trigger || !first) throw new Error('fixture inválida');

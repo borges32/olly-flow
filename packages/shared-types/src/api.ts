@@ -134,6 +134,11 @@ export interface TestRunRequest {
   pinData?: Record<string, Item[]>;
   /** "Executar até este nó". */
   destinationNodeId?: string;
+  /**
+   * Execução de um nó (FR-020): por id do nó, a execução de teste cuja saída é reaproveitada.
+   * Vale só para execuções deste workflow, nós com sucesso e dados completos (não truncados).
+   */
+  reuse?: Record<string, string>;
 }
 
 export interface TestRunResponse {
@@ -154,6 +159,8 @@ export interface NodeExecutionDetail {
   itemsIn: number;
   itemsOut: number;
   pinned: boolean;
+  /** Saída reaproveitada de uma execução anterior (FR-020). */
+  reused: boolean;
   /** Entrada/saída gravadas além do limite foram cortadas (FR-015). */
   dataTruncated: boolean;
   input: Record<string, Item[]> | null;
@@ -198,6 +205,7 @@ export interface NodeFinishedEvent {
   itemsOut: number;
   durationMs: number;
   pinned: boolean;
+  reused: boolean;
   dataTruncated: boolean;
   data: { input: Record<string, Item[]>; output: NodeOutput };
   error: NodeExecutionError | null;
@@ -229,3 +237,48 @@ export interface ExpressionPreviewRequest {
 
 export type ExpressionPreviewResponse =
   { ok: true; value: unknown } | { ok: false; error: { kind: string; message: string } };
+
+/** Credencial sem os campos secretos (spec 004, FR-002). */
+export interface CredentialSummary {
+  id: string;
+  projectId: string;
+  name: string;
+  type: string;
+  /** Campos não secretos; os `x-secret` nunca saem da API. */
+  publicFields: Record<string, unknown>;
+  /** Campos secretos que têm valor salvo (para o formulário indicar "manter atual"). */
+  secretFieldsSet: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** `POST /projects/:id/credentials`. */
+export interface CreateCredentialRequest {
+  name: string;
+  type: string;
+  data: Record<string, unknown>;
+}
+
+/** `PUT /credentials/:id`: campo secreto ausente ou vazio mantém o valor atual (HU-1.1). */
+export interface UpdateCredentialRequest {
+  name?: string;
+  data?: Record<string, unknown>;
+}
+
+/** `POST /credentials/:id/test` (FR-005). `url` é exigida pelos tipos HTTP genéricos. */
+export interface CredentialTestRequest {
+  url?: string;
+}
+
+export interface CredentialTestResponse {
+  ok: boolean;
+  message: string;
+}
+
+/** `GET /credentials/:id/postgres/columns` (FR-016). */
+export interface PostgresColumn {
+  name: string;
+  type: string;
+  nullable: boolean;
+  hasDefault: boolean;
+}

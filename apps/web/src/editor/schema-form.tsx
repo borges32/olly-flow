@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import { insertExpression, scalarText } from './expression-utils';
 import { FIELD_MIME, useExpressionHelpers } from './ndv/expression-context';
 import { ExpressionInput } from './ndv/expression-input';
+import { useLoadOptions } from './param-options';
 import {
   asSchema,
   fieldKind,
@@ -95,6 +96,7 @@ function ScalarField({
   onChange,
   description,
   inline,
+  noExpression,
   children,
 }: {
   id: string;
@@ -105,11 +107,13 @@ function ScalarField({
   onChange: (value: unknown) => void;
   description: ReactNode;
   inline?: boolean;
+  /** `x-no-expression`: sem alternador; o valor é sempre fixo (spec 004). */
+  noExpression?: boolean;
   children: ReactNode;
 }) {
   const helpers = useExpressionHelpers();
-  const expression = isExpression(value);
-  const canToggle = helpers !== null && !readOnly;
+  const expression = !noExpression && isExpression(value);
+  const canToggle = helpers !== null && !readOnly && !noExpression;
 
   const onDrop = (e: DragEvent) => {
     const field = e.dataTransfer.getData(FIELD_MIME);
@@ -152,7 +156,7 @@ function ScalarField({
       onDragOver={(e) => {
         if (!readOnly && e.dataTransfer.types.includes(FIELD_MIME)) e.preventDefault();
       }}
-      onDrop={expression ? undefined : onDrop}
+      onDrop={expression || noExpression ? undefined : onDrop}
     >
       {(!inline || expression) && (
         <div className="flex items-center gap-2">
@@ -189,6 +193,32 @@ function Field({ name, path, schema, value, readOnly, onChange }: FieldProps) {
   const testId = `param-${path}`;
   const description = schema.description && (
     <p className="text-xs text-muted-foreground">{schema.description}</p>
+  );
+
+  const singleLine = () => (
+    <ScalarField
+      id={id}
+      label={label}
+      testId={testId}
+      value={value}
+      readOnly={readOnly}
+      onChange={onChange}
+      description={description}
+      noExpression={schema['x-no-expression'] === true}
+    >
+      <Input
+        id={id}
+        data-testid={testId}
+        type={kind === 'number' ? 'number' : 'text'}
+        autoComplete="off"
+        value={toText(value)}
+        disabled={readOnly}
+        onChange={(e) => {
+          const raw = e.target.value;
+          onChange(kind === 'number' ? (raw === '' ? undefined : Number(raw)) : raw);
+        }}
+      />
+    </ScalarField>
   );
 
   switch (kind) {
@@ -249,31 +279,58 @@ function Field({ name, path, schema, value, readOnly, onChange }: FieldProps) {
         </ScalarField>
       );
     case 'string':
-    case 'number':
-      return (
-        <ScalarField
-          id={id}
-          label={label}
-          testId={testId}
-          value={value}
-          readOnly={readOnly}
-          onChange={onChange}
-          description={description}
-        >
-          <Input
+      if (schema['x-load-options']) {
+        return (
+          <ScalarField
             id={id}
-            data-testid={testId}
-            type={kind === 'number' ? 'number' : 'text'}
-            autoComplete="off"
-            value={toText(value)}
-            disabled={readOnly}
-            onChange={(e) => {
-              const raw = e.target.value;
-              onChange(kind === 'number' ? (raw === '' ? undefined : Number(raw)) : raw);
-            }}
-          />
-        </ScalarField>
-      );
+            label={label}
+            testId={testId}
+            value={value}
+            readOnly={readOnly}
+            onChange={onChange}
+            description={description}
+            noExpression
+          >
+            <LoadedOptions
+              id={id}
+              testId={testId}
+              schema={schema}
+              value={value}
+              readOnly={readOnly}
+              onChange={onChange}
+            />
+          </ScalarField>
+        );
+      }
+      if (schema['x-multiline']) {
+        return (
+          <ScalarField
+            id={id}
+            label={label}
+            testId={testId}
+            value={value}
+            readOnly={readOnly}
+            onChange={onChange}
+            description={description}
+            noExpression={schema['x-no-expression'] === true}
+          >
+            <textarea
+              id={id}
+              data-testid={testId}
+              spellCheck={false}
+              className="min-h-24 w-full rounded-md border border-input bg-background px-2 py-1.5 font-mono text-xs shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-60"
+              value={toText(value)}
+              disabled={readOnly}
+              onChange={(e) => {
+                onChange(e.target.value);
+              }}
+            />
+          </ScalarField>
+        );
+      }
+      return singleLine();
+    case 'number':
+      return singleLine();
     case 'object':
       return (
         <fieldset className="grid gap-3 rounded-md border p-3">
@@ -350,4 +407,69 @@ function Field({ name, path, schema, value, readOnly, onChange }: FieldProps) {
         <p className="text-xs text-muted-foreground">Campo “{label}” não suportado pelo editor.</p>
       );
   }
+}
+
+/**
+ * Select com opções do catálogo do banco (`x-load-options`, FR-016). Sem credencial ou com erro,
+ * vira campo de texto: o valor continua editável.
+ */
+function LoadedOptions({
+  id,
+  testId,
+  schema,
+  value,
+  readOnly,
+  onChange,
+}: {
+  id: string;
+  testId: string;
+  schema: ParamSchema;
+  value: unknown;
+  readOnly: boolean;
+  onChange: (value: unknown) => void;
+}) {
+  const { options, loading, error, hint } = useLoadOptions(schema['x-load-options']);
+  const current = toText(value ?? schema.default);
+  if (!options) {
+    return (
+      <div className="grid gap-1">
+        <Input
+          id={id}
+          data-testid={testId}
+          autoComplete="off"
+          value={current}
+          disabled={readOnly}
+          onChange={(e) => {
+            onChange(e.target.value);
+          }}
+        />
+        <p className="text-xs text-muted-foreground">
+          {loading
+            ? 'Carregando opções…'
+            : error
+              ? `Não foi possível listar: ${error.message}`
+              : hint}
+        </p>
+      </div>
+    );
+  }
+  const list = current && !options.includes(current) ? [current, ...options] : options;
+  return (
+    <Select
+      id={id}
+      data-testid={testId}
+      value={current}
+      disabled={readOnly}
+      onChange={(e) => {
+        onChange(e.target.value);
+      }}
+    >
+      <option value="">Selecione…</option>
+      {list.map((opt) => (
+        <option key={opt} value={opt}>
+          {opt}
+        </option>
+      ))}
+    </Select>
+  );
 }

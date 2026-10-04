@@ -142,6 +142,7 @@ describe('spec 003 — FR-016/FR-012: pin data e estado da execução no editor'
       itemsOut: 2,
       durationMs: 5,
       pinned: false,
+      reused: false,
       dataTruncated: false,
       data: { input: { main: [] }, output: { main: [{ json: {} }, { json: {} }] } },
       error: null,
@@ -149,5 +150,91 @@ describe('spec 003 — FR-016/FR-012: pin data e estado da execução no editor'
     expect(store().run.nodes.n1).toMatchObject({ status: 'success', itemsOut: 2, durationMs: 5 });
     store().runFinished({ executionId: 'exec-1', status: 'success', finishedAt: '', error: null });
     expect(store().run.status).toBe('success');
+  });
+
+  it('FR-020: executar um nó mantém os dados de quem não depende dele e descarta os posteriores', () => {
+    const [m, a, b, c] = ['m', 'a', 'b', 'c'].map((n, i) => store().addNode(setType, [i * 100, 0]));
+    for (const [from, to] of [
+      [m, a],
+      [a, b],
+      [m, c],
+    ] as const)
+      store().connect({ from: from ?? '', fromPort: 'main', to: to ?? '', toPort: 'main' });
+    const finish = (executionId: string, nodeId: string, reused = false) => {
+      store().nodeFinished({
+        executionId,
+        nodeId,
+        status: 'success',
+        itemsIn: 1,
+        itemsOut: 1,
+        durationMs: 1,
+        pinned: false,
+        reused,
+        dataTruncated: false,
+        data: { input: {}, output: { main: [{ json: { de: executionId } }] } },
+        error: null,
+      });
+    };
+    store().runStarted('exec-1', { signatures: { [m ?? '']: 'sig-m', [a ?? '']: 'sig-a' } });
+    for (const id of [m, a, b, c]) finish('exec-1', id ?? '');
+    expect(store().run.nodes[a ?? '']).toMatchObject({ executionId: 'exec-1', signature: 'sig-a' });
+
+    store().runStarted('exec-2', { destinationNodeId: a ?? '' });
+    expect(Object.keys(store().run.nodes).sort()).toEqual([m, c].sort());
+    expect(store().run.status).toBe('running');
+    finish('exec-2', m ?? '', true);
+    finish('exec-2', a ?? '');
+    expect(store().run.nodes[m ?? '']).toMatchObject({ reused: true, executionId: 'exec-2' });
+    // c não depende de a: continua com os dados da execução 1.
+    expect(store().run.nodes[c ?? '']?.executionId).toBe('exec-1');
+
+    store().runStarted('exec-3');
+    expect(store().run.nodes).toEqual({});
+  });
+});
+
+describe('spec 002 — FR-007: excluir conexão', () => {
+  it('FR-007: remove só a conexão indicada, entra no histórico e limpa a seleção', () => {
+    const a = store().addNode(setType, [0, 0]);
+    const b = store().addNode(setType, [100, 0]);
+    store().connect({ from: a, fromPort: 'main', to: b, toPort: 'main' });
+    const edgeId = store().edges[0]?.id ?? '';
+    store().setSelection({ nodeIds: [], edgeIds: [edgeId] });
+    store().removeEdge(edgeId);
+    expect(store().edges).toEqual([]);
+    expect(store().nodes).toHaveLength(2);
+    expect(store().selection.edgeIds).toEqual([]);
+    store().undo();
+    expect(store().edges).toHaveLength(1);
+    store().removeEdge('inexistente');
+    expect(store().edges).toHaveLength(1);
+  });
+});
+
+describe('spec 004 — FR-007/FR-017: credencial e configurações do nó', () => {
+  it('FR-007: associa e remove a credencial do nó; a definição só leva o campo quando há valor', () => {
+    const id = store().addNode(setType, [0, 0]);
+    store().updateNode(id, { credentialId: 'cred-1' });
+    expect(store().definition().nodes[0]?.credentialId).toBe('cred-1');
+    store().updateNode(id, { credentialId: undefined });
+    expect(store().definition().nodes[0]).not.toHaveProperty('credentialId');
+    store().undo();
+    expect(store().nodes[0]?.credentialId).toBe('cred-1');
+  });
+
+  it('FR-017: grava retry, timeout e onError no nó e remove quando vazio', () => {
+    const id = store().addNode(setType, [0, 0]);
+    store().updateNode(id, {
+      settings: {
+        retry: { maxTries: 3, waitMs: 1000, backoff: 'exponential' },
+        onError: 'continue',
+      },
+    });
+    expect(store().definition().nodes[0]?.settings).toEqual({
+      retry: { maxTries: 3, waitMs: 1000, backoff: 'exponential' },
+      onError: 'continue',
+    });
+    store().updateNode(id, { settings: undefined });
+    expect(store().definition().nodes[0]).not.toHaveProperty('settings');
   });
 });

@@ -4,3 +4,4 @@ export * from './paired.js';
 export * from './expressions.js';
 export * from './run.js';
 export * from './recorded.js';
+export * from './redact.js';

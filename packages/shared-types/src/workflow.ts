@@ -124,8 +124,9 @@ export const portDefSchema = z.object({
 export const workflowNodeSettingsSchema = z.object({
   retry: z
     .object({
-      maxTries: z.number().int().min(1),
-      waitMs: z.number().int().nonnegative(),
+      // Limites (spec 004): sem cancelamento até a spec 006, retry sem teto prenderia a execução.
+      maxTries: z.number().int().min(1).max(10),
+      waitMs: z.number().int().nonnegative().max(60_000),
       backoff: z.enum(['fixed', 'exponential']).optional(),
     })
     .optional(),

@@ -17,6 +17,8 @@ export interface NodeRunState {
   output?: NodeOutput;
   error?: Error;
   pinned?: boolean;
+  /** Saída reaproveitada de uma execução anterior (FR-020). */
+  reused?: boolean;
 }
 
 /** Leitura dos dados de uma execução (em andamento ou reconstruída do log). */

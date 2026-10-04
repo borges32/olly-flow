@@ -11,7 +11,15 @@ import type {
 } from '@olly/shared-types';
 import { sql } from 'kysely';
 import { AuditService, type AuditContext } from '../audit/audit.service.js';
-import { ConflictError, NotFoundError, UnprocessableError } from '../common/errors.js';
+import type { AuthenticatedUser } from '../auth/auth.types.js';
+import {
+  ConflictError,
+  NotFoundError,
+  PermissionDeniedError,
+  UnprocessableError,
+} from '../common/errors.js';
+import { CredentialsService } from '../credentials/credentials.service.js';
+import { hasProjectPermission } from '../rbac/ability.factory.js';
 import { DB } from '../core/tokens.js';
 import { NODE_REGISTRY } from '../node-types/node-types.module.js';
 import type {
@@ -31,7 +39,57 @@ export class WorkflowsService {
     @Inject(DB) private readonly db: Db,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(NODE_REGISTRY) private readonly registry: NodeRegistry,
+    @Inject(CredentialsService) private readonly credentials: CredentialsService,
   ) {}
+
+  /**
+   * Spec 004, FR-007 (plan §10): nó que passa a usar uma credencial exige `credential:use`; a
+   * credencial precisa ser do projeto e de um tipo aceito pelo nó. Referências que não mudaram
+   * não são revalidadas (a credencial pode ter sido excluída depois).
+   */
+  private async checkCredentialRefs(
+    user: AuthenticatedUser,
+    projectId: string,
+    definition: WorkflowDefinition,
+    previous?: WorkflowDefinition,
+  ): Promise<void> {
+    const before = new Map(previous?.nodes.map((n) => [n.id, n.credentialId]) ?? []);
+    const changed = definition.nodes.filter(
+      (n) => n.credentialId && before.get(n.id) !== n.credentialId,
+    );
+    if (changed.length === 0) return;
+    if (!hasProjectPermission(user, 'credential:use', projectId)) {
+      throw new PermissionDeniedError('Usar credenciais em nós exige a permissão credential:use');
+    }
+    const types = await this.credentials.typesById(
+      projectId,
+      changed.map((n) => n.credentialId as string),
+    );
+    const issues = changed.flatMap((n) => {
+      const type = types.get(n.credentialId as string);
+      const accepted = this.registry.get(n.type)?.credentialTypes ?? [];
+      if (!type) {
+        return [
+          {
+            code: 'CREDENTIAL_NOT_FOUND',
+            message: `Nó "${n.name}": credencial não encontrada neste projeto`,
+            nodeIds: [n.id],
+          },
+        ];
+      }
+      if (!accepted.includes(type)) {
+        return [
+          {
+            code: 'CREDENTIAL_TYPE_MISMATCH',
+            message: `Nó "${n.name}": credencial do tipo ${type} não serve para este nó`,
+            nodeIds: [n.id],
+          },
+        ];
+      }
+      return [];
+    });
+    if (issues.length > 0) throw new UnprocessableError('Credencial inválida em nós', { issues });
+  }
 
   /** Recusa com 422 se houver erros estruturais; devolve os avisos. */
   private validate(definition: WorkflowDefinition): Issue[] {
@@ -46,11 +104,13 @@ export class WorkflowsService {
 
   async create(
     ctx: AuditContext,
+    user: AuthenticatedUser,
     projectId: string,
     body: CreateWorkflowBody,
   ): Promise<WorkflowDetail> {
     const definition = body.definition ?? EMPTY_DEFINITION;
     const warnings = this.validate(definition);
+    await this.checkCredentialRefs(user, projectId, definition);
     const id = await this.db.transaction().execute(async (trx) => {
       const wf = await trx
         .insertInto('workflows')
@@ -148,8 +208,15 @@ export class WorkflowsService {
    * Cada salvamento cria uma versão (FR-002). Concorrência otimista (FR-003): o UPDATE só
    * acontece se `baseVersion` ainda for a versão atual; senão, 409.
    */
-  async save(ctx: AuditContext, id: string, body: SaveWorkflowBody): Promise<WorkflowDetail> {
+  async save(
+    ctx: AuditContext,
+    user: AuthenticatedUser,
+    id: string,
+    body: SaveWorkflowBody,
+  ): Promise<WorkflowDetail> {
     const warnings = this.validate(body.definition);
+    const current = await this.get(id);
+    await this.checkCredentialRefs(user, current.projectId, body.definition, current.definition);
     await this.db.transaction().execute(async (trx) => {
       const updated = await trx
         .updateTable('workflows')

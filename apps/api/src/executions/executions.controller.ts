@@ -32,7 +32,7 @@ export class ExecutionsController {
     @Param('id') id: string,
     @Body(new ZodPipe(testRunSchema)) body: TestRunBody,
   ): Promise<TestRunResponse> {
-    return this.executions.startTestRun(user.id, id, body);
+    return this.executions.startTestRun(user, id, body);
   }
 
   /** FR-014: execução e dados por nó. */

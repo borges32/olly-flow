@@ -160,6 +160,99 @@ describe('spec 003 — FR-011/FR-014: execução de teste e log', () => {
     expect(nodes['Saudação']?.output?.main?.[0]?.json.msg).toBe('Olá, cliente 99');
   });
 
+  it('FR-020: reuse reaproveita a saída gravada dos nós anteriores; só o destino executa', async () => {
+    const first = await waitFinished(
+      editor,
+      (await testRun(editor, { definition, destinationNodeId: 'se' })).json<TestRunResponse>()
+        .executionId,
+    );
+    // Busca mudou na definição, mas é reaproveitada: a saída vem da execução anterior.
+    const changed: WorkflowDefinition = {
+      ...definition,
+      nodes: definition.nodes.map((n) =>
+        n.id === 'busca'
+          ? { ...n, params: { fields: [{ name: 'id', type: 'number', value: '0' }] } }
+          : n,
+      ),
+    };
+    const res = await testRun(editor, {
+      definition: changed,
+      destinationNodeId: 'saida',
+      reuse: { m: first.id, busca: first.id, se: first.id },
+    });
+    expect(res.statusCode).toBe(202);
+    const detail = await waitFinished(editor, res.json<TestRunResponse>().executionId);
+    const nodes = Object.fromEntries(detail.nodes.map((n) => [n.nodeName, n]));
+    expect(nodes['Início']).toMatchObject({ pinned: true, reused: false });
+    expect(nodes.Busca).toMatchObject({ reused: true, itemsIn: 3, itemsOut: 3 });
+    expect(nodes['Adulto?']).toMatchObject({ reused: true });
+    expect(nodes['Adulto?']?.output?.true?.map((i) => i.json.id)).toEqual([2, 3]);
+    expect(nodes['Saudação']).toMatchObject({ reused: false });
+    expect(nodes['Saudação']?.output?.main?.map((i) => i.json.msg)).toEqual([
+      'Olá, cliente 2',
+      'Olá, cliente 3',
+    ]);
+  });
+
+  it('FR-020: reuse ignora execuções de outro workflow', async () => {
+    const other = (
+      await editor.call('POST', `/projects/${workflow.projectId}/workflows`, { name: 'Outro' })
+    ).json<WorkflowDetail>();
+    const foreign = (
+      await editor.call('POST', `/workflows/${other.id}/test-run`, { definition })
+    ).json<TestRunResponse>();
+    await waitFinished(editor, foreign.executionId);
+    const detail = await waitFinished(
+      editor,
+      (
+        await testRun(editor, {
+          definition,
+          destinationNodeId: 'se',
+          reuse: { busca: foreign.executionId },
+        })
+      ).json<TestRunResponse>().executionId,
+    );
+    expect(detail.nodes.find((n) => n.nodeId === 'busca')).toMatchObject({
+      status: 'success',
+      reused: false,
+    });
+  });
+
+  it('spec 004 — FR-017: tentativas do retry ficam em node_executions.attempts', async () => {
+    const retrying: WorkflowDefinition = {
+      nodes: [
+        manual,
+        {
+          id: 'h',
+          type: 'http.request',
+          name: 'Bloqueada',
+          params: { url: 'http://10.0.0.1/' },
+          settings: { retry: { maxTries: 3, waitMs: 1 } },
+          position: [200, 0],
+        },
+      ],
+      edges: [e('m', 'h')],
+      settings: {},
+    };
+    const detail = await waitFinished(
+      editor,
+      (await testRun(editor, { definition: retrying })).json<TestRunResponse>().executionId,
+    );
+    expect(detail.status).toBe('error');
+    const row = await ctx.database.db
+      .selectFrom('node_executions')
+      .select(['attempts', 'status'])
+      .where('execution_id', '=', detail.id)
+      .where('node_id', '=', 'h')
+      .executeTakeFirstOrThrow();
+    expect(row).toEqual({ attempts: 3, status: 'error' });
+  });
+
+  it('FR-020: reuse com id de execução inválido responde 400', async () => {
+    const res = await testRun(editor, { definition, reuse: { busca: 'x' } });
+    expect(res.statusCode).toBe(400);
+  });
+
   it('FR-007/FR-014: erro de expressão fica registrado na execução e no nó', async () => {
     const broken = {
       ...definition,
@@ -275,5 +368,50 @@ describe('spec 003 — FR-015: truncamento no log', () => {
     expect(node).toMatchObject({ dataTruncated: true, itemsOut: 200 });
     expect(node?.output?.main?.length).toBeGreaterThan(0);
     expect(node?.output?.main?.length).toBeLessThan(200);
+
+    // FR-020: nó com dados truncados não é reaproveitado (executa de novo).
+    const copia = {
+      ...busca,
+      id: 'copia',
+      name: 'Cópia',
+      params: { fields: [], includeOtherFields: true },
+    };
+    const big = {
+      nodes: [manual, copia],
+      edges: [e('m', 'copia')],
+      settings: {},
+      pinData: { m: items },
+    };
+    const waitSmall = async (id: string) => {
+      for (let i = 0; i < 100; i++) {
+        const d = (await admin.call('GET', `/executions/${id}`)).json<ExecutionDetail>();
+        if (d.status !== 'running') return d;
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      throw new Error('execução não terminou');
+    };
+    const run1 = await waitSmall(
+      (
+        await admin.call('POST', `/workflows/${wf.id}/test-run`, { definition: big })
+      ).json<TestRunResponse>().executionId,
+    );
+    expect(run1.nodes.find((n) => n.nodeId === 'copia')).toMatchObject({ dataTruncated: true });
+    const run2 = await waitSmall(
+      (
+        await admin.call('POST', `/workflows/${wf.id}/test-run`, {
+          definition: {
+            ...big,
+            nodes: [manual, copia, { ...copia, id: 'fim', name: 'Fim' }],
+            edges: [e('m', 'copia'), e('copia', 'fim')],
+          },
+          destinationNodeId: 'fim',
+          reuse: { copia: run1.id },
+        })
+      ).json<TestRunResponse>().executionId,
+    );
+    expect(run2.nodes.find((n) => n.nodeId === 'copia')).toMatchObject({
+      reused: false,
+      itemsOut: 200,
+    });
   });
 });

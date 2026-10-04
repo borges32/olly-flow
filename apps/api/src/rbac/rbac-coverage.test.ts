@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { RequestMethod } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants.js';
 import { DiscoveryService, MetadataScanner, ModulesContainer, Reflector } from '@nestjs/core';
@@ -40,6 +41,9 @@ beforeAll(async () => {
       nodeDataMaxBytes: 1_048_576,
       timezone: 'UTC',
     },
+    credentials: { keyProvider: 'env', masterKey: randomBytes(32).toString('base64') },
+    http: { allowlist: [], maxResponseBytes: 50 * 1024 * 1024 },
+    postgres: { poolMax: 5 },
   });
   const discovery = new DiscoveryService(app.get(ModulesContainer));
   const reflector = app.get(Reflector);

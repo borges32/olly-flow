@@ -13,6 +13,7 @@ import {
   collectInputs,
   runWorkflow,
   validateWorkflow,
+  type ReusedNodeRun,
   type SourceRef,
 } from '@olly/engine';
 import { exposedEnv, type ExpressionEvaluator } from '@olly/expressions';
@@ -29,7 +30,12 @@ import type {
 } from '@olly/shared-types';
 import { randomUUID } from 'node:crypto';
 import { sql } from 'kysely';
-import { NotFoundError, UnprocessableError } from '../common/errors.js';
+import type { AuthenticatedUser } from '../auth/auth.types.js';
+import { BINARY_STORAGE } from '../binary/binary.module.js';
+import type { S3BinaryStorage } from '../binary/s3-binary-store.js';
+import { NotFoundError, PermissionDeniedError, UnprocessableError } from '../common/errors.js';
+import { CredentialsService } from '../credentials/credentials.service.js';
+import { hasProjectPermission } from '../rbac/ability.factory.js';
 import { APP_CONFIG, type AppConfig } from '../config/config.js';
 import { DB } from '../core/tokens.js';
 import { EXPRESSION_EVALUATOR } from '../expressions/expressions.module.js';
@@ -54,6 +60,8 @@ export class ExecutionsService implements OnModuleInit, OnModuleDestroy, BeforeA
     @Inject(NODE_REGISTRY) private readonly registry: NodeRegistry,
     @Inject(EXPRESSION_EVALUATOR) private readonly evaluator: ExpressionEvaluator,
     @Inject(ExecutionEventsService) private readonly events: ExecutionEventsService,
+    @Inject(CredentialsService) private readonly credentials: CredentialsService,
+    @Inject(BINARY_STORAGE) private readonly binaries: S3BinaryStorage | null,
   ) {}
 
   onModuleInit(): void {
@@ -93,10 +101,11 @@ export class ExecutionsService implements OnModuleInit, OnModuleDestroy, BeforeA
 
   /** FR-011: inicia a execução de teste e devolve o id; o resto acontece em segundo plano. */
   async startTestRun(
-    userId: string,
+    user: AuthenticatedUser,
     workflowId: string,
     body: TestRunBody,
   ): Promise<TestRunResponse> {
+    const userId = user.id;
     this.validate(body.definition);
     const destination = body.destinationNodeId;
     if (destination && !body.definition.nodes.some((n) => n.id === destination)) {
@@ -107,6 +116,7 @@ export class ExecutionsService implements OnModuleInit, OnModuleDestroy, BeforeA
       .select(['id', 'name', 'version', 'project_id'])
       .where('id', '=', workflowId)
       .executeTakeFirstOrThrow();
+    await this.assertCredentialUse(user, workflow, body);
     const execution = await this.db
       .insertInto('executions')
       .values({
@@ -131,9 +141,79 @@ export class ExecutionsService implements OnModuleInit, OnModuleDestroy, BeforeA
     return { executionId: execution.id };
   }
 
+  /**
+   * Spec 004, FR-007 (plan §10): sem `credential:use`, um workflow que usa credenciais só roda
+   * como está salvo; quem não pode usar a credencial não muda para onde os segredos vão.
+   */
+  private async assertCredentialUse(
+    user: AuthenticatedUser,
+    workflow: { id: string; version: number; project_id: string },
+    body: TestRunBody,
+  ): Promise<void> {
+    if (!body.definition.nodes.some((n) => n.credentialId)) return;
+    if (hasProjectPermission(user, 'credential:use', workflow.project_id)) return;
+    const saved = await this.db
+      .selectFrom('workflow_versions')
+      .select('definition')
+      .where('workflow_id', '=', workflow.id)
+      .where('version', '=', workflow.version)
+      .executeTakeFirst();
+    // Chaves ordenadas: o JSONB do Postgres não preserva a ordem das chaves.
+    const stable = (value: unknown): unknown =>
+      Array.isArray(value)
+        ? value.map(stable)
+        : typeof value === 'object' && value !== null
+          ? Object.fromEntries(
+              Object.keys(value)
+                .sort()
+                .map((k) => [k, stable((value as Record<string, unknown>)[k])]),
+            )
+          : value;
+    const canonical = (def: WorkflowDefinition, pinData: unknown) =>
+      JSON.stringify(
+        stable({
+          nodes: [...def.nodes]
+            .sort((a, b) => a.id.localeCompare(b.id))
+            .map((n) => ({ ...n, position: null })),
+          edges: [...def.edges].sort((a, b) => a.id.localeCompare(b.id)),
+          pinData: pinData ?? {},
+        }),
+      );
+    const savedDef = saved?.definition as WorkflowDefinition | undefined;
+    if (
+      !savedDef ||
+      canonical(body.definition, body.pinData ?? body.definition.pinData) !==
+        canonical(savedDef, savedDef.pinData)
+    ) {
+      throw new PermissionDeniedError(
+        'Sem a permissão credential:use, só é possível executar a versão salva de um workflow que usa credenciais',
+      );
+    }
+  }
+
+  /** Logger dos nós (ex.: aviso de `maxRows`), com o id da execução. */
+  private nodeLogger(executionId: string) {
+    const format = (message: string, data?: Record<string, unknown>) =>
+      `${message} ${JSON.stringify({ executionId, ...data })}`;
+    return {
+      debug: (m: string, d?: Record<string, unknown>) => {
+        this.logger.debug(format(m, d));
+      },
+      info: (m: string, d?: Record<string, unknown>) => {
+        this.logger.log(format(m, d));
+      },
+      warn: (m: string, d?: Record<string, unknown>) => {
+        this.logger.warn(format(m, d));
+      },
+      error: (m: string, d?: Record<string, unknown>) => {
+        this.logger.error(format(m, d));
+      },
+    };
+  }
+
   private async run(
     executionId: string,
-    workflow: { id: string; name: string },
+    workflow: { id: string; name: string; project_id: string },
     body: TestRunBody,
   ): Promise<void> {
     const recorder = new ExecutionRecorder(
@@ -145,6 +225,7 @@ export class ExecutionsService implements OnModuleInit, OnModuleDestroy, BeforeA
       this.logger,
     );
     try {
+      const runData = body.reuse ? await this.loadReusable(workflow.id, body.reuse) : undefined;
       await runWorkflow(body.definition, this.registry, {
         executionId,
         mode: 'test',
@@ -155,6 +236,11 @@ export class ExecutionsService implements OnModuleInit, OnModuleDestroy, BeforeA
         timezone: this.config.execution.timezone,
         pinData: body.pinData ?? body.definition.pinData,
         ...(body.destinationNodeId && { destinationNodeId: body.destinationNodeId }),
+        ...(runData && { runData }),
+        credentials: (node) =>
+          this.credentials.resolveForExecution(workflow.project_id, node.credentialId),
+        ...(this.binaries && { binary: this.binaries.forExecution(executionId) }),
+        logger: this.nodeLogger(executionId),
         callbacks: recorder.callbacks(),
       });
     } catch (error) {
@@ -162,6 +248,43 @@ export class ExecutionsService implements OnModuleInit, OnModuleDestroy, BeforeA
       const message = error instanceof Error ? error.message : String(error);
       await recorder.finish('error', { message });
     }
+  }
+
+  /**
+   * FR-020: dados gravados dos nós a reaproveitar. Só execuções deste workflow e nós com
+   * sucesso e dados completos; o que não for encontrado simplesmente executa de novo.
+   */
+  private async loadReusable(
+    workflowId: string,
+    reuse: Record<string, string>,
+  ): Promise<Record<string, ReusedNodeRun>> {
+    const pairs = Object.entries(reuse);
+    if (pairs.length === 0) return {};
+    const rows = await this.db
+      .selectFrom('node_executions as ne')
+      .innerJoin('executions as e', 'e.id', 'ne.execution_id')
+      .select(['ne.node_id', 'ne.input_data', 'ne.input_sources', 'ne.output_data'])
+      .where('e.workflow_id', '=', workflowId)
+      .where('ne.status', '=', 'success')
+      .where('ne.data_truncated', '=', false)
+      .where((eb) =>
+        eb.or(
+          pairs.map(([nodeId, executionId]) =>
+            eb.and([eb('ne.node_id', '=', nodeId), eb('ne.execution_id', '=', executionId)]),
+          ),
+        ),
+      )
+      .execute();
+    return Object.fromEntries(
+      rows.map((r) => [
+        r.node_id,
+        {
+          inputs: (r.input_data ?? {}) as Record<string, Item[]>,
+          inputSources: (r.input_sources ?? {}) as Record<string, SourceRef[]>,
+          output: (r.output_data ?? {}) as NodeOutput,
+        },
+      ]),
+    );
   }
 
   /** FR-014: execução e nós, com os dados gravados. */
@@ -199,6 +322,7 @@ export class ExecutionsService implements OnModuleInit, OnModuleDestroy, BeforeA
         itemsIn: n.items_in,
         itemsOut: n.items_out,
         pinned: n.pinned,
+        reused: n.reused,
         dataTruncated: n.data_truncated,
         input: n.input_data as Record<string, Item[]> | null,
         output: n.output_data as NodeOutput | null,

@@ -104,15 +104,55 @@ test.describe('spec 003 — execução de teste no editor', () => {
     await page.keyboard.press('Escape');
   });
 
-  test('FR-011: "Executar até este nó" executa só os nós necessários', async ({ page }) => {
-    const wf = await createWorkflow(admin, projectId, 'Até o nó', definition);
+  test('FR-020/HU-2.4: executa um nó por vez pelo botão no nó, reaproveitando os anteriores', async ({
+    page,
+  }) => {
+    const wf = await createWorkflow(admin, projectId, 'Um nó por vez', definition);
     await loginViaUi(page, 'editor', `/workflows/${wf.id}`);
-    await page.getByTestId('node-Montar').dblclick();
-    await page.getByRole('button', { name: 'Executar até este nó' }).click();
+    const runNode = async (name: string) => {
+      const node = page.getByTestId(`node-${name}`);
+      await node.hover();
+      const body = page.waitForRequest((r) => r.url().endsWith('/test-run'));
+      await node.getByRole('button', { name: `Executar o nó ${name}` }).click();
+      return (await body).postDataJSON() as {
+        destinationNodeId?: string;
+        reuse?: Record<string, string>;
+      };
+    };
+
+    // Passo 1: só até Montar; o If ainda não rodou.
+    const first = await runNode('Montar');
+    expect(first).toMatchObject({ destinationNodeId: 's' });
+    expect(first.reuse).toBeUndefined();
+    await expect(status(page, 'Montar')).toHaveText(/2 itens/);
+    await expect(status(page, 'Adulto?')).toHaveCount(0);
+
+    // Passo 2: o If executa sobre a saída de Montar, sem executar Montar de novo.
+    const second = await runNode('Adulto?');
+    expect(second.destinationNodeId).toBe('i');
+    expect(Object.keys(second.reuse ?? {}).sort()).toEqual(['m', 's']);
+    await expect(status(page, 'Adulto?')).toHaveAttribute('data-status', 'success');
+    await expect(status(page, 'Montar')).toHaveAttribute('title', /execução anterior/);
+    await page.getByTestId('node-Adulto?').dblclick();
+    await expect(
+      page.getByTestId('ndv-output').getByRole('tab', { name: 'Verdadeiro (1)' }),
+    ).toBeVisible();
+
+    // Pelo painel: mesmo comando.
+    await page.getByRole('button', { name: 'Executar este nó' }).click();
     await expect(page.getByTestId('ndv-output').getByTestId('ndv-output-count')).toHaveText(
-      '2 itens',
+      '1 item',
     );
     await page.keyboard.press('Escape');
+
+    // Alterar Montar invalida o reaproveitamento dele; executar Montar descarta os dados do If.
+    await page.getByTestId('node-Montar').dblclick();
+    await page.getByTestId('param-fields.1.value').fill('{{ $json.idade + 10 }}');
+    await page.keyboard.press('Escape');
+    const third = await runNode('Adulto?');
+    expect(Object.keys(third.reuse ?? {})).toEqual(['m']);
+    await expect(status(page, 'Adulto?')).toHaveAttribute('data-status', 'success');
+    await runNode('Montar');
     await expect(status(page, 'Montar')).toHaveAttribute('data-status', 'success');
     await expect(status(page, 'Adulto?')).toHaveCount(0);
   });

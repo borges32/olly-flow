@@ -1,9 +1,11 @@
+import { randomBytes } from 'node:crypto';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import type { MeResponse } from '@olly/shared-types';
 import type { InjectOptions, LightMyRequestResponse } from 'fastify';
 import { startTestDatabase, type TestDatabase } from '@olly/db/testing';
 import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
 import { createApp } from '../app.js';
+import type { AppOptions } from '../app.module.js';
 import type { AppConfig } from '../config/config.js';
 import { startFakeIssuer, type FakeIssuer } from './fake-oidc-issuer.js';
 
@@ -20,7 +22,10 @@ export interface TestContext {
   close(): Promise<void>;
 }
 
-export async function startTestContext(overrides: Partial<AppConfig> = {}): Promise<TestContext> {
+export async function startTestContext(
+  overrides: Partial<AppConfig> = {},
+  options: AppOptions = {},
+): Promise<TestContext> {
   const [database, redis, issuer] = await Promise.all([
     startTestDatabase(),
     new RedisContainer('redis:7-alpine').start(),
@@ -41,9 +46,12 @@ export async function startTestContext(overrides: Partial<AppConfig> = {}): Prom
       nodeDataMaxBytes: 1_048_576,
       timezone: 'UTC',
     },
+    credentials: { keyProvider: 'env', masterKey: randomBytes(32).toString('base64') },
+    http: { allowlist: [], maxResponseBytes: 50 * 1024 * 1024 },
+    postgres: { poolMax: 5 },
     ...overrides,
   };
-  const app = await createApp(config);
+  const app = await createApp(config, options);
   let url: string | undefined;
   return {
     app,

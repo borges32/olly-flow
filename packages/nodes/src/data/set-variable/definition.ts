@@ -12,6 +12,7 @@ export const setVariableNode: NodeDefinition = {
   description: 'Grava variáveis da execução, acessíveis em $vars; repassa os itens sem alteração.',
   icon: 'variable',
   category: 'data',
+  rerunOnPartialExecution: true,
   inputs: [{ name: 'main', kind: 'main' }],
   outputs: [{ name: 'main', kind: 'main' }],
   paramsSchema: {

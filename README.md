@@ -17,7 +17,7 @@ Máquina de referência: 16 GB de RAM. As portas `3000`, `5173`, `5432`, `6379`,
 ```bash
 corepack enable
 pnpm install
-cp .env.example .env            # valores fictícios, só para o ambiente local
+cp .env.example .env            # valores fictícios, só para o ambiente local (inclui OLLY_MASTER_KEY)
 docker compose up -d --wait     # PostgreSQL, Redis, Keycloak (IdP de dev) e MinIO
 pnpm build
 pnpm db:migrate && pnpm db:seed
@@ -29,6 +29,8 @@ Desenvolvimento com recarga automática (API em `:3000`, frontend em `:5173`):
 ```bash
 pnpm dev
 ```
+
+> **`.env` criado antes da spec 004?** Acrescente `OLLY_MASTER_KEY` (copie do `.env.example` ou gere com `openssl rand -base64 32`): a API não sobe sem a chave mestra das credenciais. Ver [docs/credenciais.md](docs/credenciais.md).
 
 Abra <http://localhost:5173> e entre com um usuário de teste (senha `olly123`). Só `admin@olly.local` (grupo `admin` do IdP) tem acesso global; os demais precisam ser adicionados a um projeto em **Administração** para ver e editar workflows.
 
