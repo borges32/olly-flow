@@ -1,9 +1,10 @@
 # Ambiente local (FR-002): PostgreSQL, Redis, IdP de desenvolvimento e object storage.
 # Uso: docker compose up -d --wait
 #
-# Profile `app`: também sobe a API e o frontend em containers, para testes de UX sem
+# Profile `app`: também sobe a API, o worker e o frontend em containers, para testes de UX sem
 # ferramentas de desenvolvimento. Usa as portas 3000 e 5173 (pare o `pnpm dev` antes):
 #   docker compose --profile app up -d --build --wait   →   http://localhost:5173
+# Spec 006 (FR-014): vários workers com `--scale worker=3`.
 name: olly-flow
 
 services:
@@ -123,7 +124,7 @@ services:
       context: .
       dockerfile: infra/docker/Dockerfile
       target: api
-    environment:
+    environment: &app-env
       LOG_LEVEL: info
       API_PORT: 3000
       DATABASE_URL: postgres://${POSTGRES_USER:-olly}:${POSTGRES_PASSWORD:-olly}@postgres:5432/${POSTGRES_DB:-olly}
@@ -141,6 +142,11 @@ services:
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:-olly}
       S3_SECRET_KEY: ${S3_SECRET_KEY:-olly-dev-secret}
       S3_BUCKET: ${S3_BUCKET:-olly}
+      # Spec 006: execuções pela fila; o serviço `worker` executa.
+      OLLY_WORKER_CONCURRENCY: ${OLLY_WORKER_CONCURRENCY:-20}
+      OLLY_PROJECT_MAX_CONCURRENT: ${OLLY_PROJECT_MAX_CONCURRENT:-20}
+      OLLY_WEBHOOK_RATE_LIMIT_PER_MIN: ${OLLY_WEBHOOK_RATE_LIMIT_PER_MIN:-120}
+      OLLY_DEFAULT_WORKFLOW_TIMEOUT: ${OLLY_DEFAULT_WORKFLOW_TIMEOUT:-300}
     ports:
       - '3000:3000'
     depends_on:
@@ -159,6 +165,32 @@ services:
       retries: 30
       start_period: 10s
 
+  worker:
+    # Spec 006: consumidor da fila de execuções. Sem porta publicada, para escalar:
+    #   docker compose --profile app up -d --scale worker=3
+    profiles: ['app']
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile
+      target: worker
+    init: true
+    environment: *app-env
+    # SIGTERM: espera as execuções em andamento (OLLY_WORKER_SHUTDOWN_TIMEOUT, 60 s).
+    stop_grace_period: 70s
+    depends_on:
+      db-init:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:3101/health']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
   web:
     profiles: ['app']
     build:
@@ -171,6 +203,18 @@ services:
     depends_on:
       api:
         condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1/']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  mock:
+    # Spec 006 (carga, infra/load): API HTTP de mentira para o workflow do k6.
+    profiles: ['load']
+    image: nginx:1.29-alpine
+    volumes:
+      - ./infra/load/mock-nginx.conf:/etc/nginx/conf.d/default.conf:ro
     healthcheck:
       test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1/']
       interval: 5s

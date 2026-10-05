@@ -1,5 +1,6 @@
 import type { BinaryRef, WorkflowNode } from '@olly/shared-types';
 import type { ResolvedCredential } from '../credentials/definitions.js';
+import { mapWithConcurrency } from '../shared/concurrency.js';
 import type { CodeMode, NodeContext, WebhookResponse } from '../types.js';
 
 export interface FakeContext extends NodeContext {
@@ -72,6 +73,11 @@ export function fakeContext(options: {
     respondToWebhook: (response) => {
       responses.push(response);
       return responses.length === 1;
+    },
+    // Como o motor, para um tipo com `supportsParallelItems` (spec 006, FR-009).
+    mapItems: (items, fn) => {
+      const parallel = node.settings?.parallelItems;
+      return mapWithConcurrency(items, parallel?.enabled ? parallel.concurrency : 1, fn);
     },
     secrets,
     logs,

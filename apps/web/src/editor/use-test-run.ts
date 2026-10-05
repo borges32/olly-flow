@@ -62,7 +62,7 @@ export function useTestRun(workflowId: string) {
     };
     const onNodeStarted = (e: NodeStartedEvent) => {
       dispatch(e.executionId, () => {
-        store().nodeStarted(e.executionId, e.nodeId);
+        store().nodeStarted(e.executionId, e.nodeId, e.startedAt);
       });
     };
     const onNodeFinished = (e: NodeFinishedEvent) => {
@@ -75,6 +75,8 @@ export function useTestRun(workflowId: string) {
         store().runFinished(e);
         finishWithDetail(e.executionId);
         if (e.status === 'success') toast.success('Execução concluída');
+        else if (e.status === 'cancelled')
+          toast.warning('Execução interrompida', { description: e.error?.message });
         else toast.error('Execução com erro', { description: e.error?.message });
       });
     };
@@ -165,5 +167,23 @@ export function useTestRun(workflowId: string) {
       if (detail) useEditorStore.getState().applyExecution(detail);
     },
     [api, workflowId],
+  );
+}
+
+/** Spec 006, FR-010: para uma execução na fila ou em andamento. */
+export function useCancelExecution() {
+  const api = useApi();
+  return useCallback(
+    async (executionId: string) => {
+      try {
+        await api.post(`/api/v1/executions/${executionId}/cancel`);
+        toast.info('Parando a execução…');
+      } catch (error) {
+        toast.error('Não foi possível parar a execução', {
+          description: error instanceof Error ? error.message : undefined,
+        });
+      }
+    },
+    [api],
   );
 }

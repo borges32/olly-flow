@@ -75,7 +75,7 @@ const definition: WorkflowDefinition = {
 async function waitFinished(user: TestUser, executionId: string): Promise<ExecutionDetail> {
   for (let i = 0; i < 100; i++) {
     const detail = (await user.call('GET', `/executions/${executionId}`)).json<ExecutionDetail>();
-    if (detail.status !== 'running') return detail;
+    if (!['queued', 'running'].includes(detail.status)) return detail;
     await new Promise((r) => setTimeout(r, 50));
   }
   throw new Error('execução não terminou');
@@ -347,6 +347,8 @@ describe('spec 003 — FR-015: truncamento no log', () => {
         isolateMemoryMb: 64,
         nodeDataMaxBytes: 4096,
         timezone: 'UTC',
+        workflowTimeoutMs: 300_000,
+        defaultMaxParallel: 8,
       },
     });
     const admin = await loginAs(small, { sub: 'a', email: 'a@t.local', groups: ['admin'] });
@@ -385,7 +387,7 @@ describe('spec 003 — FR-015: truncamento no log', () => {
     const waitSmall = async (id: string) => {
       for (let i = 0; i < 100; i++) {
         const d = (await admin.call('GET', `/executions/${id}`)).json<ExecutionDetail>();
-        if (d.status !== 'running') return d;
+        if (!['queued', 'running'].includes(d.status)) return d;
         await new Promise((r) => setTimeout(r, 50));
       }
       throw new Error('execução não terminou');

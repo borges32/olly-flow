@@ -78,15 +78,21 @@ class CodeTimeoutError extends Error {}
 export class CodeSandbox implements CodeRunner {
   private readonly timeoutMs: number;
   private readonly memoryMb: number;
+  /** Isolates em uso por execução, para o cancelamento (spec 006, FR-010). */
+  private readonly running = new Map<string, Set<ivm.Isolate>>();
+  private readonly cancelled = new WeakSet<ivm.Isolate>();
 
   constructor(options: CodeSandboxOptions = {}) {
     this.timeoutMs = options.timeoutMs ?? 30_000;
     this.memoryMb = options.memoryMb ?? 128;
   }
 
-  async runCode({ code, mode, data }: RunCodeRequest): Promise<RunCodeResult> {
+  async runCode({ executionId, code, mode, data }: RunCodeRequest): Promise<RunCodeResult> {
     const consoleLines: string[] = [];
     const isolate = new ivm.Isolate({ memoryLimit: this.memoryMb });
+    const isolates = this.running.get(executionId) ?? new Set();
+    isolates.add(isolate);
+    this.running.set(executionId, isolates);
     let timer: NodeJS.Timeout | undefined;
     try {
       const context = await isolate.createContext();
@@ -137,13 +143,27 @@ export class CodeSandbox implements CodeRunner {
     } finally {
       clearTimeout(timer);
       if (!isolate.isDisposed) isolate.dispose();
+      isolates.delete(isolate);
+      if (isolates.size === 0) this.running.delete(executionId);
     }
+  }
+
+  /** Interrompe o código ainda em andamento da execução (cancelamento, spec 006 FR-010). */
+  disposeExecution(executionId: string): void {
+    for (const isolate of this.running.get(executionId) ?? []) {
+      this.cancelled.add(isolate);
+      if (!isolate.isDisposed) isolate.dispose();
+    }
+    this.running.delete(executionId);
   }
 
   private classify(
     error: unknown,
     isolate: ivm.Isolate,
   ): Extract<RunCodeResult, { ok: false }>['error'] {
+    if (this.cancelled.has(isolate)) {
+      return { kind: 'runtime', message: 'Código interrompido: a execução foi cancelada' };
+    }
     if (error instanceof CodeTimeoutError || /timed out/i.test(message(error))) {
       return { kind: 'timeout', message: `Tempo limite do código excedido (${this.timeoutMs} ms)` };
     }

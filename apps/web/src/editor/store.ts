@@ -3,6 +3,7 @@ import type {
   Edge,
   ExecutionDetail,
   ExecutionFinishedEvent,
+  ExecutionStatus,
   Item,
   NodeExecutionError,
   NodeExecutionStatus,
@@ -39,6 +40,8 @@ export interface NodeRunView {
   status: NodeExecutionStatus;
   itemsIn: number;
   itemsOut: number;
+  /** Início (ISO), para a linha do tempo (spec 006, FR-013). */
+  startedAt?: string;
   durationMs?: number;
   pinned: boolean;
   /** Saída reaproveitada de uma execução anterior (FR-020). */
@@ -59,7 +62,8 @@ export interface NodeRunView {
 
 export interface RunState {
   executionId: string | null;
-  status: 'idle' | 'running' | 'success' | 'error';
+  /** `cancelled`: interrompida (cancelamento ou timeout global, spec 006). */
+  status: 'idle' | 'running' | 'success' | 'error' | 'cancelled';
   nodes: Record<string, NodeRunView>;
   error: string | null;
   /** Assinaturas dos nós no início da execução corrente. */
@@ -138,7 +142,7 @@ export interface EditorState {
   setPinData(nodeId: string, items: Item[] | null): void;
   definition(): WorkflowDefinition;
   runStarted(executionId: string, start?: RunStart): void;
-  nodeStarted(executionId: string, nodeId: string): void;
+  nodeStarted(executionId: string, nodeId: string, startedAt?: string): void;
   nodeFinished(event: NodeFinishedEvent): void;
   runFinished(event: ExecutionFinishedEvent): void;
   /** Completa o estado com a execução gravada (eventos perdidos antes de entrar na sala). */
@@ -147,6 +151,14 @@ export interface EditorState {
 }
 
 const newId = () => crypto.randomUUID();
+
+/** Status da execução no editor: na fila ou em andamento continua `running`. */
+function finalStatus(status: ExecutionStatus, current: RunState['status']): RunState['status'] {
+  if (status === 'queued' || status === 'running' || status === 'waiting') {
+    return current === 'idle' ? 'running' : current;
+  }
+  return status;
+}
 const snapshot = (s: EditorState): Snapshot =>
   structuredClone({ name: s.name, nodes: s.nodes, edges: s.edges, pinData: s.pinData });
 
@@ -340,7 +352,7 @@ export const useEditorStore = create<EditorState>()((set, get) => {
       });
     },
 
-    nodeStarted: (executionId, nodeId) => {
+    nodeStarted: (executionId, nodeId, startedAt) => {
       const { run } = get();
       if (run.executionId !== executionId) return;
       set({
@@ -350,6 +362,7 @@ export const useEditorStore = create<EditorState>()((set, get) => {
             ...run.nodes,
             [nodeId]: {
               status: 'running',
+              startedAt: startedAt ?? new Date().toISOString(),
               itemsIn: 0,
               itemsOut: 0,
               pinned: false,
@@ -365,6 +378,7 @@ export const useEditorStore = create<EditorState>()((set, get) => {
     nodeFinished: (e) => {
       const { run } = get();
       if (run.executionId !== e.executionId) return;
+      const started = run.nodes[e.nodeId];
       set({
         run: {
           ...run,
@@ -372,6 +386,10 @@ export const useEditorStore = create<EditorState>()((set, get) => {
             ...run.nodes,
             [e.nodeId]: {
               status: e.status,
+              startedAt:
+                started?.status === 'running' && started.startedAt
+                  ? started.startedAt
+                  : new Date(Date.now() - e.durationMs).toISOString(),
               itemsIn: e.itemsIn,
               itemsOut: e.itemsOut,
               durationMs: e.durationMs,
@@ -399,7 +417,7 @@ export const useEditorStore = create<EditorState>()((set, get) => {
       set({
         run: {
           ...run,
-          status: e.status === 'success' ? 'success' : 'error',
+          status: finalStatus(e.status, run.status),
           error: e.error?.message ?? null,
         },
       });
@@ -412,6 +430,7 @@ export const useEditorStore = create<EditorState>()((set, get) => {
       for (const n of detail.nodes) {
         nodes[n.nodeId] = {
           status: n.status,
+          startedAt: n.startedAt,
           itemsIn: n.itemsIn,
           itemsOut: n.itemsOut,
           ...(n.finishedAt && {
@@ -429,12 +448,7 @@ export const useEditorStore = create<EditorState>()((set, get) => {
           ...(run.signatures[n.nodeId] !== undefined && { signature: run.signatures[n.nodeId] }),
         };
       }
-      const status =
-        detail.status === 'running'
-          ? run.status
-          : detail.status === 'success'
-            ? 'success'
-            : 'error';
+      const status = finalStatus(detail.status, run.status);
       set({ run: { ...run, nodes, status, error: detail.error?.message ?? run.error } });
     },
 

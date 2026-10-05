@@ -97,6 +97,13 @@ export interface NodeContext {
   runCode(request: { code: string; mode: CodeMode }): Promise<unknown>;
   /** Grava a resposta do webhook; só a primeira vale (devolve `false` nas seguintes). */
   respondToWebhook(response: WebhookResponse): boolean;
+  /**
+   * Processa itens com a concorrência do nó (spec 006, FR-009): em paralelo quando o tipo tem
+   * `supportsParallelItems` e o nó liga `settings.parallelItems`; senão, um por vez. A ordem dos
+   * resultados é a dos itens. Na primeira falha nenhum item novo começa, e vale o erro do item de
+   * menor índice.
+   */
+  mapItems<T, R>(items: readonly T[], fn: (item: T, index: number) => Promise<R>): Promise<R[]>;
 }
 
 export interface NodeDefinition {

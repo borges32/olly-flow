@@ -74,6 +74,8 @@ export function createPostgresQueryNode(deps: PostgresDeps): NodeDefinition {
     category: 'integration',
     inputs: [{ name: 'main', kind: 'main' }],
     outputs: [{ name: 'main', kind: 'main' }],
+    // Spec 006, FR-009: itens em paralelo (aba Configurações do nó).
+    supportsParallelItems: true,
     credentialTypes: ['postgres'],
     paramsSchema: postgresQueryParamsSchema,
     execute: (input, ctx) => executePostgresQuery(input, ctx, deps),

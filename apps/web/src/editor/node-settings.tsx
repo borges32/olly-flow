@@ -8,6 +8,7 @@ import { useEditorStore } from './store';
 type SettingsPatch = { [K in keyof WorkflowNodeSettings]?: WorkflowNodeSettings[K] | undefined };
 
 const DEFAULT_RETRY = { maxTries: 3, waitMs: 1000, backoff: 'fixed' as const };
+const DEFAULT_PARALLEL = { enabled: true, concurrency: 5 };
 
 const intOrUndefined = (raw: string, min: number, max: number) => {
   if (raw.trim() === '') return undefined;
@@ -15,10 +16,22 @@ const intOrUndefined = (raw: string, min: number, max: number) => {
   return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : undefined;
 };
 
-/** Aba "Configurações" do nó: novas tentativas, timeout e comportamento em erro (spec 004, FR-017). */
-export function NodeSettings({ node, readOnly }: { node: WorkflowNode; readOnly: boolean }) {
+/**
+ * Aba "Configurações" do nó: novas tentativas, timeout e comportamento em erro (spec 004,
+ * FR-017) e, nos tipos que suportam, itens em paralelo (spec 006, FR-009).
+ */
+export function NodeSettings({
+  node,
+  readOnly,
+  supportsParallelItems = false,
+}: {
+  node: WorkflowNode;
+  readOnly: boolean;
+  supportsParallelItems?: boolean;
+}) {
   const settings = node.settings ?? {};
   const retry = settings.retry;
+  const parallel = settings.parallelItems?.enabled ? settings.parallelItems : undefined;
   const update = (patch: SettingsPatch) => {
     const merged: Record<string, unknown> = { ...settings, ...patch };
     const next = Object.fromEntries(
@@ -121,6 +134,49 @@ export function NodeSettings({ node, readOnly }: { node: WorkflowNode; readOnly:
           Interrompe a operação HTTP ou SQL em andamento.
         </p>
       </div>
+      {supportsParallelItems && (
+        <fieldset className="grid gap-3 rounded-md border p-3">
+          <legend className="px-1 text-sm font-medium">Itens em paralelo</legend>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="size-4 accent-primary"
+              data-testid="settings-parallel"
+              checked={parallel !== undefined}
+              disabled={readOnly}
+              onChange={(e) => {
+                update({ parallelItems: e.target.checked ? DEFAULT_PARALLEL : undefined });
+              }}
+            />
+            Processar vários itens ao mesmo tempo
+          </label>
+          {parallel && (
+            <div className="grid max-w-48 gap-1">
+              <Label htmlFor="parallel-concurrency">Itens simultâneos (1–100)</Label>
+              <Input
+                id="parallel-concurrency"
+                data-testid="settings-parallel-concurrency"
+                type="number"
+                min={1}
+                max={100}
+                value={parallel.concurrency}
+                disabled={readOnly}
+                onChange={(e) => {
+                  update({
+                    parallelItems: {
+                      enabled: true,
+                      concurrency: intOrUndefined(e.target.value, 1, 100) ?? 1,
+                    },
+                  });
+                }}
+              />
+            </div>
+          )}
+          <p className="text-xs text-muted-foreground">
+            A ordem dos resultados é sempre a dos itens de entrada.
+          </p>
+        </fieldset>
+      )}
       <div className="grid gap-1.5">
         <Label htmlFor="settings-on-error">Em caso de erro</Label>
         <Select

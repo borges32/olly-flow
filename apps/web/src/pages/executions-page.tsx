@@ -1,7 +1,10 @@
 import type { ExecutionStatus } from '@olly/shared-types';
-import { Loader2 } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
+import { Gauge, Loader2, Square } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router';
-import { useExecutions, useProjects, useWorkflows } from '@/api/queries';
+import { useExecutions, useProjects, useQueueStats, useWorkflows } from '@/api/queries';
+import { useCan } from '@/api/use-can';
+import { useCancelExecution } from '@/editor/use-test-run';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,6 +24,57 @@ type Filter = 'project' | 'workflow' | 'status' | 'mode' | 'trigger' | 'from' | 
 
 const duration = (ms: number | null) =>
   ms === null ? '—' : ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`;
+
+/** Spec 006, FR-012: ocupação da cota do projeto. */
+function QueueIndicator({ projectId }: { projectId: string }) {
+  const { data } = useQueueStats(projectId);
+  if (!data) return null;
+  const full = data.running >= data.limit;
+  return (
+    <div
+      data-testid="queue-stats"
+      className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm"
+      title={
+        data.customLimit
+          ? 'Cota de execuções simultâneas definida para o projeto'
+          : 'Cota padrão da plataforma'
+      }
+    >
+      <Gauge className={full ? 'size-4 text-amber-600' : 'size-4 text-muted-foreground'} />
+      <span>
+        <strong>{data.running}</strong> de {data.limit} em execução
+      </span>
+      <span className="text-muted-foreground">·</span>
+      <span>
+        <strong>{data.queued}</strong> na fila
+      </span>
+    </div>
+  );
+}
+
+/** Para uma execução da lista (spec 006, FR-010); só para quem pode executar no projeto. */
+function StopButton({ executionId, projectId }: { executionId: string; projectId: string }) {
+  const canExecute = useCan('workflow:execute', projectId);
+  const cancel = useCancelExecution();
+  const queryClient = useQueryClient();
+  if (!canExecute) return null;
+  return (
+    <Button
+      size="sm"
+      variant="ghost"
+      className="h-7 text-destructive hover:text-destructive"
+      aria-label="Parar execução"
+      title="Parar execução"
+      onClick={() => {
+        void cancel(executionId).then(() =>
+          queryClient.invalidateQueries({ queryKey: ['executions'] }),
+        );
+      }}
+    >
+      <Square className="size-3.5" /> Parar
+    </Button>
+  );
+}
 
 /** Execuções com filtros (spec 005, FR-013); abrir uma leva ao canvas somente leitura. */
 export function ExecutionsPage() {
@@ -55,7 +109,10 @@ export function ExecutionsPage() {
 
   return (
     <div className="grid gap-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Execuções</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-semibold tracking-tight">Execuções</h1>
+        {projectId && <QueueIndicator projectId={projectId} />}
+      </div>
       <div className="flex flex-wrap items-end gap-3" data-testid="execution-filters">
         <div className="grid gap-1.5">
           <Label htmlFor="f-project">Projeto</Label>
@@ -178,19 +235,20 @@ export function ExecutionsPage() {
               <th className="px-4 py-2 font-medium">Gatilho</th>
               <th className="px-4 py-2 font-medium">Início</th>
               <th className="px-4 py-2 font-medium">Duração</th>
+              <th className="px-4 py-2" />
             </tr>
           </thead>
           <tbody>
             {executions.isLoading && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
                   <Loader2 className="mx-auto size-4 animate-spin" />
                 </td>
               </tr>
             )}
             {!executions.isLoading && items.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
                   Nenhuma execução encontrada.
                 </td>
               </tr>
@@ -202,7 +260,11 @@ export function ExecutionsPage() {
                 data-testid={`execution-${e.id}`}
               >
                 <td className="px-4 py-2">
-                  <Badge variant={e.status === 'success' ? 'default' : 'secondary'}>
+                  <Badge
+                    variant={e.status === 'success' ? 'default' : 'secondary'}
+                    data-status={e.status}
+                  >
+                    {e.status === 'running' && <Loader2 className="size-3 animate-spin" />}
                     {STATUS_LABEL[e.status]}
                   </Badge>
                 </td>
@@ -217,6 +279,11 @@ export function ExecutionsPage() {
                   {dateFormat.format(new Date(e.startedAt))}
                 </td>
                 <td className="px-4 py-2 text-muted-foreground">{duration(e.durationMs)}</td>
+                <td className="px-2 py-1 text-right">
+                  {(e.status === 'queued' || e.status === 'running') && (
+                    <StopButton executionId={e.id} projectId={e.projectId} />
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>

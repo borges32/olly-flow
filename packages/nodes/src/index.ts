@@ -11,6 +11,7 @@ export * from './credentials/definitions.js';
 export * from './credentials/registry.js';
 export * from './credentials/test.js';
 export * from './shared/http-guard.js';
+export { mapWithConcurrency } from './shared/concurrency.js';
 export { OAuth2TokenCache, applyHttpCredential } from './http/auth.js';
 export {
   createHttpRequestNode,

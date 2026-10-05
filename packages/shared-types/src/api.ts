@@ -174,6 +174,16 @@ export interface NodeExecutionDetail {
   error: NodeExecutionError | null;
 }
 
+/**
+ * Erro de uma execução. `reason` (spec 006) indica fim antecipado: `cancelled` (pedido do
+ * usuário), `timeout` (timeout global do workflow) ou `worker_lost` (o worker caiu).
+ */
+export interface ExecutionErrorInfo {
+  message: string;
+  nodeId?: string;
+  reason?: 'cancelled' | 'timeout' | 'worker_lost';
+}
+
 /** `GET /executions/:id` (FR-014). */
 export interface ExecutionDetail {
   id: string;
@@ -186,7 +196,7 @@ export interface ExecutionDetail {
   status: ExecutionStatus;
   startedAt: string;
   finishedAt: string | null;
-  error: { message: string; nodeId?: string } | null;
+  error: ExecutionErrorInfo | null;
   /** Spec 005, FR-014: sem `execution:readData`, entrada, saída e console vêm omitidos. */
   dataRedacted: boolean;
   /** Definição executada (pode ser um rascunho não salvo, nas execuções de teste). */
@@ -259,7 +269,7 @@ export interface ExecutionFinishedEvent {
   executionId: string;
   status: ExecutionStatus;
   finishedAt: string;
-  error: { message: string; nodeId?: string } | null;
+  error: ExecutionErrorInfo | null;
 }
 
 export interface ExecutionEvents {
@@ -345,4 +355,21 @@ export interface PostgresColumn {
   type: string;
   nullable: boolean;
   hasDefault: boolean;
+}
+
+/** `GET /projects/:id/queue-stats` (spec 006, FR-012). */
+export interface QueueStats {
+  /** Execuções do projeto em andamento agora. */
+  running: number;
+  /** Execuções do projeto esperando vaga na fila. */
+  queued: number;
+  /** Cota de execuções simultâneas do projeto. */
+  limit: number;
+  /** `true` quando a cota foi definida para o projeto (senão, é o padrão da plataforma). */
+  customLimit: boolean;
+}
+
+/** `PUT /projects/:id/quota` (spec 006, FR-012): `null` volta ao padrão da plataforma. */
+export interface ProjectQuotaRequest {
+  maxConcurrentExecutions: number | null;
 }

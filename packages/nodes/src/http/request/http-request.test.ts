@@ -56,6 +56,14 @@ beforeAll(async () => {
           res.writeHead(500, { 'content-type': 'text/plain' });
           res.end('falhou aqui');
           return;
+        case '/delay': {
+          // Spec 006, FR-009: atraso por item e eco do índice, para medir o paralelismo.
+          const ms = Number(url.searchParams.get('ms') ?? 0);
+          setTimeout(() => {
+            json(200, { i: Number(url.searchParams.get('i')) });
+          }, ms);
+          return;
+        }
         case '/slow':
           setTimeout(() => {
             json(200, { ok: true });
@@ -311,6 +319,23 @@ describe('spec 004 — FR-009: nó http.request', () => {
     );
     expect(out).toHaveLength(4);
     expect(Date.now() - started).toBeGreaterThanOrEqual(140);
+  });
+});
+
+describe('spec 006 — FR-009: itens em paralelo no http.request', () => {
+  it('FR-009/SC-003: 20 itens de 100 ms com concorrência 5 levam ~400 ms, na ordem', async () => {
+    const items = Array.from({ length: 20 }, (_, i) => ({ json: { i } }));
+    const params = items.map((item) => ({ url: `${base}/delay?ms=100&i=${String(item.json.i)}` }));
+    const ctx = fakeContext({
+      params,
+      node: { settings: { parallelItems: { enabled: true, concurrency: 5 } } },
+    });
+    const started = Date.now();
+    const out = await jsonOf(executeHttpRequest({ inputs: { main: items }, items }, ctx, deps()));
+    const elapsed = Date.now() - started;
+    expect(out.map((j) => j.i)).toEqual(items.map((item) => item.json.i));
+    expect(elapsed).toBeGreaterThanOrEqual(390);
+    expect(elapsed).toBeLessThan(1500);
   });
 });
 

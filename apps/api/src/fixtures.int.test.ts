@@ -62,7 +62,7 @@ describe('spec 005 — FR-018/SC-001: fixtures recriadas, executadas pela API', 
       })
     ).json<TestRunResponse>();
     let detail: ExecutionDetail | undefined;
-    for (let i = 0; i < 200 && (!detail || detail.status === 'running'); i++) {
+    for (let i = 0; i < 200 && (!detail || ['queued', 'running'].includes(detail.status)); i++) {
       await new Promise((r) => setTimeout(r, 50));
       detail = (await admin.call('GET', `/executions/${executionId}`)).json<ExecutionDetail>();
     }

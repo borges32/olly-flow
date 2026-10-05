@@ -161,3 +161,25 @@ describe('spec 005 — FR-010/SC-006: código malicioso é contido', () => {
     });
   });
 });
+
+describe('spec 006 — FR-010/NFR-001: cancelamento interrompe o código', () => {
+  it('FR-010: disposeExecution interrompe um laço infinito em andamento', async () => {
+    const slow = new CodeSandbox({ timeoutMs: 30_000 });
+    const started = Date.now();
+    const running = slow.runCode({
+      executionId: 'cancelar',
+      code: 'while (true) {}',
+      mode: 'runOnceForAllItems',
+      data: expressionData(),
+    });
+    await new Promise((r) => setTimeout(r, 200));
+    // Outra execução não é afetada.
+    slow.disposeExecution('outra');
+    slow.disposeExecution('cancelar');
+    expect(await running).toMatchObject({
+      ok: false,
+      error: { kind: 'runtime', message: 'Código interrompido: a execução foi cancelada' },
+    });
+    expect(Date.now() - started).toBeLessThan(2000);
+  });
+});

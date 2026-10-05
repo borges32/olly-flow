@@ -6,6 +6,7 @@ import type {
   Paginated,
   ProjectMember,
   ProjectSummary,
+  QueueStats,
   UserSummary,
   WorkflowDetail,
   WorkflowSummary,
@@ -24,6 +25,7 @@ export const queryKeys = {
   credentialTypes: ['credential-types'] as const,
   executions: (filters: Record<string, string>) => ['executions', filters] as const,
   execution: (id: string) => ['executions', id] as const,
+  queueStats: (projectId: string) => ['projects', projectId, 'queue-stats'] as const,
   postgresOptions: (credentialId: string, source: string, schema = '', table = '') =>
     ['credentials', credentialId, 'postgres', source, schema, table] as const,
 };
@@ -118,6 +120,13 @@ export function useExecutions(filters: Record<string, string>) {
     },
     initialPageParam: '',
     getNextPageParam: (last) => last.nextCursor ?? undefined,
+    // Spec 006: enquanto houver execução na fila ou em andamento, atualiza a lista.
+    refetchInterval: (query) =>
+      query.state.data?.pages.some((p) =>
+        p.items.some((i) => i.status === 'queued' || i.status === 'running'),
+      )
+        ? 2000
+        : false,
   });
 }
 
@@ -128,5 +137,19 @@ export function useExecution(id: string | undefined) {
     queryFn: () => api.get<ExecutionDetail>(`/api/v1/executions/${id ?? ''}`),
     enabled: id !== undefined,
     refetchOnWindowFocus: false,
+    // Spec 006: execução na fila ou em andamento é acompanhada até terminar.
+    refetchInterval: (query) =>
+      ['queued', 'running'].includes(query.state.data?.status ?? '') ? 1000 : false,
+  });
+}
+
+/** Spec 006, FR-012: execuções do projeto em andamento, na fila e a cota. */
+export function useQueueStats(projectId: string | undefined) {
+  const api = useApi();
+  return useQuery({
+    queryKey: queryKeys.queueStats(projectId ?? ''),
+    queryFn: () => api.get<QueueStats>(`/api/v1/projects/${projectId ?? ''}/queue-stats`),
+    enabled: projectId !== undefined,
+    refetchInterval: 3000,
   });
 }

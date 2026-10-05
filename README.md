@@ -24,11 +24,13 @@ pnpm db:migrate && pnpm db:seed
 pnpm smoke                      # verifica o ambiente de ponta a ponta
 ```
 
-Desenvolvimento com recarga automática (API em `:3000`, frontend em `:5173`):
+Desenvolvimento com recarga automática (API em `:3000`, worker em `:3101`, frontend em `:5173`):
 
 ```bash
 pnpm dev
 ```
+
+As execuções passam pela fila (Redis/BullMQ) e são executadas pelo **worker** (`apps/worker`, spec 006), que o `pnpm dev` também sobe. Para executar os testes do editor sem worker, use `OLLY_TEST_RUN_MODE=inprocess` no `.env`. Semântica de execução (paralelismo, cancelamento, cotas): [docs/execucao.md](docs/execucao.md).
 
 > **`.env` criado antes da spec 004?** Acrescente `OLLY_MASTER_KEY` (copie do `.env.example` ou gere com `openssl rand -base64 32`): a API não sobe sem a chave mestra das credenciais. Ver [docs/credenciais.md](docs/credenciais.md).
 
@@ -45,7 +47,7 @@ Webhooks publicados respondem em `http://localhost:5173/webhook/<caminho>` (e `/
 
 ### Testar a UX sem ambiente de desenvolvimento
 
-Para validar o editor com usuários (por exemplo, da POC) sem instalar Node, suba também a API e o frontend em containers:
+Para validar o editor com usuários (por exemplo, da POC) sem instalar Node, suba também a API, o worker e o frontend em containers (`--scale worker=3` para vários workers):
 
 ```bash
 docker compose --profile app up -d --build --wait   # ou: pnpm app:up
@@ -72,15 +74,16 @@ Outros endereços úteis:
 
 | Comando | O que faz |
 |---|---|
-| `pnpm dev` | API e frontend em modo desenvolvimento |
+| `pnpm dev` | API, worker e frontend em modo desenvolvimento |
 | `pnpm build` | Compila todos os workspaces |
 | `pnpm lint` | ESLint (estrito, com tipos) e Prettier |
 | `pnpm typecheck` | TypeScript em todos os workspaces |
 | `pnpm test` | Testes de unidade |
 | `pnpm test:integration` | Testes de integração com Testcontainers (exige Docker) |
-| `pnpm test:e2e` | Playwright; sobe o compose, aplica migrations e inicia API e frontend |
+| `pnpm test:e2e` | Playwright; sobe o compose, aplica migrations e inicia API, worker e frontend |
 | `pnpm smoke` | Smoke test do ambiente (inicia a API compilada se ela não estiver no ar) |
-| `pnpm app:up` / `pnpm app:down` / `pnpm app:reset` | Sobe/para/recria do zero a API e o frontend em containers (profile `app`), para testes de UX |
+| `pnpm app:up` / `pnpm app:down` / `pnpm app:reset` | Sobe/para/recria do zero a API, o worker e o frontend em containers (profile `app`), para testes de UX |
+| `infra/load/run.sh` | Teste de carga (k6) do webhook com N workers ([infra/load](infra/load/README.md)) |
 | `pnpm db:migrate` / `pnpm db:rollback` / `pnpm db:seed` | Migrations ([`infra/migrations`](infra/migrations/README.md)) e papéis padrão |
 
 Na primeira execução do E2E, instale o navegador: `pnpm --filter @olly/web exec playwright install chromium`.
@@ -90,7 +93,9 @@ Na primeira execução do E2E, instale o navegador: `pnpm --filter @olly/web exe
 ```text
 apps/api               API REST (NestJS + Fastify): OIDC, RBAC por projeto, projetos, workflows
 apps/web               Frontend (React + Vite + Tailwind + shadcn/ui), editor com React Flow
-apps/worker, apps/task-runner, apps/python-runner   reservados (specs 003, 006, 008)
+apps/worker            Worker de execuções: consome a fila e executa com o motor (spec 006)
+apps/task-runner       Sandbox de expressões e código JavaScript (isolated-vm)
+apps/python-runner     reservado (spec 008)
 packages/shared-types  Tipos e schemas zod dos contratos centrais
 packages/nodes         Contrato de nó, registro e nós (docs/nos/)
 packages/engine        Validação estrutural e motor de execução

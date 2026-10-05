@@ -64,6 +64,15 @@ const envSchema = z.object({
     .enum(['true', 'false', '1', '0'])
     .default('false')
     .transform((v) => v === 'true' || v === '1'),
+  // Spec 006: fila, workers, paralelismo, timeout global e cotas. Tempos em segundos.
+  OLLY_TEST_RUN_MODE: z.enum(['queue', 'inprocess']).default('queue'),
+  OLLY_WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(1000).default(20),
+  OLLY_WORKER_SHUTDOWN_TIMEOUT: z.coerce.number().positive().max(3600).default(60),
+  OLLY_WORKER_PORT: z.coerce.number().int().min(1).max(65535).default(3101),
+  OLLY_DEFAULT_WORKFLOW_TIMEOUT: z.coerce.number().positive().max(86_400).default(300),
+  OLLY_PROJECT_MAX_CONCURRENT: z.coerce.number().int().min(1).max(10_000).default(20),
+  // Lido também pelo motor (`@olly/engine`); validado aqui para falhar cedo.
+  OLLY_DEFAULT_MAX_PARALLEL: z.coerce.number().int().min(1).max(1000).default(8),
 });
 
 export interface AppConfig {
@@ -80,11 +89,33 @@ export interface AppConfig {
     isolateMemoryMb: number;
     nodeDataMaxBytes: number;
     timezone: string;
+    /** Timeout global padrão (`settings.timeoutSec` do workflow prevalece), spec 006 FR-011. */
+    workflowTimeoutMs: number;
+    /** Paralelismo padrão entre nós (`settings.maxParallel` prevalece). */
+    defaultMaxParallel: number;
   };
   credentials: { keyProvider: 'env'; masterKey: string };
   http: { allowlist: string[]; maxResponseBytes: number };
   postgres: { poolMax: number };
   dispatcher: { maxConcurrent: number };
+  /** Spec 006: fila de execuções e workers. Tempos em ms. */
+  queue: {
+    /** Execuções de teste pela fila (padrão) ou no processo da API. Produção é sempre fila. */
+    testRunMode: 'queue' | 'inprocess';
+    workerConcurrency: number;
+    workerShutdownTimeoutMs: number;
+    workerPort: number;
+    /** Cota padrão de execuções simultâneas por projeto (FR-012). */
+    projectMaxConcurrent: number;
+    /** Batimento das execuções em andamento (FR-005, plan §2). */
+    heartbeatMs: number;
+    /** Sem batimento há mais que isto: `worker_lost`. */
+    staleAfterMs: number;
+    /** Intervalo da varredura de execuções sem batimento. */
+    sweepIntervalMs: number;
+    /** Espera antes de tentar de novo um job sem vaga na cota do projeto. */
+    quotaRetryMs: number;
+  };
   webhook: {
     maxBodyBytes: number;
     responseTimeoutMs: number;
@@ -133,6 +164,8 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
       isolateMemoryMb: e.OLLY_ISOLATE_MEMORY_MB,
       nodeDataMaxBytes: e.OLLY_NODE_DATA_MAX_BYTES,
       timezone: e.OLLY_TIMEZONE,
+      workflowTimeoutMs: Math.floor(e.OLLY_DEFAULT_WORKFLOW_TIMEOUT * 1000),
+      defaultMaxParallel: e.OLLY_DEFAULT_MAX_PARALLEL,
     },
     credentials: { keyProvider: e.OLLY_KEY_PROVIDER, masterKey: e.OLLY_MASTER_KEY },
     http: {
@@ -143,6 +176,17 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     },
     postgres: { poolMax: e.OLLY_PG_POOL_MAX },
     dispatcher: { maxConcurrent: e.OLLY_MAX_CONCURRENT_EXECUTIONS },
+    queue: {
+      testRunMode: e.OLLY_TEST_RUN_MODE,
+      workerConcurrency: e.OLLY_WORKER_CONCURRENCY,
+      workerShutdownTimeoutMs: Math.floor(e.OLLY_WORKER_SHUTDOWN_TIMEOUT * 1000),
+      workerPort: e.OLLY_WORKER_PORT,
+      projectMaxConcurrent: e.OLLY_PROJECT_MAX_CONCURRENT,
+      heartbeatMs: 10_000,
+      staleAfterMs: 60_000,
+      sweepIntervalMs: 60_000,
+      quotaRetryMs: 1000,
+    },
     webhook: {
       maxBodyBytes: Math.floor(e.OLLY_WEBHOOK_MAX_BODY * 1024 * 1024),
       responseTimeoutMs: Math.floor(e.OLLY_WEBHOOK_RESPONSE_TIMEOUT * 1000),

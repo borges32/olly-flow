@@ -1,6 +1,6 @@
 # Relatório — Spec 005: Webhook, código JavaScript e fechamento do MVP
 
-**Status:** Implementada com pendências (SC-001 depende das fixtures reais da POC; nenhum comando falhando)
+**Status:** Verificada, com pendências (SC-001 depende das fixtures reais da POC; nenhum comando falhando)
 **Data:** 04/10/2026
 
 ## Resumo

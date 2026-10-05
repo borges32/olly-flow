@@ -86,7 +86,11 @@ export function ParameterPanel({
       </header>
       {tab === 'settings' ? (
         <div className="overflow-y-auto p-4">
-          <NodeSettings node={node} readOnly={readOnly} />
+          <NodeSettings
+            node={node}
+            readOnly={readOnly}
+            supportsParallelItems={description?.supportsParallelItems === true}
+          />
         </div>
       ) : (
         <div className="grid gap-5 overflow-y-auto p-4">

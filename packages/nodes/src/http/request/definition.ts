@@ -170,6 +170,8 @@ export function createHttpRequestNode(deps: HttpRequestDeps): NodeDefinition {
     category: 'integration',
     inputs: [{ name: 'main', kind: 'main' }],
     outputs: [{ name: 'main', kind: 'main' }],
+    // Spec 006, FR-009: itens em paralelo (aba Configurações do nó).
+    supportsParallelItems: true,
     credentialTypes: [...HTTP_CREDENTIAL_TYPES],
     paramsSchema: httpRequestParamsSchema,
     execute: (input, ctx) => executeHttpRequest(input, ctx, deps),

@@ -13,7 +13,16 @@ import '@xyflow/react/dist/style.css';
 import type { NodeDescription } from '@olly/nodes';
 import type { ExecutionDetail, WorkflowDetail } from '@olly/shared-types';
 import { useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, ClipboardCopy, Eye, Loader2, Play, Save } from 'lucide-react';
+import {
+  ArrowLeft,
+  ChartGantt,
+  ClipboardCopy,
+  Eye,
+  Loader2,
+  Play,
+  Save,
+  Square,
+} from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import { Link, useBlocker, useNavigate, useParams, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
@@ -39,7 +48,9 @@ import { NodeDetailsView } from './ndv/node-details-view';
 import { useEditorStore } from './store';
 import { NodeActionsContext, type NodeActions } from './node-actions';
 import { PublishControls } from './publish-controls';
-import { useTestRun } from './use-test-run';
+import { ExecutionTimeline } from './execution-timeline';
+import { timelineRows } from './timeline';
+import { useCancelExecution, useTestRun } from './use-test-run';
 import { WorkflowEdgeView, type OllyFlowEdge } from './workflow-edge';
 import { WorkflowNodeView, type OllyFlowNode } from './workflow-node';
 
@@ -147,7 +158,9 @@ export function Editor({
   const readOnly = execution !== undefined || !canUpdate;
   const canExecute = execution === undefined && canExecuteWorkflow;
   const runTest = useTestRun(workflow.id);
+  const cancelExecution = useCancelExecution();
   const [ndvNodeId, setNdvNodeId] = useState<string | null>(null);
+  const [showTimeline, setShowTimeline] = useState(false);
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
 
   const state = useEditorStore();
@@ -193,9 +206,15 @@ export function Editor({
         target: e.to,
         targetHandle: e.toPort,
         selected: selection.edgeIds.includes(e.id),
+        // Spec 006, FR-013: aresta animada enquanto o nó de destino executa.
+        animated: run.nodes[e.to]?.status === 'running',
         data: { hovered: hoveredEdgeId === e.id, readOnly, onHover: setHoveredEdgeId },
       })),
-    [edges, selection.edgeIds, hoveredEdgeId, readOnly],
+    [edges, selection.edgeIds, hoveredEdgeId, readOnly, run.nodes],
+  );
+  const timeline = useMemo(
+    () => timelineRows(run.nodes, Object.fromEntries(nodes.map((n) => [n.id, n.name]))),
+    [run.nodes, nodes],
   );
 
   const onNodesChange = useCallback((changes: NodeChange<OllyFlowNode>[]) => {
@@ -407,6 +426,14 @@ export function Editor({
 
   const ndvNode = ndvNodeId ? nodes.find((n) => n.id === ndvNodeId) : undefined;
   const running = run.status === 'running';
+  // Spec 006, FR-010: parar a execução de teste corrente ou a execução aberta (na fila ou em andamento).
+  const stoppableId = execution
+    ? ['queued', 'running'].includes(execution.status) && canExecuteWorkflow
+      ? execution.id
+      : null
+    : running && canExecute
+      ? run.executionId
+      : null;
   const nodeActions = useMemo<NodeActions>(
     () => ({
       canExecute,
@@ -474,6 +501,28 @@ export function Editor({
         )}
         {!execution && (
           <PublishControls workflow={workflow} dirty={dirty} canPublish={canPublish} />
+        )}
+        <Button
+          size="sm"
+          variant={showTimeline ? 'secondary' : 'ghost'}
+          aria-pressed={showTimeline}
+          onClick={() => {
+            setShowTimeline((v) => !v);
+          }}
+          title="Início e duração de cada nó da execução"
+        >
+          <ChartGantt /> Linha do tempo
+        </Button>
+        {stoppableId && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-destructive hover:text-destructive"
+            onClick={() => void cancelExecution(stoppableId)}
+            title="Interrompe as operações em andamento (HTTP, SQL, código)"
+          >
+            <Square /> Parar execução
+          </Button>
         )}
         {canExecute && (
           <Button
@@ -562,6 +611,17 @@ export function Editor({
             <p className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
               {readOnly ? 'Workflow vazio.' : 'Adicione um nó pela paleta à esquerda.'}
             </p>
+          )}
+          {showTimeline && (
+            <div className="absolute inset-x-0 bottom-0 z-10 max-h-[40%] overflow-auto border-t bg-card shadow-lg">
+              <div className="flex items-center justify-between border-b px-3 py-1.5 text-sm font-medium">
+                Linha do tempo
+                <span className="text-xs font-normal text-muted-foreground">
+                  {timeline.length} {timeline.length === 1 ? 'nó' : 'nós'}
+                </span>
+              </div>
+              <ExecutionTimeline rows={timeline} />
+            </div>
           )}
           <IssuesPanel
             errors={errors}

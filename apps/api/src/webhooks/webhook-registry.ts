@@ -1,7 +1,16 @@
-import { Inject, Injectable } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  type OnApplicationShutdown,
+  type OnModuleInit,
+} from '@nestjs/common';
 import type { Db } from '@olly/db';
 import type { WorkflowDefinition, WorkflowNode } from '@olly/shared-types';
-import { DB } from '../core/tokens.js';
+import type { Redis } from 'ioredis';
+import { APP_CONFIG, type AppConfig } from '../config/config.js';
+import { createRedisConnection } from '../core/redis.js';
+import { DB, REDIS } from '../core/tokens.js';
 import { matchPath, specificity } from './paths.js';
 
 /** Rota de produção: caminho + método → workflow publicado e nó de webhook. */
@@ -36,18 +45,49 @@ export function findRoute<T extends { method: string; path: string }>(
   return best;
 }
 
+/** Canal Redis que avisa as instâncias da API para recarregar as rotas (spec 006). */
+const ROUTES_CHANGED_CHANNEL = 'olly:webhook-routes-changed';
+
 /**
  * Rotas de webhook dos workflows publicados (spec 005, plan §3), em cache. A publicação, a
- * despublicação e a exclusão de workflow recarregam o cache.
+ * despublicação e a exclusão de workflow recarregam o cache, nesta e nas demais instâncias da
+ * API (aviso pelo Redis, spec 006).
  */
 @Injectable()
-export class WebhookRegistry {
+export class WebhookRegistry implements OnModuleInit, OnApplicationShutdown {
+  private readonly logger = new Logger('WebhookRegistry');
   private routes?: Promise<WebhookRoute[]>;
+  private subscriber?: Redis;
 
-  constructor(@Inject(DB) private readonly db: Db) {}
+  constructor(
+    @Inject(DB) private readonly db: Db,
+    @Inject(REDIS) private readonly redis: Redis,
+    @Inject(APP_CONFIG) private readonly config: AppConfig,
+  ) {}
+
+  async onModuleInit(): Promise<void> {
+    const subscriber = createRedisConnection(this.config.redisUrl, 'webhook-routes');
+    this.subscriber = subscriber;
+    subscriber.on('message', () => {
+      this.routes = undefined;
+    });
+    const subscribed = subscriber.subscribe(ROUTES_CHANGED_CHANNEL).catch((error: unknown) => {
+      this.logger.warn(`Assinatura das mudanças de rotas falhou: ${String(error)}`);
+    });
+    await Promise.race([subscribed, new Promise((resolve) => setTimeout(resolve, 2000).unref())]);
+  }
+
+  onApplicationShutdown(): void {
+    this.subscriber?.disconnect();
+  }
 
   reload(): void {
     this.routes = undefined;
+    this.redis.publish(ROUTES_CHANGED_CHANNEL, '1').catch((error: unknown) => {
+      this.logger.warn(
+        `Outras instâncias não foram avisadas da mudança de rotas: ${String(error)}`,
+      );
+    });
   }
 
   async match(method: string, path: string): Promise<WebhookMatch<WebhookRoute> | null> {

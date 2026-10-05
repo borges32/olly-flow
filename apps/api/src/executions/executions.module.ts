@@ -1,7 +1,11 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module.js';
+import { QueueDispatcher } from '../queue/queue-dispatcher.js';
+import { RoutingDispatcher } from '../queue/routing-dispatcher.js';
+import { WorkerLostSweeper } from '../queue/worker-lost-sweeper.js';
 import { ExecutionDispatcher, InProcessDispatcher } from './dispatcher.js';
-import { ExecutionEventsService } from './execution-events.service.js';
+import { ExecutionEventRelay } from './event-relay.js';
+import { ExecutionEventSink, ExecutionEventsService } from './execution-events.service.js';
 import { ExecutionRunner } from './execution-runner.js';
 import { ExecutionsController } from './executions.controller.js';
 import { ExecutionsGateway } from './executions.gateway.js';
@@ -13,12 +17,16 @@ import { ExecutionsService } from './executions.service.js';
   providers: [
     ExecutionsService,
     ExecutionEventsService,
+    { provide: ExecutionEventSink, useExisting: ExecutionEventsService },
+    ExecutionEventRelay,
     ExecutionsGateway,
     ExecutionRunner,
     InProcessDispatcher,
-    // Spec 005, FR-003: a spec 006 troca esta implementação por uma fila com workers.
-    { provide: ExecutionDispatcher, useExisting: InProcessDispatcher },
+    // Spec 006: produção pela fila (workers); teste pela fila ou em processo.
+    QueueDispatcher,
+    { provide: ExecutionDispatcher, useClass: RoutingDispatcher },
+    WorkerLostSweeper,
   ],
-  exports: [ExecutionsService, ExecutionDispatcher, ExecutionEventsService],
+  exports: [ExecutionsService, ExecutionDispatcher, ExecutionEventsService, ExecutionEventSink],
 })
 export class ExecutionsModule {}

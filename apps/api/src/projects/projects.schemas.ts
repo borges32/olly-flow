@@ -4,3 +4,7 @@ import { z } from 'zod';
 export const projectBodySchema = z.object({ name: z.string().trim().min(1).max(120) });
 export const memberBodySchema = z.object({ role: z.enum(ROLE_NAMES) });
 export const userSearchQuerySchema = z.object({ search: z.string().trim().max(120).optional() });
+/** Spec 006, FR-012: `null` volta à cota padrão da plataforma. */
+export const quotaBodySchema = z.object({
+  maxConcurrentExecutions: z.number().int().min(1).max(10_000).nullable(),
+});

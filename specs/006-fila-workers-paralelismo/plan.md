@@ -92,11 +92,13 @@
 
 | Variável | Padrão | Descrição |
 |---|---|---|
-| `OLLY_WORKER_CONCURRENCY` | 10 | Jobs simultâneos por worker |
+| `OLLY_WORKER_CONCURRENCY` | 20 | Jobs simultâneos por worker |
 | `OLLY_WORKER_SHUTDOWN_TIMEOUT` | 60 s | Espera no SIGTERM |
 | `OLLY_DEFAULT_WORKFLOW_TIMEOUT` | 300 s | Timeout global padrão |
 | `OLLY_PROJECT_MAX_CONCURRENT` | 20 | Cota padrão por projeto |
-| `OLLY_TEST_RUN_MODE` | `queue` | Execução de teste via fila ou em processo |
+| `OLLY_TEST_RUN_MODE` | `queue` | Execução de teste via fila ou em processo (produção é sempre fila) |
+| `OLLY_WORKER_PORT` | 3101 | Porta interna de `/health` e `/metrics` do worker |
+| `OLLY_DEFAULT_MAX_PARALLEL` | 8 | `maxParallel` padrão (contrato); `1` = sequencial |
 
 ## Decisões técnicas
 
@@ -128,3 +130,18 @@
 | Condição de corrida no pub/sub | Subscrever antes de enfileirar |
 
 Ao concluir, produzir `docs/execucao.md` com a semântica: prontidão, "sem dados", paralelismo, cancelamento e recuperação.
+
+## Histórico de alterações
+
+| Data | Alteração | Motivo |
+|---|---|---|
+| 05/10/2026 | `OLLY_WORKER_CONCURRENCY` padrão 10 → 20 | Decisão do PO |
+| 05/10/2026 | §2: o código do worker fica em `apps/api/src/worker` e é exportado como `@olly/api/worker`; `apps/worker` é o processo implantável | Reaproveita os módulos de execução da API (banco, nós, credenciais, binários, `ExecutionRunner`) sem duplicação nem um pacote novo |
+| 05/10/2026 | §2: o batimento é feito pelo `ExecutionRunner` (fila e em processo); no SIGTERM, execuções que passam do limite terminam como `error`/`worker_lost`, em vez de "devolvidas" | Devolver uma execução já iniciada a reexecutaria, contrariando a FR-005; os jobs não iniciados continuam na fila |
+| 05/10/2026 | §3: modo de resposta `lastNode` usa o último nó com dados na ordem topológica; com erros em vários ramos, vale o primeiro na ordem topológica | FR-008: a ordem de conclusão varia com o paralelismo |
+| 05/10/2026 | §4: o nó de código não é elegível a `parallelItems` | O modo "uma vez por item" já roda todos os itens numa única chamada ao sandbox (spec 005) |
+| 05/10/2026 | §4: helper próprio `mapWithConcurrency` em vez de `p-limit` | Poucas linhas; evita dependência nova |
+| 05/10/2026 | §5: cancelamento e timeout terminam com status `cancelled` e `error.reason` (`cancelled` \| `timeout`); `worker_lost` termina `error`. O task runner interrompe o código em andamento no `disposeExecution` | Spec: "cancelada com motivo `timeout`"; FR-005; NFR-001 |
+| 05/10/2026 | §6: semáforo como sorted set com validade por vaga (renovada no batimento), em vez de `INCR`/TTL/`DECR`; cota alterada por `PUT /projects/:id/quota` (administração da plataforma) | Com contador único, o TTL de um worker morto zeraria as vagas dos outros; o plano não definia como alterar a cota |
+| 05/10/2026 | §1: todos os eventos da API também passam pelo Redis (relay) | `testWebhookReceived` e afins precisam chegar a editores conectados em outra instância da API (FR-003) |
+

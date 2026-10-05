@@ -32,7 +32,7 @@
       "persistent": true
     },
     "@olly/web#test:e2e": {
-      "dependsOn": ["^build", "@olly/api#build", "@olly/db#build"],
+      "dependsOn": ["^build", "@olly/api#build", "@olly/worker#build", "@olly/db#build"],
       "cache": false
     }
   }

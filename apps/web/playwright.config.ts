@@ -34,6 +34,14 @@ export default defineConfig({
       timeout: 60_000,
     },
     {
+      // Spec 006: as execuções passam pela fila; o worker executa (mesmo ambiente da API).
+      command: 'node ../worker/dist/main.js',
+      url: 'http://localhost:3101/health',
+      env: { ...env, LOG_LEVEL: 'warn', OLLY_HTTP_ALLOWLIST: '127.0.0.1' },
+      reuseExistingServer: !isCI,
+      timeout: 60_000,
+    },
+    {
       command: 'pnpm exec vite',
       url: 'http://localhost:5173',
       env,

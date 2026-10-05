@@ -95,4 +95,32 @@ describe('configuração da API (validação zod na inicialização)', () => {
       region: 'us-east-1',
     });
   });
+
+  it('spec 006 — FR-004/FR-011/FR-012: padrões de fila, worker, timeout global e cota', () => {
+    const config = loadConfig(valid);
+    expect(config.queue).toMatchObject({
+      testRunMode: 'queue',
+      workerConcurrency: 20,
+      workerShutdownTimeoutMs: 60_000,
+      workerPort: 3101,
+      projectMaxConcurrent: 20,
+    });
+    expect(config.execution.workflowTimeoutMs).toBe(300_000);
+    expect(config.execution.defaultMaxParallel).toBe(8);
+    const custom = loadConfig({
+      ...valid,
+      OLLY_TEST_RUN_MODE: 'inprocess',
+      OLLY_WORKER_CONCURRENCY: '5',
+      OLLY_DEFAULT_WORKFLOW_TIMEOUT: '2.5',
+    });
+    expect(custom.queue.testRunMode).toBe('inprocess');
+    expect(custom.queue.workerConcurrency).toBe(5);
+    expect(custom.execution.workflowTimeoutMs).toBe(2500);
+    expect(() => loadConfig({ ...valid, OLLY_TEST_RUN_MODE: 'thread' })).toThrow(
+      /OLLY_TEST_RUN_MODE/,
+    );
+    expect(() => loadConfig({ ...valid, OLLY_DEFAULT_MAX_PARALLEL: '0' })).toThrow(
+      /OLLY_DEFAULT_MAX_PARALLEL/,
+    );
+  });
 });

@@ -51,7 +51,7 @@ async function run(jsCode: string, mode?: string): Promise<ExecutionDetail> {
   ).json<TestRunResponse>();
   for (let i = 0; i < 200; i++) {
     const detail = (await admin.call('GET', `/executions/${executionId}`)).json<ExecutionDetail>();
-    if (detail.status !== 'running') return detail;
+    if (!['queued', 'running'].includes(detail.status)) return detail;
     await new Promise((r) => setTimeout(r, 50));
   }
   throw new Error('execução não terminou');

@@ -12,6 +12,8 @@ onlyBuiltDependencies:
 ignoredBuiltDependencies:
   - '@scarf/scarf'
   - cpu-features
+  # bullmq → msgpackr: usa o binário pré-compilado (pacote opcional) ou cai para JS puro.
+  - msgpackr-extract
   - protobufjs
   - ssh2
 

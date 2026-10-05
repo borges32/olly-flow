@@ -24,7 +24,7 @@ const TOKEN = 'token-de-teste-bearer-123';
 async function waitFinished(user: TestUser, executionId: string): Promise<ExecutionDetail> {
   for (let i = 0; i < 100; i++) {
     const detail = (await user.call('GET', `/executions/${executionId}`)).json<ExecutionDetail>();
-    if (detail.status !== 'running') return detail;
+    if (!['queued', 'running'].includes(detail.status)) return detail;
     await new Promise((r) => setTimeout(r, 50));
   }
   throw new Error('execução não terminou');

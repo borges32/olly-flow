@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| **Status** | Implementada |
+| **Status** | Verificada |
 | **Fase** | 1 — MVP |
 | **Depende de** | 004 |
 | **Requisitos de produto** | PR-06, PR-07, PR-08, PR-09, PR-17 (parcial), PR-19 (parcial) |

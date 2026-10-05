@@ -26,6 +26,8 @@ export interface ProjectsTable {
   id: Generated<string>;
   name: string;
   created_at: GeneratedTimestamp;
+  /** Cota de execuções simultâneas (spec 006, FR-012); `null` usa o padrão da configuração. */
+  max_concurrent_executions: ColumnType<number | null, number | null | undefined, number | null>;
 }
 
 export interface ProjectMembersTable {
@@ -97,6 +99,18 @@ export interface ExecutionsTable {
   error: ColumnType<unknown, string | null | undefined, string | null>;
   /** Definição executada (spec 005): execuções de teste rodam o rascunho não salvo. */
   definition: ColumnType<unknown, string | null | undefined, string | null>;
+  /** Último batimento do worker (spec 006, FR-005). */
+  heartbeat_at: ColumnType<Date | null, Date | null | undefined, Date | null>;
+}
+
+/** Dados do disparo de uma execução enfileirada (spec 006, FR-001). */
+export interface ExecutionPayloadsTable {
+  execution_id: string;
+  /** JSONB: insira com `JSON.stringify`. */
+  data: ColumnType<unknown, string | null | undefined, string | null>;
+  /** Chave no object storage quando o conteúdo passa de 1 MB. */
+  data_ref: string | null;
+  created_at: GeneratedTimestamp;
 }
 
 export interface NodeExecutionsTable {
@@ -148,6 +162,7 @@ export interface Database {
   webhooks: WebhooksTable;
   executions: ExecutionsTable;
   node_executions: NodeExecutionsTable;
+  execution_payloads: ExecutionPayloadsTable;
   credentials: CredentialsTable;
 }
 

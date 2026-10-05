@@ -1,7 +1,7 @@
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
 import type { NodeDescription } from '@olly/nodes';
 import type { WorkflowNode } from '@olly/shared-types';
-import { AlertTriangle, Check, Loader2, Minus, Pin, Play, X } from 'lucide-react';
+import { AlertTriangle, Check, Loader2, Minus, Pin, Play, Square, X } from 'lucide-react';
 import { memo } from 'react';
 import { cn } from '@/lib/utils';
 import { useNodeActions } from './node-actions';
@@ -55,6 +55,17 @@ function RunStatus({ run }: { run: NodeRunView }) {
           title={run.error?.message}
         >
           <X className="size-3" /> erro
+        </span>
+      );
+    case 'cancelled':
+      return (
+        <span
+          data-testid="node-status"
+          data-status="cancelled"
+          className={cn(common, 'text-amber-600 dark:text-amber-400')}
+          title={run.error?.message ?? 'Execução interrompida'}
+        >
+          <Square className="size-3" /> interrompido
         </span>
       );
     default:

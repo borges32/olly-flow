@@ -4,6 +4,7 @@ import type {
   ExecutionDetail,
   ExecutionList,
   ExpressionPreviewResponse,
+  QueueStats,
   TestRunResponse,
 } from '@olly/shared-types';
 import type { AuditContext } from '../audit/audit.service.js';
@@ -56,6 +57,26 @@ export class ExecutionsController {
   @Get('executions/:id')
   get(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string): Promise<ExecutionDetail> {
     return this.executions.get(user, id);
+  }
+
+  /** Spec 006, FR-010: para uma execução na fila ou em andamento. */
+  @RequirePermission('workflow:execute', { execution: 'id' })
+  @HttpCode(202)
+  @Post('executions/:id/cancel')
+  async cancel(
+    @Audit() audit: AuditContext,
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ): Promise<{ cancelled: true }> {
+    await this.executions.cancel(audit, user, id);
+    return { cancelled: true };
+  }
+
+  /** Spec 006, FR-012: execuções do projeto em andamento e na fila, e a cota. */
+  @RequirePermission('execution:read', { project: 'id' })
+  @Get('projects/:id/queue-stats')
+  queueStats(@Param('id') id: string): Promise<QueueStats> {
+    return this.executions.queueStats(id);
   }
 
   /** FR-018 (spec 003): pré-visualização de expressão sobre a última execução de teste. */

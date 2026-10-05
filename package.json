@@ -17,7 +17,7 @@
     "test:e2e": "turbo run test:e2e",
     "smoke": "tsx scripts/smoke.ts",
     "app:up": "docker compose --profile app up -d --build --wait",
-    "app:down": "docker compose --profile app stop db-init api web",
+    "app:down": "docker compose --profile app stop db-init api worker web",
     "app:reset": "docker compose --profile app down -v && docker compose --profile app up -d --build --wait",
     "db:migrate": "turbo run build --filter=@olly/db --output-logs=errors-only && pnpm --filter @olly/db run migrate",
     "db:rollback": "turbo run build --filter=@olly/db --output-logs=errors-only && pnpm --filter @olly/db run rollback",

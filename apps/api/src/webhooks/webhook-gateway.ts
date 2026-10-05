@@ -334,9 +334,12 @@ export class WebhookGateway {
     mode: string,
     executionId: string,
   ): Promise<void> {
-    if (outcome.status === 'error') {
+    if (outcome.status !== 'success') {
       await reply.code(500).send({
-        message: 'O workflow terminou com erro',
+        message:
+          outcome.status === 'cancelled'
+            ? 'A execução foi interrompida antes do fim'
+            : 'O workflow terminou com erro',
         executionId,
         error: outcome.error?.message,
       });

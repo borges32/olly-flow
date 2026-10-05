@@ -12,8 +12,8 @@
 | 002 | [editor-workflows-rbac](../specs/002-editor-workflows-rbac/spec.md) | 1 — MVP | Canvas, CRUD de workflows, RBAC por projeto, esqueleto do motor | 001 | Verificada ([relatório](../specs/002-editor-workflows-rbac/report.md)) | |
 | 003 | [expressoes-execucao-teste](../specs/003-expressoes-execucao-teste/spec.md) | 1 — MVP | Expressões N8N em sandbox, If, `$vars`, execução de teste, log | 002 | Verificada ([relatório](../specs/003-expressoes-execucao-teste/report.md)) | |
 | 004 | [credenciais-http-postgres](../specs/004-credenciais-http-postgres/spec.md) | 1 — MVP | Credenciais, anti-SSRF, HTTP, Postgres, retry/timeout | 003 | Verificada ([relatório](../specs/004-credenciais-http-postgres/report.md)) | |
-| 005 | [webhook-codigo-js-mvp](../specs/005-webhook-codigo-js-mvp/spec.md) | 1 — MVP | Webhook, publicação, código JS, execuções, matriz RBAC, POC | 004 | Implementada ([relatório](../specs/005-webhook-codigo-js-mvp/report.md)) — SC-001 pendente (fixtures da POC) | 🏁 MVP + Go/No-Go |
-| 006 | [fila-workers-paralelismo](../specs/006-fila-workers-paralelismo/spec.md) | 2 — Execução avançada | Fila, workers, DAG paralelo, cancelamento, cotas | 005 + Go | Aprovada | |
+| 005 | [webhook-codigo-js-mvp](../specs/005-webhook-codigo-js-mvp/spec.md) | 1 — MVP | Webhook, publicação, código JS, execuções, matriz RBAC, POC | 004 | Verificada ([relatório](../specs/005-webhook-codigo-js-mvp/report.md)) — SC-001 pendente (fixtures da POC) | 🏁 MVP + Go/No-Go |
+| 006 | [fila-workers-paralelismo](../specs/006-fila-workers-paralelismo/spec.md) | 2 — Execução avançada | Fila, workers, DAG paralelo, cancelamento, cotas | 005 + Go | Implementada ([relatório](../specs/006-fila-workers-paralelismo/report.md)) | |
 | 007 | [controle-de-fluxo](../specs/007-controle-de-fluxo/spec.md) | 2 — Execução avançada | Merge, While, Loop, Switch, porta de erro, error workflow | 006 | Aprovada | |
 | 008 | [python-agendamento-subworkflow](../specs/008-python-agendamento-subworkflow/spec.md) | 2 — Execução avançada | Python isolado, cron, sub-workflow, Wait, reexecução, paginação | 007 | Aprovada | 🏁 Motor completo |
 | 009 | [governanca-lgpd-sso](../specs/009-governanca-lgpd-sso/spec.md) | 3 — IA e governança | Vault/KMS, SSO, versionamento, aprovação, mascaramento, retenção | 008 | Aprovada | |
@@ -40,7 +40,7 @@ Entre cada spec, antes de iniciar a próxima:
 |---|---|---|
 | 001 | ~~Confirmar ADRs 0002–0004~~ (aceitas em 03/10/2026); exportar workflows de referência da POC para `fixtures/n8n/` | Tech lead + PO |
 | 002–005 | Revisar código e relatórios; validar UX do editor com usuários da POC | Tech lead + PO |
-| 006 | **Go/No-Go** (TCO vs. N8N Enterprise) registrado em ADR; ADR-0006 (infraestrutura) | Gestão + PO |
+| 006 | ~~**Go/No-Go** (TCO vs. N8N Enterprise) registrado em ADR; ADR-0006 (infraestrutura)~~ (Go na [ADR-0009](adr/0009-go-no-go.md), 05/10/2026; ADR-0006 aceita em 04/10/2026) | Gestão + PO |
 | 009 | ADR-0005 (IdP) e ADR-0007 (Vault/KMS) decididas, com acessos de homologação | Infra + Segurança |
 | 011 | ADR-0008 (provedores e modelos de LLM aprovados) e chaves de homologação | Gestão + Segurança + Jurídico/LGPD |
 | 012 | Exportar **todos** os workflows da POC; agendar pentest; ambiente de homologação; metas de carga (NFR-G08) | PO + Segurança + Infra |
@@ -53,7 +53,6 @@ Entre cada spec, antes de iniciar a próxima:
 | ADR | Assunto | Decidir até | Se não estiver decidida |
 |---|---|---|---|
 | 0005 | IdP institucional | 009 | Keycloak local + pendência registrada |
-| 0006 | Infraestrutura | 006 / 012 | Docker Compose; Helm testado em kind/k3d |
 | 0007 | Vault/KMS | 009 | Vault local em modo dev |
 | 0008 | Provedores de LLM | 011 | Provedor compatível com a API OpenAI + modelo fake nos testes |
 

@@ -19,6 +19,21 @@ import { UsersModule } from './users/users.module.js';
 import { WebhooksModule } from './webhooks/webhooks.module.js';
 import { WorkflowsModule } from './workflows/workflows.module.js';
 
+/**
+ * Spec 004, FR-003: corpos não são registrados; os caminhos de credencial ficam como garantia
+ * caso algum log passe a incluir o corpo da requisição. Também usado pelo worker (spec 006).
+ */
+export const LOG_REDACT = [
+  'req.headers.authorization',
+  'req.headers.cookie',
+  'res.headers["set-cookie"]',
+  'req.body.data',
+  '*.password',
+  '*.token',
+  '*.clientSecret',
+  '*.secret',
+];
+
 export interface AppOptions {
   /** Destino dos logs (testes de vazamento de segredos, spec 004 SC-002). Padrão: stdout. */
   logStream?: DestinationStream;
@@ -31,18 +46,7 @@ export class AppModule {
       level: config.logLevel,
       // O id já foi definido pelo Fastify (ver app.ts) e copiado para o cabeçalho.
       genReqId: (req) => String(req.headers['x-request-id']),
-      // Spec 004, FR-003: corpos não são registrados; os caminhos de credencial ficam como
-      // garantia caso algum log passe a incluir o corpo da requisição.
-      redact: [
-        'req.headers.authorization',
-        'req.headers.cookie',
-        'res.headers["set-cookie"]',
-        'req.body.data',
-        '*.password',
-        '*.token',
-        '*.clientSecret',
-        '*.secret',
-      ],
+      redact: LOG_REDACT,
       autoLogging: { ignore: (req) => req.url === '/health' },
     };
     return {

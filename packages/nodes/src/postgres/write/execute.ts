@@ -235,17 +235,20 @@ export async function executePostgresWrite(
     return { main: out };
   }
 
-  const out: Item[] = [];
+  // Sem transação única, cada lote (ou item, no update) é independente: pode rodar em paralelo
+  // com `settings.parallelItems` (spec 006, FR-009), na ordem dos itens.
   const units = operation === 'update' ? all.map((i) => [i]) : batches;
-  for (const unit of units) {
+  const out = await ctx.mapItems(units, async (unit): Promise<Item[]> => {
     try {
+      const results: Item[] = [];
       for (const statement of build(unit)) {
-        out.push(...(await inTransaction(pool, tx, (client) => run(client, statement))));
+        results.push(...(await inTransaction(pool, tx, (client) => run(client, statement))));
       }
+      return results;
     } catch (error) {
       if (!continueOnFail || ctx.signal.aborted) throw error;
-      for (const i of unit) out.push({ json: errorJson(error), pairedItem: { item: i } });
+      return unit.map((i) => ({ json: errorJson(error), pairedItem: { item: i } }));
     }
-  }
-  return { main: out };
+  });
+  return { main: out.flat() };
 }

@@ -78,6 +78,29 @@ export class ProjectsService {
     });
   }
 
+  /** Spec 006, FR-012: cota de execuções simultâneas (`null`: padrão da plataforma). */
+  async setQuota(ctx: AuditContext, projectId: string, limit: number | null): Promise<void> {
+    await this.db.transaction().execute(async (trx) => {
+      const before = await trx
+        .selectFrom('projects')
+        .select('max_concurrent_executions')
+        .where('id', '=', projectId)
+        .executeTakeFirst();
+      if (!before) throw new NotFoundError('Projeto não encontrado');
+      await trx
+        .updateTable('projects')
+        .set({ max_concurrent_executions: limit })
+        .where('id', '=', projectId)
+        .execute();
+      await this.audit.record(trx, ctx, {
+        action: 'project.quota',
+        entityType: 'project',
+        entityId: projectId,
+        details: { from: before.max_concurrent_executions, to: limit },
+      });
+    });
+  }
+
   /** Projetos com workflows (mesmo excluídos) não podem ser apagados: o histórico precisa ficar. */
   async delete(ctx: AuditContext, projectId: string): Promise<void> {
     await this.db.transaction().execute(async (trx) => {

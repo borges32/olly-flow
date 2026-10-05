@@ -1,9 +1,11 @@
+import type { CancelReason } from '@olly/engine';
 import type { WebhookResponse } from '@olly/nodes';
 import type { Item, WorkflowDefinition } from '@olly/shared-types';
 
 /**
  * Trabalho de execução serializável (spec 005, FR-003, plan §2 e §10): tudo o que um executor
- * precisa, para que a fila da spec 006 o leve a um worker sem mudar quem despacha.
+ * precisa. Na fila (spec 006), o job leva só o id; o worker remonta este objeto a partir da
+ * execução gravada e de `execution_payloads`.
  */
 export interface ExecutionJob {
   executionId: string;
@@ -19,11 +21,36 @@ export interface ExecutionJob {
   reuse?: Record<string, string>;
 }
 
+/** Dados do disparo guardados fora da fila (`execution_payloads`, spec 006 FR-001). */
+export type ExecutionPayload = Pick<
+  ExecutionJob,
+  'triggerItems' | 'startNodeId' | 'pinData' | 'destinationNodeId' | 'reuse'
+>;
+
+export interface ExecutionError {
+  nodeId?: string;
+  message: string;
+  /** Fim antecipado (spec 006): cancelamento, timeout global ou worker perdido. */
+  reason?: CancelReason;
+}
+
 export interface ExecutionOutcome {
-  status: 'success' | 'error';
-  error?: { nodeId?: string; message: string };
+  status: 'success' | 'error' | 'cancelled';
+  error?: ExecutionError;
   /** Itens do último nó que terminou com dados (modo de resposta `lastNode`). */
   lastOutput?: Item[];
+}
+
+export type WaitResult =
+  | { kind: 'response'; response: WebhookResponse }
+  | { kind: 'finished'; outcome: ExecutionOutcome }
+  | { kind: 'timeout' };
+
+/** Pedido de cancelamento publicado para os workers (spec 006, FR-010). */
+export interface CancelMessage {
+  executionId: string;
+  reason: CancelReason;
+  message: string;
 }
 
 export type { WebhookResponse };

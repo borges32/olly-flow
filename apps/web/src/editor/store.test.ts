@@ -283,3 +283,46 @@ describe('spec 005 — FR-012/FR-014: console e dados omitidos na execução', (
     expect(store().webhookListening).toBeNull();
   });
 });
+
+describe('spec 006 — FR-010/FR-013: nós simultâneos, linha do tempo e cancelamento', () => {
+  it('FR-013: vários nós em execução ao mesmo tempo guardam o próprio início', () => {
+    store().runStarted('exec-p');
+    store().nodeStarted('exec-p', 'h1', '2026-10-05T10:00:00.000Z');
+    store().nodeStarted('exec-p', 'h2', '2026-10-05T10:00:00.010Z');
+    expect(store().run.nodes.h1).toMatchObject({
+      status: 'running',
+      startedAt: '2026-10-05T10:00:00.000Z',
+    });
+    expect(store().run.nodes.h2?.status).toBe('running');
+    store().nodeFinished({
+      executionId: 'exec-p',
+      nodeId: 'h1',
+      status: 'success',
+      itemsIn: 1,
+      itemsOut: 1,
+      durationMs: 1000,
+      pinned: false,
+      reused: false,
+      dataTruncated: false,
+      data: { input: {}, output: {} },
+      error: null,
+    });
+    // O início continua o do evento nodeStarted.
+    expect(store().run.nodes.h1?.startedAt).toBe('2026-10-05T10:00:00.000Z');
+    expect(store().run.nodes.h2?.status).toBe('running');
+  });
+
+  it('FR-010: execução cancelada termina como cancelled, não como erro', () => {
+    store().runStarted('exec-c');
+    store().runFinished({
+      executionId: 'exec-c',
+      status: 'cancelled',
+      finishedAt: '',
+      error: { message: 'Execução cancelada por Ana', reason: 'cancelled' },
+    });
+    expect(store().run).toMatchObject({
+      status: 'cancelled',
+      error: 'Execução cancelada por Ana',
+    });
+  });
+});

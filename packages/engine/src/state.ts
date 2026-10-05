@@ -1,6 +1,15 @@
 import type { Item, NodeOutput, WorkflowDefinition } from '@olly/shared-types';
 
-export type NodeRunStatus = 'pending' | 'running' | 'success' | 'error' | 'skipped';
+export type NodeRunStatus = 'pending' | 'running' | 'success' | 'error' | 'skipped' | 'cancelled';
+
+/**
+ * Estado de uma porta de entrada (spec 006, plan §3): `unresolved` enquanto algum nó que a
+ * alimenta não terminou; depois, `data` se chegou pelo menos um item, senão `noData`.
+ */
+export type PortState = 'unresolved' | 'data' | 'noData';
+
+/** Prontidão de um nó pendente: aguardando, pronto para executar ou sem dados (pular). */
+export type Readiness = 'waiting' | 'ready' | 'noData';
 
 /** De onde veio um item de entrada: nó, porta de saída e índice na saída. */
 export interface SourceRef {
@@ -29,20 +38,23 @@ export interface RunView {
   isExecuted(nodeId: string): boolean;
 }
 
+const FINISHED: ReadonlySet<NodeRunStatus> = new Set(['success', 'skipped', 'error', 'cancelled']);
+
 /**
- * Estado de uma execução: entradas acumuladas por porta e status de cada nó. Um nó fica
- * pronto quando todos os nós que o alimentam já terminaram (com dados ou sem dados).
+ * Estado de uma execução: status e saída de cada nó. A entrada de um nó é montada quando ele
+ * fica pronto, a partir das saídas dos pais **na ordem das arestas na definição** (spec 006,
+ * FR-008), nunca pela ordem em que os pais terminaram.
  */
 export class ExecutionState implements RunView {
   readonly nodes = new Map<string, NodeRunState>();
-  private readonly incoming = new Map<string, string[]>();
+  private readonly incoming = new Map<string, WorkflowDefinition['edges']>();
 
-  constructor(private readonly def: WorkflowDefinition) {
+  constructor(def: WorkflowDefinition) {
     for (const node of def.nodes) {
       this.nodes.set(node.id, { inputs: {}, sources: {}, status: 'pending' });
       this.incoming.set(node.id, []);
     }
-    for (const edge of def.edges) this.incoming.get(edge.to)?.push(edge.from);
+    for (const edge of def.edges) this.incoming.get(edge.to)?.push(edge);
   }
 
   get(nodeId: string): NodeRunState {
@@ -51,36 +63,62 @@ export class ExecutionState implements RunView {
     return state;
   }
 
+  /** Nós que alimentam `nodeId`, na ordem das arestas. */
   sources(nodeId: string): string[] {
-    return this.incoming.get(nodeId) ?? [];
+    return (this.incoming.get(nodeId) ?? []).map((e) => e.from);
   }
 
   isFinished(nodeId: string): boolean {
-    const { status } = this.get(nodeId);
-    return status === 'success' || status === 'skipped' || status === 'error';
+    return FINISHED.has(this.get(nodeId).status);
+  }
+
+  /** Estado de cada porta de entrada conectada (FR-007). */
+  portStates(nodeId: string): Record<string, PortState> {
+    const states: Record<string, PortState> = {};
+    for (const edge of this.incoming.get(nodeId) ?? []) {
+      const current = states[edge.toPort];
+      const source = this.get(edge.from);
+      if (!FINISHED.has(source.status)) {
+        states[edge.toPort] = 'unresolved';
+        continue;
+      }
+      if (current === 'unresolved') continue;
+      const hasItems = (source.output?.[edge.fromPort]?.length ?? 0) > 0;
+      states[edge.toPort] = hasItems || current === 'data' ? 'data' : 'noData';
+    }
+    return states;
+  }
+
+  /**
+   * Prontidão (plan §3): todas as portas conectadas resolvidas e pelo menos uma com dados.
+   * Todas sem dados: o nó é pulado e também não entrega dados aos seguintes.
+   */
+  readiness(nodeId: string): Readiness {
+    if (this.get(nodeId).status !== 'pending') return 'waiting';
+    const ports = Object.values(this.portStates(nodeId));
+    if (ports.includes('unresolved')) return 'waiting';
+    return ports.includes('data') ? 'ready' : 'noData';
   }
 
   isReady(nodeId: string): boolean {
-    return (
-      this.get(nodeId).status === 'pending' && this.sources(nodeId).every((s) => this.isFinished(s))
-    );
+    return this.readiness(nodeId) !== 'waiting';
   }
 
-  /** Entrega a saída do nó às arestas que partem dele. Cada destino recebe sua própria cópia. */
-  deliver(nodeId: string, output: NodeOutput): void {
-    for (const edge of this.def.edges) {
-      if (edge.from !== nodeId) continue;
-      const items = output[edge.fromPort] ?? [];
-      const target = this.get(edge.to);
-      target.inputs[edge.toPort] = [
-        ...(target.inputs[edge.toPort] ?? []),
-        ...structuredClone(items),
-      ];
-      target.sources[edge.toPort] = [
-        ...(target.sources[edge.toPort] ?? []),
-        ...items.map((_, index) => ({ nodeId, port: edge.fromPort, index })),
+  /** Monta a entrada do nó a partir das saídas dos pais, na ordem das arestas (cópias). */
+  collect(nodeId: string): void {
+    const target = this.get(nodeId);
+    const inputs: Record<string, Item[]> = {};
+    const sources: Record<string, SourceRef[]> = {};
+    for (const edge of this.incoming.get(nodeId) ?? []) {
+      const items = this.get(edge.from).output?.[edge.fromPort] ?? [];
+      inputs[edge.toPort] = [...(inputs[edge.toPort] ?? []), ...structuredClone(items)];
+      sources[edge.toPort] = [
+        ...(sources[edge.toPort] ?? []),
+        ...items.map((_, index) => ({ nodeId: edge.from, port: edge.fromPort, index })),
       ];
     }
+    target.inputs = inputs;
+    target.sources = sources;
   }
 
   inputsOf(nodeId: string): Record<string, Item[]> | undefined {

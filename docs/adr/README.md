@@ -14,9 +14,10 @@ Cada decisão segue o formato **Contexto → Decisão → Consequências**.
 | [0003](0003-sandbox-javascript.md) | Sandbox JavaScript com isolated-vm em task runner separado | **Aceita** (03/10/2026) | — | 003, 005 |
 | [0004](0004-runner-python.md) | Runner Python em container isolado | **Aceita** (03/10/2026) | — | 008 |
 | [0005](0005-autenticacao-oidc.md) | Autenticação via OIDC federado ao diretório institucional | Proposta — institucional | 009 | 001, 009 |
-| [0006](0006-infraestrutura.md) | Infraestrutura de execução | Proposta — institucional | 006 / 012 | 006, 012 |
+| [0006](0006-infraestrutura.md) | Infraestrutura de execução | **Aceita** (04/10/2026) | — | 006, 012 |
 | [0007](0007-gestao-de-segredos.md) | Gestão de segredos | Proposta — institucional | 009 | 004, 009 |
 | [0008](0008-provedor-llm.md) | Provedor de LLM e camada de IA | Proposta — institucional | 011 | 011 |
+| [0009](0009-go-no-go.md) | Go/No-Go do Olly Flow após o MVP | **Aceita** (05/10/2026) | — | 006–013 |
 
 ## Como registrar uma nova ADR
 

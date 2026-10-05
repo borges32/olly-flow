@@ -14,9 +14,11 @@
 | `workflows` | Cabeçalho do workflow; `version` = última versão salva | 002 | `published_version`, `active` (005); `error_workflow_id` (007) |
 | `workflow_versions` | Definição completa (JSONB) por versão | 002 | Mensagem de versão (009) |
 | `webhooks` | Rotas `path` + método → workflow/nó | 002 / 005 | Ativadas na publicação |
-| `executions` | Execução de workflow | 003 | **Particionada por mês** (`olly_ensure_partitions`). `project_id` copiado do workflow. `definition` (definição executada, spec 005). `trace_id` (012), `parent_execution_id` (008) |
+| `executions` | Execução de workflow | 003 | **Particionada por mês** (`olly_ensure_partitions`). `project_id` copiado do workflow. `definition` (definição executada, spec 005). `heartbeat_at` (batimento do worker, spec 006). `trace_id` (012), `parent_execution_id` (008) |
 | `node_executions` | Execução de cada nó (por `run_index`) | 003 | **Particionada por mês**. `input_sources` (origem dos itens, para *paired items*), `pinned`, `reused` (saída reaproveitada de execução anterior, FR-020), `data_truncated`, `console` (saída do nó de código, spec 005). Dados mascarados na spec 009 |
 | `workflows.published_version`, `workflows.active` | Versão em produção e se as rotas estão ativas (spec 005, `0006_publish_console`) | 005 | |
+| `execution_payloads` | Dados do disparo de uma execução enfileirada (itens do gatilho, nó inicial, pinData, reaproveitamento): a fila leva só o id (spec 006, `0007_queue`). Acima de 1 MB, conteúdo no object storage (`data_ref`) | 006 | Sem FK (executions é particionada) |
+| `projects.max_concurrent_executions` | Cota de execuções simultâneas do projeto; `NULL` usa `OLLY_PROJECT_MAX_CONCURRENT` (spec 006, `0007_queue`) | 006 | |
 | `credentials` | Credenciais cifradas por projeto (`data_encrypted` = envelope AES-256-GCM, `key_version` da chave mestra); nome único no projeto | 004 | Ver [docs/credenciais.md](../credenciais.md) |
 | `execution_payloads` | Payload do gatilho para o worker | 006 | Ou object storage se grande |
 | `execution_state` | Estado serializado para retomada (`waiting`) | 008 | Usado por Wait e aprovação humana |
@@ -40,7 +42,8 @@ CREATE TABLE users (
   updated_at TIMESTAMPTZ                      -- última mudança de nome/e-mail vinda do IdP
 );
 CREATE TABLE roles (id SERIAL PRIMARY KEY, name TEXT UNIQUE NOT NULL, permissions TEXT[] NOT NULL);
-CREATE TABLE projects (id UUID PRIMARY KEY, name TEXT NOT NULL, created_at TIMESTAMPTZ DEFAULT now());
+CREATE TABLE projects (id UUID PRIMARY KEY, name TEXT NOT NULL, created_at TIMESTAMPTZ DEFAULT now(),
+  max_concurrent_executions INT);           -- 0007_queue (spec 006)
 CREATE TABLE project_members (
   project_id UUID REFERENCES projects(id), user_id UUID REFERENCES users(id),
   role_id INT REFERENCES roles(id), created_at TIMESTAMPTZ DEFAULT now(),
@@ -73,6 +76,7 @@ CREATE TABLE executions (
   id UUID, workflow_id UUID, project_id UUID, workflow_version INT, mode TEXT, trigger_type TEXT,
   triggered_by UUID, status TEXT,            -- queued|running|waiting|success|error|cancelled
   started_at TIMESTAMPTZ NOT NULL, finished_at TIMESTAMPTZ, error JSONB,
+  definition JSONB, heartbeat_at TIMESTAMPTZ, -- 0006 (spec 005), 0007 (spec 006)
   PRIMARY KEY (id, started_at)
 ) PARTITION BY RANGE (started_at);         -- partições mensais: olly_ensure_partitions(meses)
 CREATE TABLE node_executions (
@@ -81,6 +85,9 @@ CREATE TABLE node_executions (
   input_data JSONB, input_sources JSONB, output_data JSONB, data_truncated BOOLEAN, data_ref TEXT, error JSONB,
   PRIMARY KEY (execution_id, node_id, run_index, started_at)
 ) PARTITION BY RANGE (started_at);
+CREATE TABLE execution_payloads (            -- 0007_queue (spec 006)
+  execution_id UUID PRIMARY KEY, data JSONB, data_ref TEXT, created_at TIMESTAMPTZ DEFAULT now()
+);
 CREATE TABLE audit_log (                      -- sem FK em user_id: o registro sobrevive a users
   id BIGSERIAL PRIMARY KEY, user_id UUID, action TEXT NOT NULL, entity_type TEXT,
   entity_id TEXT, details JSONB, ip INET, created_at TIMESTAMPTZ DEFAULT now()

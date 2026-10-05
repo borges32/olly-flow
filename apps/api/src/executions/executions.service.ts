@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import type { Db } from '@olly/db';
 import {
+  ExecutionCancelledError,
   RecordedRun,
   buildExpressionData,
   collectInputs,
@@ -24,13 +25,19 @@ import type {
   Item,
   NodeExecutionStatus,
   NodeOutput,
+  QueueStats,
   TestRunResponse,
   WorkflowDefinition,
 } from '@olly/shared-types';
 import { sql } from 'kysely';
 import { AuditService, type AuditContext } from '../audit/audit.service.js';
 import type { AuthenticatedUser } from '../auth/auth.types.js';
-import { NotFoundError, PermissionDeniedError, UnprocessableError } from '../common/errors.js';
+import {
+  ConflictError,
+  NotFoundError,
+  PermissionDeniedError,
+  UnprocessableError,
+} from '../common/errors.js';
 import { APP_CONFIG, type AppConfig } from '../config/config.js';
 import { DB } from '../core/tokens.js';
 import { EXPRESSION_EVALUATOR } from '../expressions/expressions.module.js';
@@ -102,8 +109,8 @@ export class ExecutionsService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Grava a execução (com a definição executada) e a despacha (FR-003). Sem vaga, ela fica
-   * `queued` até o dispatcher iniciá-la.
+   * Grava a execução (com a definição executada) e a despacha (FR-003). Na fila (spec 006), ou
+   * sem vaga no despacho em processo, ela fica `queued` até começar.
    */
   async launch(req: LaunchRequest): Promise<{ executionId: string }> {
     const execution = await this.db
@@ -115,12 +122,12 @@ export class ExecutionsService implements OnModuleInit, OnModuleDestroy {
         mode: req.mode,
         trigger_type: req.triggerType,
         triggered_by: req.triggeredBy,
-        status: this.dispatcher.saturated ? 'queued' : 'running',
+        status: this.dispatcher.initialStatus(req.mode),
         definition: JSON.stringify(req.definition),
       })
       .returning('id')
       .executeTakeFirstOrThrow();
-    this.dispatcher.dispatch({
+    const job: ExecutionJob = {
       executionId: execution.id,
       workflow: {
         id: req.workflow.id,
@@ -131,8 +138,75 @@ export class ExecutionsService implements OnModuleInit, OnModuleDestroy {
       definition: req.definition,
       mode: req.mode,
       ...req.job,
-    });
+    };
+    try {
+      await this.dispatcher.dispatch(job);
+    } catch (error) {
+      // Ex.: Redis fora do ar. A execução não fica "na fila" para sempre.
+      this.logger.error(`Não foi possível despachar a execução ${execution.id}: ${String(error)}`);
+      await this.db
+        .updateTable('executions')
+        .set({
+          status: 'error',
+          finished_at: new Date(),
+          error: JSON.stringify({ message: 'Não foi possível enfileirar a execução' }),
+        })
+        .where('id', '=', execution.id)
+        .execute();
+      throw error;
+    }
     return { executionId: execution.id };
+  }
+
+  /**
+   * Spec 006, FR-010: cancela uma execução na fila (termina na hora) ou em andamento (o worker
+   * interrompe as operações em curso). Auditado.
+   */
+  async cancel(ctx: AuditContext, user: AuthenticatedUser, executionId: string): Promise<void> {
+    const execution = await this.db
+      .selectFrom('executions')
+      .select(['status', 'workflow_id'])
+      .where('id', '=', executionId)
+      .executeTakeFirst();
+    if (!execution) throw new NotFoundError('Execução não encontrada');
+    const who = user.name ?? user.email;
+    const reason = new ExecutionCancelledError('cancelled', `Execução cancelada por ${who}`);
+    const signalled =
+      ['queued', 'running'].includes(execution.status) &&
+      (await this.dispatcher.cancel(executionId, reason));
+    if (!signalled) throw new ConflictError('A execução já terminou');
+    await this.audit.record(this.db, ctx, {
+      action: 'execution.cancel',
+      entityType: 'execution',
+      entityId: executionId,
+      details: { workflowId: execution.workflow_id, status: execution.status },
+    });
+  }
+
+  /** Spec 006, FR-012: ocupação da fila do projeto, para o indicador da UI. */
+  async queueStats(projectId: string): Promise<QueueStats> {
+    const [counts, project] = await Promise.all([
+      this.db
+        .selectFrom('executions')
+        .select(['status', (eb) => eb.fn.countAll<string>().as('n')])
+        .where('project_id', '=', projectId)
+        .where('status', 'in', ['queued', 'running'])
+        .groupBy('status')
+        .execute(),
+      this.db
+        .selectFrom('projects')
+        .select('max_concurrent_executions')
+        .where('id', '=', projectId)
+        .executeTakeFirst(),
+    ]);
+    if (!project) throw new NotFoundError('Projeto não encontrado');
+    const count = (status: string) => Number(counts.find((c) => c.status === status)?.n ?? 0);
+    return {
+      running: count('running'),
+      queued: count('queued'),
+      limit: project.max_concurrent_executions ?? this.config.queue.projectMaxConcurrent,
+      customLimit: project.max_concurrent_executions !== null,
+    };
   }
 
   /** FR-011 (spec 003): execução de teste a partir do editor, auditada (spec 005, FR-016). */

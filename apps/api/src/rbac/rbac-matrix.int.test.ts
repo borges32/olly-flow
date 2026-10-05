@@ -194,7 +194,7 @@ beforeAll(async () => {
   ).json<TestRunResponse>().executionId;
   for (let i = 0; i < 100; i++) {
     const d = (await root.call('GET', `/executions/${executionId}`)).json<ExecutionDetail>();
-    if (d.status !== 'running') break;
+    if (!['queued', 'running'].includes(d.status)) break;
     await new Promise((r) => setTimeout(r, 50));
   }
 });

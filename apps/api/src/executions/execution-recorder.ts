@@ -1,8 +1,9 @@
 import type { Logger } from '@nestjs/common';
 import type { Db, NewNodeExecution } from '@olly/db';
-import type { NodeRunRecord, RunCallbacks, RunResult } from '@olly/engine';
+import type { NodeRunRecord, RunCallbacks } from '@olly/engine';
 import { sql } from 'kysely';
-import type { ExecutionEventsService } from './execution-events.service.js';
+import type { ExecutionEventSink } from './execution-events.service.js';
+import type { ExecutionError, ExecutionOutcome } from './execution-job.js';
 import { truncateByBytes } from './truncate.js';
 
 const NO_PARTITION = '23514';
@@ -14,7 +15,7 @@ const NO_PARTITION = '23514';
 export class ExecutionRecorder {
   constructor(
     private readonly db: Db,
-    private readonly events: ExecutionEventsService,
+    private readonly events: ExecutionEventSink,
     private readonly executionId: string,
     private readonly workflowId: string,
     private readonly maxBytes: number,
@@ -31,21 +32,32 @@ export class ExecutionRecorder {
         );
       },
       onNodeFinish: (record) => this.recordNode(record),
-      onExecutionFinish: (result) => this.finish(result.status, result.error ?? null),
+      onExecutionFinish: async (result) => {
+        await this.finish(result.status, result.error ?? null);
+      },
     };
   }
 
+  /**
+   * Grava o fim da execução e publica `executionFinished`. Só uma execução ainda `running` é
+   * finalizada: se a varredura já a marcou como `worker_lost` (spec 006, FR-005), prevalece.
+   * Devolve o status final (worker perdido conta como erro).
+   */
   async finish(
-    status: RunResult['status'],
-    error: { nodeId?: string; message: string } | null,
-  ): Promise<void> {
+    engineStatus: ExecutionOutcome['status'],
+    error: ExecutionError | null,
+  ): Promise<ExecutionOutcome['status']> {
+    const status =
+      engineStatus === 'cancelled' && error?.reason === 'worker_lost' ? 'error' : engineStatus;
     const finishedAt = new Date();
     try {
-      await this.db
+      const updated = await this.db
         .updateTable('executions')
         .set({ status, finished_at: finishedAt, error: error ? JSON.stringify(error) : null })
         .where('id', '=', this.executionId)
-        .execute();
+        .where('status', '=', 'running')
+        .executeTakeFirst();
+      if (updated.numUpdatedRows === 0n) return status;
     } catch (err) {
       this.logger.error(`Falha ao finalizar a execução ${this.executionId}: ${String(err)}`);
     }
@@ -54,6 +66,7 @@ export class ExecutionRecorder {
       { executionId: this.executionId, status, finishedAt: finishedAt.toISOString(), error },
       this.workflowId,
     );
+    return status;
   }
 
   private async recordNode(record: NodeRunRecord): Promise<void> {

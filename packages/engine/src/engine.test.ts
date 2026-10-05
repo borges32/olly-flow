@@ -212,12 +212,18 @@ describe('spec 002 — FR-016: ExecutionState', () => {
     expect(state.isReady('c')).toBe(true);
   });
 
-  it('FR-016: deliver acumula itens por porta de destino', () => {
+  it('FR-016/FR-008 (spec 006): a entrada segue a ordem das arestas, não a de conclusão', () => {
     const state = new ExecutionState(
       def([manual('a'), manual('b'), setFields('c', [])], [edge('a', 'c'), edge('b', 'c')]),
     );
-    state.deliver('a', { main: [{ json: { x: 1 } }] });
-    state.deliver('b', { main: [{ json: { x: 2 } }] });
+    // `b` termina antes de `a`.
+    Object.assign(state.get('b'), { status: 'success', output: { main: [{ json: { x: 2 } }] } });
+    Object.assign(state.get('a'), { status: 'success', output: { main: [{ json: { x: 1 } }] } });
+    state.collect('c');
     expect(state.get('c').inputs.main?.map((i) => i.json)).toEqual([{ x: 1 }, { x: 2 }]);
+    expect(state.get('c').sources.main).toEqual([
+      { nodeId: 'a', port: 'main', index: 0 },
+      { nodeId: 'b', port: 'main', index: 0 },
+    ]);
   });
 });

@@ -310,7 +310,8 @@ async function requestItem(
 }
 
 /**
- * Uma requisição por item, em lotes (`batchSize` simultâneas, `batchIntervalMs` entre lotes).
+ * Uma requisição por item, em lotes (`batchSize` simultâneas, `batchIntervalMs` entre lotes),
+ * ou com a concorrência de `settings.parallelItems` quando ligada (spec 006).
  * Com `onError: continue`, o item que falha vira `{ json: { error } }` e os demais seguem.
  */
 export async function executeHttpRequest(
@@ -324,18 +325,25 @@ export async function executeHttpRequest(
   const continueOnFail = ctx.node.settings?.onError === 'continue';
   const { batchSize, batchIntervalMs } = readOptions(ctx.getParam('options', 0));
 
+  const run = async (item: Item, i: number): Promise<Item[]> => {
+    try {
+      return await requestItem(ctx, item, i, deps, credential);
+    } catch (error) {
+      if (!continueOnFail || ctx.signal.aborted) throw error;
+      return [{ json: errorJson(error), pairedItem: { item: i } }];
+    }
+  };
+  // Spec 006, FR-009: itens em paralelo, com a concorrência do nó, no lugar dos lotes.
+  if (ctx.node.settings?.parallelItems?.enabled) {
+    return { main: (await ctx.mapItems(items, run)).flat() };
+  }
+
   const results: Item[][] = [];
   for (let start = 0; start < items.length; start += batchSize) {
     if (start > 0) await wait(batchIntervalMs, ctx.signal);
-    const batch = items.slice(start, start + batchSize).map(async (item, offset) => {
-      const i = start + offset;
-      try {
-        return await requestItem(ctx, item, i, deps, credential);
-      } catch (error) {
-        if (!continueOnFail || ctx.signal.aborted) throw error;
-        return [{ json: errorJson(error), pairedItem: { item: i } }];
-      }
-    });
+    const batch = items
+      .slice(start, start + batchSize)
+      .map((item, offset) => run(item, start + offset));
     results.push(...(await Promise.all(batch)));
   }
   return { main: results.flat() };

@@ -58,22 +58,25 @@ export async function executePostgresQuery(
   const runs = perItem ? Math.max(1, input.items.length) : 1;
   const continueOnFail = ctx.node.settings?.onError === 'continue';
 
-  const out: Item[] = [];
-  for (let i = 0; i < runs; i++) {
-    try {
-      const { rows, truncated } = await inTransaction(pool, tx, (client) =>
-        queryWithLimit(client, sql, parameters(ctx, i), maxRows),
-      );
-      if (truncated) {
-        ctx.logger.warn(`Resultado truncado em ${maxRows} linhas (options.maxRows)`, { item: i });
+  // Spec 006, FR-009: no modo por item, os itens podem rodar em paralelo (ordem preservada).
+  const out = await ctx.mapItems(
+    Array.from({ length: runs }, (_, i) => i),
+    async (i): Promise<Item[]> => {
+      try {
+        const { rows, truncated } = await inTransaction(pool, tx, (client) =>
+          queryWithLimit(client, sql, parameters(ctx, i), maxRows),
+        );
+        if (truncated) {
+          ctx.logger.warn(`Resultado truncado em ${maxRows} linhas (options.maxRows)`, { item: i });
+        }
+        // Comando sem linhas (ex.: INSERT sem RETURNING): um item de sucesso, como no N8N.
+        const json = rows.length > 0 ? rows : [{ success: true }];
+        return json.map((row) => ({ json: row, pairedItem: { item: i } }));
+      } catch (error) {
+        if (!continueOnFail || ctx.signal.aborted) throw error;
+        return [{ json: errorJson(error), pairedItem: { item: i } }];
       }
-      // Comando sem linhas (ex.: INSERT sem RETURNING): um item de sucesso, como no N8N.
-      const json = rows.length > 0 ? rows : [{ success: true }];
-      for (const row of json) out.push({ json: row, pairedItem: { item: i } });
-    } catch (error) {
-      if (!continueOnFail || ctx.signal.aborted) throw error;
-      out.push({ json: errorJson(error), pairedItem: { item: i } });
-    }
-  }
-  return { main: out };
+    },
+  );
+  return { main: out.flat() };
 }

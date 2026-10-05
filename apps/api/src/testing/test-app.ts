@@ -7,6 +7,7 @@ import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redi
 import { createApp } from '../app.js';
 import type { AppOptions } from '../app.module.js';
 import type { AppConfig } from '../config/config.js';
+import { startWorker, type WorkerHandle } from '../worker/worker.js';
 import { startFakeIssuer, type FakeIssuer } from './fake-oidc-issuer.js';
 
 export const AUDIENCE = 'olly-api';
@@ -19,12 +20,21 @@ export interface TestContext {
   redis: StartedRedisContainer;
   issuer: FakeIssuer;
   config: AppConfig;
+  /** Worker no mesmo processo (spec 006), salvo com `{ worker: false }`. */
+  worker?: WorkerHandle;
+  /** Sobe mais um worker com a mesma configuração (ou com ajustes). */
+  startWorker(overrides?: Partial<AppConfig>): Promise<WorkerHandle>;
   close(): Promise<void>;
+}
+
+export interface TestContextOptions extends AppOptions {
+  /** Padrão `true`: as execuções passam pela fila e por um worker (spec 006). */
+  worker?: boolean;
 }
 
 export async function startTestContext(
   overrides: Partial<AppConfig> = {},
-  options: AppOptions = {},
+  options: TestContextOptions = {},
 ): Promise<TestContext> {
   const [database, redis, issuer] = await Promise.all([
     startTestDatabase(),
@@ -45,11 +55,25 @@ export async function startTestContext(
       isolateMemoryMb: 64,
       nodeDataMaxBytes: 1_048_576,
       timezone: 'UTC',
+      workflowTimeoutMs: 300_000,
+      // Regressão do plan §3: OLLY_DEFAULT_MAX_PARALLEL=1 roda a suíte em modo sequencial.
+      defaultMaxParallel: Number(process.env.OLLY_DEFAULT_MAX_PARALLEL) || 8,
     },
     credentials: { keyProvider: 'env', masterKey: randomBytes(32).toString('base64') },
     http: { allowlist: [], maxResponseBytes: 50 * 1024 * 1024 },
     postgres: { poolMax: 5 },
     dispatcher: { maxConcurrent: 10 },
+    queue: {
+      testRunMode: 'queue',
+      workerConcurrency: 10,
+      workerShutdownTimeoutMs: 5000,
+      workerPort: 0,
+      projectMaxConcurrent: 20,
+      heartbeatMs: 10_000,
+      staleAfterMs: 60_000,
+      sweepIntervalMs: 60_000,
+      quotaRetryMs: 200,
+    },
     webhook: {
       maxBodyBytes: 16 * 1024 * 1024,
       responseTimeoutMs: 120_000,
@@ -60,6 +84,13 @@ export async function startTestContext(
     ...overrides,
   };
   const app = await createApp(config, options);
+  const workers: WorkerHandle[] = [];
+  const spawn = async (extra: Partial<AppConfig> = {}) => {
+    const worker = await startWorker({ ...config, ...extra }, options);
+    workers.push(worker);
+    return worker;
+  };
+  const worker = options.worker === false ? undefined : await spawn();
   let url: string | undefined;
   return {
     app,
@@ -74,7 +105,10 @@ export async function startTestContext(
     redis,
     issuer,
     config,
+    ...(worker && { worker }),
+    startWorker: spawn,
     close: async () => {
+      await Promise.allSettled(workers.map((w) => w.close(1000)));
       await app.close();
       // allSettled: alguns testes derrubam dependências de propósito antes do fim.
       await Promise.allSettled([database.stop(), redis.stop(), issuer.close()]);

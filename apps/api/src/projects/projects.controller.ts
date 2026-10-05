@@ -12,7 +12,13 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import type { ProjectMember, ProjectSummary, RoleName, UserSummary } from '@olly/shared-types';
+import type {
+  ProjectMember,
+  ProjectQuotaRequest,
+  ProjectSummary,
+  RoleName,
+  UserSummary,
+} from '@olly/shared-types';
 import type { AuditContext } from '../audit/audit.service.js';
 import type { AuthenticatedUser } from '../auth/auth.types.js';
 import { CurrentUser } from '../auth/current-user.decorator.js';
@@ -21,7 +27,12 @@ import { Audit } from '../common/audit-context.decorator.js';
 import { NotFoundError } from '../common/errors.js';
 import { ZodPipe } from '../common/zod.pipe.js';
 import { RequirePermission, RequireProjectMember } from '../rbac/require-permission.decorator.js';
-import { memberBodySchema, projectBodySchema, userSearchQuerySchema } from './projects.schemas.js';
+import {
+  memberBodySchema,
+  projectBodySchema,
+  quotaBodySchema,
+  userSearchQuerySchema,
+} from './projects.schemas.js';
 import { ProjectsService } from './projects.service.js';
 
 const userIdPipe = new ParseUUIDPipe({
@@ -64,6 +75,21 @@ export class ProjectsController {
     @Body(new ZodPipe(projectBodySchema)) body: { name: string },
   ): Promise<void> {
     await this.projects.rename(audit, id, body.name);
+  }
+
+  /**
+   * Spec 006, FR-012: cota de execuções simultâneas do projeto. Só a administração da
+   * plataforma (o limite protege a capacidade compartilhada).
+   */
+  @RequirePermission('project:manage', 'global')
+  @HttpCode(204)
+  @Put('projects/:id/quota')
+  async setQuota(
+    @Audit() audit: AuditContext,
+    @Param('id') id: string,
+    @Body(new ZodPipe(quotaBodySchema)) body: ProjectQuotaRequest,
+  ): Promise<void> {
+    await this.projects.setQuota(audit, id, body.maxConcurrentExecutions);
   }
 
   @RequirePermission('project:manage', { project: 'id' })

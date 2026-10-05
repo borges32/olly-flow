@@ -50,6 +50,8 @@ process.on('message', (raw: unknown) => {
     return;
   }
   if (message.type === 'disposeExecution') {
+    // Também interrompe código em andamento da execução (cancelamento, spec 006).
+    code.disposeExecution(message.executionId);
     void evaluator.disposeExecution(message.executionId).then(() => {
       reply({ type: 'ack', id: message.id });
     });

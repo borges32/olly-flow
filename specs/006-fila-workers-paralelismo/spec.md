@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| **Status** | Aprovada |
+| **Status** | Implementada |
 | **Fase** | 2 — Execução avançada |
 | **Depende de** | 005 + Go/No-Go aprovado |
 | **Requisitos de produto** | PR-12, PR-20 (parcial) |
@@ -98,3 +98,5 @@ Nenhum.
 | Data | Alteração | Motivo |
 |---|---|---|
 | 03/10/2026 | Criação a partir do prompt da Sprint 5 | Migração para SDD |
+| 05/10/2026 | Pré-requisitos atendidos: Go na [ADR-0009](../../docs/adr/0009-go-no-go.md); ADR-0006 aceita | Registro da decisão |
+| 05/10/2026 | Esclarecido: cancelamento e timeout global terminam com status `cancelled` (motivo `cancelled` ou `timeout`); `worker_lost` termina com `error`. A cota por projeto é alterada pela administração da plataforma | Implementação (ver plan.md, Histórico) |
