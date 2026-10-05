@@ -1,0 +1,70 @@
+{
+  "description": "Workflow de erro: o gatilho entrega o payload do Error Trigger do N8N",
+  "requirements": ["FR-014", "SC-006"],
+  "definition": {
+    "nodes": [
+      {
+        "id": "g",
+        "type": "trigger.error",
+        "name": "Gatilho de erro",
+        "params": {},
+        "position": [0, 0]
+      },
+      {
+        "id": "s",
+        "type": "data.set",
+        "name": "Alerta",
+        "params": {
+          "fields": [
+            {
+              "name": "texto",
+              "type": "string",
+              "value": "=Falhou {{ $json.workflow.name }} em {{ $json.execution.lastNodeExecuted }}: {{ $json.execution.error.message }}"
+            }
+          ],
+          "includeOtherFields": false
+        },
+        "position": [0, 0]
+      }
+    ],
+    "edges": [
+      {
+        "id": "g.main-s.main",
+        "from": "g",
+        "fromPort": "main",
+        "to": "s",
+        "toPort": "main"
+      }
+    ],
+    "settings": {}
+  },
+  "input": [
+    {
+      "json": {
+        "execution": {
+          "id": "e1",
+          "url": "http://localhost:5173/executions/e1",
+          "error": {
+            "message": "Falha no HTTP",
+            "stack": ""
+          },
+          "lastNodeExecuted": "Busca",
+          "mode": "webhook"
+        },
+        "workflow": {
+          "id": "w1",
+          "name": "Pedidos"
+        }
+      }
+    }
+  ],
+  "expected": {
+    "Alerta": {
+      "main": [
+        {
+          "texto": "Falhou Pedidos em Busca: Falha no HTTP"
+        }
+      ]
+    }
+  }
+}

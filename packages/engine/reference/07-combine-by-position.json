@@ -1,0 +1,118 @@
+{
+  "description": "combineByPosition com itens sem par e campos repetidos com sufixo",
+  "requirements": ["FR-002", "FR-003"],
+  "definition": {
+    "nodes": [
+      {
+        "id": "m",
+        "type": "trigger.manual",
+        "name": "Início",
+        "params": {},
+        "position": [0, 0]
+      },
+      {
+        "id": "a",
+        "type": "data.set",
+        "name": "A",
+        "params": {
+          "fields": [],
+          "includeOtherFields": false
+        },
+        "position": [0, 0]
+      },
+      {
+        "id": "b",
+        "type": "data.set",
+        "name": "B",
+        "params": {
+          "fields": [],
+          "includeOtherFields": false
+        },
+        "position": [0, 0]
+      },
+      {
+        "id": "mg",
+        "type": "logic.merge",
+        "name": "Posição",
+        "params": {
+          "mode": "combineByPosition",
+          "includeUnpaired": true,
+          "clashHandling": "addSuffix"
+        },
+        "position": [0, 0]
+      }
+    ],
+    "edges": [
+      {
+        "id": "m.main-a.main",
+        "from": "m",
+        "fromPort": "main",
+        "to": "a",
+        "toPort": "main"
+      },
+      {
+        "id": "m.main-b.main",
+        "from": "m",
+        "fromPort": "main",
+        "to": "b",
+        "toPort": "main"
+      },
+      {
+        "id": "a.main-mg.input1",
+        "from": "a",
+        "fromPort": "main",
+        "to": "mg",
+        "toPort": "input1"
+      },
+      {
+        "id": "b.main-mg.input2",
+        "from": "b",
+        "fromPort": "main",
+        "to": "mg",
+        "toPort": "input2"
+      }
+    ],
+    "settings": {},
+    "pinData": {
+      "a": [
+        {
+          "json": {
+            "id": 1,
+            "x": "a"
+          }
+        },
+        {
+          "json": {
+            "id": 2
+          }
+        }
+      ],
+      "b": [
+        {
+          "json": {
+            "id": 10
+          }
+        }
+      ]
+    }
+  },
+  "input": [
+    {
+      "json": {}
+    }
+  ],
+  "expected": {
+    "Posição": {
+      "main": [
+        {
+          "id_1": 1,
+          "id_2": 10,
+          "x": "a"
+        },
+        {
+          "id": 2
+        }
+      ]
+    }
+  }
+}

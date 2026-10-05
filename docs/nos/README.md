@@ -14,6 +14,13 @@ Cada nó vive em `packages/nodes/src/<categoria>/<nome>/` (`definition.ts`, `exe
 | `trigger.webhook` | Webhook | 005 | [trigger.webhook.md](trigger.webhook.md) |
 | `http.respondToWebhook` | Responder ao webhook | 005 | [http.respondToWebhook.md](http.respondToWebhook.md) |
 | `code.javascript` | Código (JavaScript) | 005 | [code.javascript.md](code.javascript.md) |
+| `logic.merge` | Juntar (Merge) | 007 | [logic.merge.md](logic.merge.md) |
+| `logic.while` | Enquanto (While) | 007 | [logic.while.md](logic.while.md) |
+| `logic.loopOverItems` | Loop em lotes (Loop Over Items) | 007 | [logic.loopOverItems.md](logic.loopOverItems.md) |
+| `logic.switch` | Roteador (Switch) | 007 | [logic.switch.md](logic.switch.md) |
+| `trigger.error` | Gatilho de erro | 007 | [trigger.error.md](trigger.error.md) |
+
+**Portas dinâmicas (spec 007):** `dynamicPorts` descreve portas calculadas a partir dos parâmetros: `mergeInputs` (Merge) ou `switchOutputs` (Switch). A regra fica em `resolveNodePorts` (`@olly/shared-types`), usada pelo motor, pela validação e pelo editor. Com `settings.onError = 'errorOutput'`, qualquer nó ganha a saída `error`: os itens que falharam seguem por ela, com o campo `error`. Nós por item (`data.set`, `http.request`, `postgres.query`, `postgres.write`) desviam só os itens que falharam; nos demais, uma falha desvia todos os itens de entrada.
 
 Os nós de integração recebem as dependências da API por `createBuiltinNodes({ httpGuard, httpMaxResponseBytes, pools })`: filtro anti-SSRF com a allowlist, limite de resposta e pools Postgres. Credenciais: [docs/credenciais.md](../credenciais.md).
 

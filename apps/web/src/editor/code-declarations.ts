@@ -18,6 +18,8 @@ declare const $itemIndex: number;
 declare const $vars: Record<string, any>;
 declare const $env: Record<string, string>;
 declare const $execution: { id: string; mode: 'test' | 'production' };
+/** Dentro de um laço (While/Loop Over Items): voltas concluídas, limite e itens acumulados. */
+declare const $loop: { index: number; maxIterations: number; accumulated: { json: Record<string, any> }[] } | undefined;
 declare const $workflow: { id: string; name: string; active: boolean };
 declare const $now: any; declare const $today: any; declare const DateTime: any;
 /** lodash */ declare const _: any;

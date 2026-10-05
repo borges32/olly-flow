@@ -1,0 +1,135 @@
+{
+  "description": "3 ramos paralelos → Merge waitAll emite a entrada 1 depois de todos",
+  "requirements": ["FR-001", "FR-002", "FR-004"],
+  "definition": {
+    "nodes": [
+      {
+        "id": "m",
+        "type": "trigger.manual",
+        "name": "Início",
+        "params": {},
+        "position": [0, 0]
+      },
+      {
+        "id": "a",
+        "type": "data.set",
+        "name": "A",
+        "params": {
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "value": "a"
+            }
+          ],
+          "includeOtherFields": false
+        },
+        "position": [0, 0]
+      },
+      {
+        "id": "b",
+        "type": "data.set",
+        "name": "B",
+        "params": {
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "value": "b"
+            }
+          ],
+          "includeOtherFields": false
+        },
+        "position": [0, 0]
+      },
+      {
+        "id": "c",
+        "type": "data.set",
+        "name": "C",
+        "params": {
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "value": "c"
+            }
+          ],
+          "includeOtherFields": false
+        },
+        "position": [0, 0]
+      },
+      {
+        "id": "mg",
+        "type": "logic.merge",
+        "name": "Espera",
+        "params": {
+          "mode": "waitAll",
+          "numberInputs": 3
+        },
+        "position": [0, 0]
+      }
+    ],
+    "edges": [
+      {
+        "id": "m.main-a.main",
+        "from": "m",
+        "fromPort": "main",
+        "to": "a",
+        "toPort": "main"
+      },
+      {
+        "id": "m.main-b.main",
+        "from": "m",
+        "fromPort": "main",
+        "to": "b",
+        "toPort": "main"
+      },
+      {
+        "id": "m.main-c.main",
+        "from": "m",
+        "fromPort": "main",
+        "to": "c",
+        "toPort": "main"
+      },
+      {
+        "id": "a.main-mg.input1",
+        "from": "a",
+        "fromPort": "main",
+        "to": "mg",
+        "toPort": "input1"
+      },
+      {
+        "id": "b.main-mg.input2",
+        "from": "b",
+        "fromPort": "main",
+        "to": "mg",
+        "toPort": "input2"
+      },
+      {
+        "id": "c.main-mg.input3",
+        "from": "c",
+        "fromPort": "main",
+        "to": "mg",
+        "toPort": "input3"
+      }
+    ],
+    "settings": {}
+  },
+  "input": [
+    {
+      "json": {}
+    }
+  ],
+  "expected": {
+    "Espera": {
+      "main": [
+        {
+          "r": "a"
+        }
+      ]
+    }
+  },
+  "runs": {
+    "Espera": 1
+  }
+}

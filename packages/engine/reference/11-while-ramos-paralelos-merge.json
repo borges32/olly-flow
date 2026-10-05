@@ -1,0 +1,185 @@
+{
+  "description": "While com 2 ramos paralelos e Merge no corpo: o Merge executa uma vez por iteração",
+  "requirements": ["FR-005", "FR-009", "FR-017"],
+  "definition": {
+    "nodes": [
+      {
+        "id": "m",
+        "type": "trigger.manual",
+        "name": "Início",
+        "params": {},
+        "position": [0, 0]
+      },
+      {
+        "id": "w",
+        "type": "logic.while",
+        "name": "Voltas",
+        "params": {
+          "condition": "={{ $loop.index < 3 }}"
+        },
+        "position": [0, 0]
+      },
+      {
+        "id": "a",
+        "type": "data.set",
+        "name": "A",
+        "params": {
+          "fields": [
+            {
+              "name": "ramo",
+              "type": "string",
+              "value": "A"
+            },
+            {
+              "name": "volta",
+              "type": "number",
+              "value": "={{ $loop.index }}"
+            }
+          ],
+          "includeOtherFields": false
+        },
+        "position": [0, 0]
+      },
+      {
+        "id": "b",
+        "type": "data.set",
+        "name": "B",
+        "params": {
+          "fields": [
+            {
+              "name": "ramo",
+              "type": "string",
+              "value": "B"
+            },
+            {
+              "name": "volta",
+              "type": "number",
+              "value": "={{ $loop.index }}"
+            }
+          ],
+          "includeOtherFields": false
+        },
+        "position": [0, 0]
+      },
+      {
+        "id": "mg",
+        "type": "logic.merge",
+        "name": "Junta",
+        "params": {
+          "mode": "append"
+        },
+        "position": [0, 0]
+      },
+      {
+        "id": "f",
+        "type": "data.set",
+        "name": "Fim",
+        "params": {
+          "fields": [],
+          "includeOtherFields": true
+        },
+        "position": [0, 0]
+      }
+    ],
+    "edges": [
+      {
+        "id": "m.main-w.main",
+        "from": "m",
+        "fromPort": "main",
+        "to": "w",
+        "toPort": "main"
+      },
+      {
+        "id": "w.loop-a.main",
+        "from": "w",
+        "fromPort": "loop",
+        "to": "a",
+        "toPort": "main"
+      },
+      {
+        "id": "w.loop-b.main",
+        "from": "w",
+        "fromPort": "loop",
+        "to": "b",
+        "toPort": "main"
+      },
+      {
+        "id": "a.main-mg.input1",
+        "from": "a",
+        "fromPort": "main",
+        "to": "mg",
+        "toPort": "input1"
+      },
+      {
+        "id": "b.main-mg.input2",
+        "from": "b",
+        "fromPort": "main",
+        "to": "mg",
+        "toPort": "input2"
+      },
+      {
+        "id": "mg.main-w.continue",
+        "from": "mg",
+        "fromPort": "main",
+        "to": "w",
+        "toPort": "continue"
+      },
+      {
+        "id": "w.done-f.main",
+        "from": "w",
+        "fromPort": "done",
+        "to": "f",
+        "toPort": "main"
+      }
+    ],
+    "settings": {}
+  },
+  "input": [
+    {
+      "json": {}
+    }
+  ],
+  "expected": {
+    "Fim": {
+      "main": [
+        {
+          "ramo": "A",
+          "volta": 2
+        },
+        {
+          "ramo": "A",
+          "volta": 2
+        },
+        {
+          "ramo": "A",
+          "volta": 2
+        },
+        {
+          "ramo": "A",
+          "volta": 2
+        },
+        {
+          "ramo": "B",
+          "volta": 2
+        },
+        {
+          "ramo": "B",
+          "volta": 2
+        },
+        {
+          "ramo": "B",
+          "volta": 2
+        },
+        {
+          "ramo": "B",
+          "volta": 2
+        }
+      ]
+    }
+  },
+  "runs": {
+    "Junta": 3,
+    "A": 3,
+    "B": 3
+  }
+}

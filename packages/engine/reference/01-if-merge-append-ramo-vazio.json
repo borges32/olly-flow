@@ -1,0 +1,96 @@
+{
+  "description": "If com o ramo false vazio → Merge append executa com o ramo true",
+  "requirements": ["FR-002", "FR-004", "HU-1.2"],
+  "definition": {
+    "nodes": [
+      {
+        "id": "m",
+        "type": "trigger.manual",
+        "name": "Início",
+        "params": {},
+        "position": [0, 0]
+      },
+      {
+        "id": "if",
+        "type": "logic.if",
+        "name": "Positivo?",
+        "params": {
+          "conditions": {
+            "combinator": "and",
+            "conditions": [
+              {
+                "leftValue": "={{ $json.v }}",
+                "rightValue": "0",
+                "operator": {
+                  "type": "number",
+                  "operation": "gt"
+                }
+              }
+            ]
+          }
+        },
+        "position": [0, 0]
+      },
+      {
+        "id": "mg",
+        "type": "logic.merge",
+        "name": "Junta",
+        "params": {
+          "mode": "append"
+        },
+        "position": [0, 0]
+      }
+    ],
+    "edges": [
+      {
+        "id": "m.main-if.main",
+        "from": "m",
+        "fromPort": "main",
+        "to": "if",
+        "toPort": "main"
+      },
+      {
+        "id": "if.true-mg.input1",
+        "from": "if",
+        "fromPort": "true",
+        "to": "mg",
+        "toPort": "input1"
+      },
+      {
+        "id": "if.false-mg.input2",
+        "from": "if",
+        "fromPort": "false",
+        "to": "mg",
+        "toPort": "input2"
+      }
+    ],
+    "settings": {}
+  },
+  "input": [
+    {
+      "json": {
+        "v": 1
+      }
+    },
+    {
+      "json": {
+        "v": 2
+      }
+    }
+  ],
+  "expected": {
+    "Junta": {
+      "main": [
+        {
+          "v": 1
+        },
+        {
+          "v": 2
+        }
+      ]
+    }
+  },
+  "runs": {
+    "Junta": 1
+  }
+}

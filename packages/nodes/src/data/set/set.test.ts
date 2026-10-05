@@ -4,8 +4,18 @@ import { NodeParameterError } from '../../errors.js';
 import type { NodeContext } from '../../types.js';
 import { executeSet } from './execute.js';
 
-function ctx(params: Record<string, unknown>): NodeContext {
-  return { getParam: (name: string) => params[name] } as unknown as NodeContext;
+function ctx(params: Record<string, unknown>, onError?: string): NodeContext {
+  return {
+    getParam: (name: string) => params[name],
+    node: {
+      id: 's',
+      type: 'data.set',
+      name: 'Set',
+      params,
+      position: [0, 0],
+      settings: { onError },
+    },
+  } as unknown as NodeContext;
 }
 
 async function run(items: Item[], params: Record<string, unknown>) {
@@ -127,5 +137,25 @@ describe('spec 003 — FR-008: data.set com expressões e incluir os demais camp
       ],
     });
     expect(out?.[0]?.json).toEqual({ n: 34, s: '34', o: { x: 1 }, b: true });
+  });
+});
+
+describe('spec 007 — FR-013: saída de erro por item no data.set', () => {
+  it('FR-013: com errorOutput, o item que falha vai para error e os demais seguem', async () => {
+    const items = [{ json: { n: '1' } }, { json: { n: 'x' } }, { json: { n: '3' } }];
+    const perItem = (i: number) => ({
+      fields: [{ name: 'n', type: 'number', value: items[i]?.json.n }],
+    });
+    const c = {
+      ...ctx({}, 'errorOutput'),
+      getParam: (name: string, i: number) => (perItem(i) as Record<string, unknown>)[name],
+    };
+    const out = await executeSet({ inputs: { main: items }, items }, c);
+    expect(out.main?.map((i) => i.json)).toEqual([{ n: 1 }, { n: 3 }]);
+    expect(out.error).toHaveLength(1);
+    expect(out.error?.[0]).toMatchObject({
+      json: { n: 'x', error: { message: expect.stringContaining('número') as string } },
+      pairedItem: { item: 1 },
+    });
   });
 });

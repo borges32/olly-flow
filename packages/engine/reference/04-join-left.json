@@ -1,0 +1,149 @@
+{
+  "description": "Join left por cpf entre um ramo 'Banco' e um ramo 'API' paralelos",
+  "requirements": ["FR-002", "SC-004", "HU-1.1"],
+  "definition": {
+    "nodes": [
+      {
+        "id": "m",
+        "type": "trigger.manual",
+        "name": "Início",
+        "params": {},
+        "position": [0, 0]
+      },
+      {
+        "id": "db",
+        "type": "data.set",
+        "name": "Banco",
+        "params": {
+          "fields": [],
+          "includeOtherFields": false
+        },
+        "position": [0, 0]
+      },
+      {
+        "id": "api",
+        "type": "data.set",
+        "name": "API",
+        "params": {
+          "fields": [],
+          "includeOtherFields": false
+        },
+        "position": [0, 0]
+      },
+      {
+        "id": "mg",
+        "type": "logic.merge",
+        "name": "Join",
+        "params": {
+          "mode": "combineByFields",
+          "fields": [
+            {
+              "input1Field": "cpf",
+              "input2Field": "cpf"
+            }
+          ],
+          "joinMode": "left"
+        },
+        "position": [0, 0]
+      }
+    ],
+    "edges": [
+      {
+        "id": "m.main-db.main",
+        "from": "m",
+        "fromPort": "main",
+        "to": "db",
+        "toPort": "main"
+      },
+      {
+        "id": "m.main-api.main",
+        "from": "m",
+        "fromPort": "main",
+        "to": "api",
+        "toPort": "main"
+      },
+      {
+        "id": "db.main-mg.input1",
+        "from": "db",
+        "fromPort": "main",
+        "to": "mg",
+        "toPort": "input1"
+      },
+      {
+        "id": "api.main-mg.input2",
+        "from": "api",
+        "fromPort": "main",
+        "to": "mg",
+        "toPort": "input2"
+      }
+    ],
+    "settings": {},
+    "pinData": {
+      "db": [
+        {
+          "json": {
+            "cpf": "1",
+            "nome": "Ana"
+          }
+        },
+        {
+          "json": {
+            "cpf": "2",
+            "nome": "Bia"
+          }
+        },
+        {
+          "json": {
+            "cpf": "3",
+            "nome": "Caio"
+          }
+        }
+      ],
+      "api": [
+        {
+          "json": {
+            "cpf": "1",
+            "score": 10
+          }
+        },
+        {
+          "json": {
+            "cpf": "3",
+            "score": 30
+          }
+        },
+        {
+          "json": {
+            "cpf": "9",
+            "score": 90
+          }
+        }
+      ]
+    }
+  },
+  "input": [
+    {
+      "json": {}
+    }
+  ],
+  "expected": {
+    "Join": {
+      "main": [
+        {
+          "cpf": "1",
+          "nome": "Ana",
+          "score": 10
+        },
+        {
+          "cpf": "2",
+          "nome": "Bia"
+        },
+        {
+          "cpf": "3",
+          "nome": "Caio",
+          "score": 30
+        }
+      ]
+    }
+  }
+}

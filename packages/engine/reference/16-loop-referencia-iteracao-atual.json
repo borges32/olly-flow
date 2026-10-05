@@ -1,0 +1,120 @@
+{
+  "description": "Dentro do laço, $('Nó') aponta para a iteração atual",
+  "requirements": ["FR-009"],
+  "definition": {
+    "nodes": [
+      {
+        "id": "m",
+        "type": "trigger.manual",
+        "name": "Início",
+        "params": {},
+        "position": [0, 0]
+      },
+      {
+        "id": "w",
+        "type": "logic.while",
+        "name": "Voltas",
+        "params": {
+          "condition": "={{ $loop.index < 3 }}",
+          "accumulate": "appendBodyOutput"
+        },
+        "position": [0, 0]
+      },
+      {
+        "id": "a",
+        "type": "data.set",
+        "name": "A",
+        "params": {
+          "fields": [
+            {
+              "name": "volta",
+              "type": "number",
+              "value": "={{ $loop.index }}"
+            }
+          ],
+          "includeOtherFields": false
+        },
+        "position": [0, 0]
+      },
+      {
+        "id": "b",
+        "type": "data.set",
+        "name": "B",
+        "params": {
+          "fields": [
+            {
+              "name": "viu",
+              "type": "number",
+              "value": "={{ $('A').item.json.volta }}"
+            },
+            {
+              "name": "volta",
+              "type": "number",
+              "value": "={{ $loop.index }}"
+            }
+          ],
+          "includeOtherFields": false
+        },
+        "position": [0, 0]
+      }
+    ],
+    "edges": [
+      {
+        "id": "m.main-w.main",
+        "from": "m",
+        "fromPort": "main",
+        "to": "w",
+        "toPort": "main"
+      },
+      {
+        "id": "w.loop-a.main",
+        "from": "w",
+        "fromPort": "loop",
+        "to": "a",
+        "toPort": "main"
+      },
+      {
+        "id": "a.main-b.main",
+        "from": "a",
+        "fromPort": "main",
+        "to": "b",
+        "toPort": "main"
+      },
+      {
+        "id": "b.main-w.continue",
+        "from": "b",
+        "fromPort": "main",
+        "to": "w",
+        "toPort": "continue"
+      }
+    ],
+    "settings": {}
+  },
+  "input": [
+    {
+      "json": {}
+    }
+  ],
+  "expected": {
+    "Voltas": {
+      "done": [
+        {
+          "viu": 0,
+          "volta": 0
+        },
+        {
+          "viu": 1,
+          "volta": 1
+        },
+        {
+          "viu": 2,
+          "volta": 2
+        }
+      ]
+    }
+  },
+  "runs": {
+    "A": 3,
+    "B": 3
+  }
+}

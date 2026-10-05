@@ -52,6 +52,7 @@ beforeAll(async () => {
       // FR-011: timeout global padrão curto, para o teste.
       workflowTimeoutMs: 4000,
       defaultMaxParallel: 8,
+      maxLoopIterations: 10_000,
     },
   });
   admin = await loginAs(ctx, { sub: 'admin', email: 'admin@t.local', groups: ['admin'] });

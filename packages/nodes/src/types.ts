@@ -1,5 +1,12 @@
 import type { JSONSchema7, JSONSchema7Definition } from 'json-schema';
-import type { BinaryRef, Item, NodeOutput, PortDef, WorkflowNode } from '@olly/shared-types';
+import type {
+  BinaryRef,
+  DynamicPorts,
+  Item,
+  NodeOutput,
+  PortDef,
+  WorkflowNode,
+} from '@olly/shared-types';
 import type { ResolvedCredential } from './credentials/definitions.js';
 
 export type { JSONSchema7, JSONSchema7Definition };
@@ -76,6 +83,21 @@ export interface WebhookResponse {
     | { kind: 'binary'; ref: BinaryRef };
 }
 
+/**
+ * Estado de um laço em andamento (spec 007, plan §3–§4), mantido pelo motor para o nó de laço
+ * (While, Loop Over Items) entre a entrada `main` e cada volta pela `continue`.
+ */
+export interface LoopState {
+  /** Voltas concluídas: 0 na entrada `main`, 1 na primeira `continue`... (`$loop.index`). */
+  index: number;
+  /** Limite de iterações do laço (`$loop.maxIterations`); o nó o define na entrada `main`. */
+  maxIterations: number;
+  /** Itens acumulados pelo nó (`$loop.accumulated`). */
+  accumulated: Item[];
+  /** Estado próprio do nó (ex.: fila de lotes). */
+  data: Record<string, unknown>;
+}
+
 export interface NodeContext {
   readonly executionId: string;
   readonly workflowId: string;
@@ -104,6 +126,10 @@ export interface NodeContext {
    * menor índice.
    */
   mapItems<T, R>(items: readonly T[], fn: (item: T, index: number) => Promise<R>): Promise<R[]>;
+  /** Só nos nós de laço (spec 007): estado do laço em andamento. */
+  readonly loop?: LoopState;
+  /** Teto global de iterações (`OLLY_MAX_LOOP_ITERATIONS`, spec 007 NFR-001). */
+  readonly maxLoopIterations: number;
 }
 
 export interface NodeDefinition {
@@ -116,6 +142,8 @@ export interface NodeDefinition {
   inputs: PortDef[];
   /** Podem ser dinâmicas (Merge, Switch). */
   outputs: PortDef[];
+  /** Portas calculadas a partir dos parâmetros (spec 007): ver `resolveNodePorts`. */
+  dynamicPorts?: DynamicPorts;
   /** Gera o formulário; extensões em `PARAMS_SCHEMA_EXTENSIONS`. */
   paramsSchema: JSONSchema7;
   credentialTypes?: string[];

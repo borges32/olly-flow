@@ -1,6 +1,8 @@
 import type { Logger } from '@nestjs/common';
 import type { Db } from '@olly/db';
+import type { WorkflowDefinition } from '@olly/shared-types';
 import type { ExecutionEventSink } from '../executions/execution-events.service.js';
+import type { ErrorWorkflowTrigger } from '../executions/error-workflow.js';
 import type { ExecutionError } from '../executions/execution-job.js';
 import type { ResultPublisher } from '../executions/result-bus.js';
 import { WORKER_LOST_MESSAGE } from './constants.js';
@@ -12,6 +14,8 @@ export interface WorkerLostDeps {
   results: ResultPublisher;
   quota: ProjectQuota;
   logger: Logger;
+  /** Aciona o workflow de erro das execuções de produção perdidas (spec 007, FR-014). */
+  errorWorkflows?: ErrorWorkflowTrigger;
 }
 
 /**
@@ -35,7 +39,7 @@ export async function markWorkerLost(
     .$if('executionId' in filter, (qb) =>
       qb.where('id', '=', 'executionId' in filter ? filter.executionId : ''),
     )
-    .returning(['id', 'workflow_id', 'project_id'])
+    .returning(['id', 'workflow_id', 'project_id', 'mode', 'trigger_type', 'definition'])
     .execute();
   for (const row of rows) {
     deps.logger.warn(`Execução ${row.id} encerrada: worker perdido`);
@@ -48,6 +52,23 @@ export async function markWorkerLost(
       deps.results.finished(row.id, { status: 'error', error }),
       deps.quota.release(row.project_id, row.id),
     ]);
+    if (deps.errorWorkflows && row.definition) {
+      const workflow = await deps.db
+        .selectFrom('workflows')
+        .select('name')
+        .where('id', '=', row.workflow_id)
+        .executeTakeFirst();
+      await deps.errorWorkflows.trigger({
+        executionId: row.id,
+        workflowId: row.workflow_id,
+        workflowName: workflow?.name ?? '',
+        projectId: row.project_id,
+        mode: row.mode,
+        triggerType: row.trigger_type,
+        definition: row.definition as WorkflowDefinition,
+        error,
+      });
+    }
   }
   return rows.map((r) => r.id);
 }

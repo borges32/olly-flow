@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| **Status** | Aprovada |
+| **Status** | Implementada |
 | **Fase** | 2 — Execução avançada |
 | **Depende de** | 006 |
 | **Requisitos de produto** | PR-01, PR-13, PR-02 (Switch complementar) |
@@ -109,3 +109,4 @@ Nenhum.
 | Data | Alteração | Motivo |
 |---|---|---|
 | 03/10/2026 | Criação a partir do prompt da Sprint 6 | Migração para SDD |
+| 05/10/2026 | Esclarecido: o editor permite desenhar o ciclo inválido, mas o destaca com a regra e o salvamento o recusa (FR-016); o workflow de erro também é acionado quando o worker se perde (`worker_lost`) | Implementação (ver plan.md, Histórico) |

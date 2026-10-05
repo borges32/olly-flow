@@ -1,6 +1,6 @@
 # Semântica de execução
 
-> Como o motor (`packages/engine`) e os workers executam um workflow. Produzido pela [spec 006](../specs/006-fila-workers-paralelismo/spec.md); a [spec 007](../specs/007-controle-de-fluxo/spec.md) acrescenta Merge, laços, Switch e porta de erro.
+> Como o motor (`packages/engine`) e os workers executam um workflow. Produzido pela [spec 006](../specs/006-fila-workers-paralelismo/spec.md) (fila, paralelismo, cancelamento) e completado pela [spec 007](../specs/007-controle-de-fluxo/spec.md) (laços, Merge, porta de erro, workflow de erro). A semântica é fixada pela suíte de referência em `packages/engine/reference/`, que roda cada caso com paralelismo 1 e 8 e exige resultados idênticos.
 
 ## Onde a execução roda
 
@@ -14,7 +14,7 @@ Execuções de **produção** sempre passam pela fila. Execuções de **teste** 
 
 ## Prontidão e "sem dados"
 
-O workflow é um grafo dirigido acíclico. Ciclos só serão permitidos pelas portas de laço, na spec 007.
+O workflow é um grafo dirigido. Ciclos só são permitidos como **laços estruturados** (ver "Laços").
 
 - Cada **porta de entrada** conectada de um nó está:
   - `unresolved`, enquanto algum nó que a alimenta não terminou;
@@ -41,6 +41,43 @@ O resultado não depende da ordem em que os nós terminam:
 - **Erro em vários ramos:** quando mais de um ramo falha, o erro da execução é o do nó que vem primeiro na ordem topológica.
 - **Ressalva:** `data.setVariable` em ramos paralelos que gravam a mesma variável não tem ordem garantida. Prefira variáveis distintas por ramo ou `maxParallel = 1`.
 
+## Laços (While e Loop Over Items)
+
+### Regra para ciclos (FR-008)
+
+Um ciclo é válido somente quando:
+1. **volta pela porta `continue`** de um nó de laço (`logic.while` ou `logic.loopOverItems`);
+2. **esse nó é a única entrada do ciclo** (dominador): conexões de fora do ciclo só podem chegar à entrada `main` do nó de laço.
+
+Laços aninhados são aceitos. Qualquer outro ciclo é recusado ao salvar (`INVALID_CYCLE`, com os nós envolvidos), e o editor o destaca com a regra no tooltip.
+
+### Execução
+
+- **Início:** o nó de laço recebe os itens em `main` e decide se emite em `loop` (corpo) ou em `done` (fim).
+- **Corpo:** cada emissão em `loop` abre uma **volta**: o corpo recomeça do zero (nós pendentes, sem saída anterior) e seus nós executam normalmente, inclusive em paralelo e com Merge.
+- **Fim da volta:** quando **todo o corpo terminou** (sem nó em andamento e sem laço interno ativo), o nó de laço recebe em `continue` o que voltou pelas arestas de retorno, na ordem das arestas, e decide de novo.
+- **Durante o laço:** nós fora dele não enxergam o corpo nem a saída `done` como resolvidos; só executam depois do fim, vendo a **última** iteração.
+- **Limites:**
+  - cada nó de laço tem o seu (`maxIterations` do While; o número de lotes no Loop Over Items);
+  - há um teto global, `OLLY_MAX_LOOP_ITERATIONS` (10 000);
+  - passar do limite é erro explícito.
+
+### Iterações e `$loop` (FR-007, FR-009)
+
+- **Registro:** cada execução de nó dentro de um laço é registrada com um `runIndex` (0, 1, 2…), nos eventos em tempo real e em `node_executions.run_index`. O painel do nó navega entre elas ("Execução i de N").
+- **`$('Nó')`:** dentro do corpo, aponta para a execução **da iteração atual**; fora do laço, para a última.
+- **`$loop`:** para os nós do laço mais interno (inclusive o próprio nó de laço), traz:
+  - `index`: voltas concluídas;
+  - `maxIterations`;
+  - `accumulated`: itens acumulados pelo nó de laço.
+- **Execução de um nó (spec 003, FR-020):** nós dentro de laços nunca reaproveitam a saída anterior; sempre executam de novo.
+
+## Merge e várias entradas
+
+- **Quando executa:** o Merge, como qualquer nó com várias entradas, executa **uma vez**, quando todas as entradas conectadas estão resolvidas, com ou sem dados. Se todas vierem sem dados, é pulado. Dentro de um laço, executa uma vez por volta.
+- **`waitFor`:** em `allConnected`, uma entrada sem dados entra como lista vazia; em `anyWithData`, é ignorada.
+- **Detalhes dos modos:** ver [docs/nos/logic.merge.md](nos/logic.merge.md).
+
 ## Paralelismo por item
 
 Nos nós com `supportsParallelItems`, a aba **Configurações** oferece "Itens em paralelo" (`settings.parallelItems: { enabled, concurrency }`). Os nós elegíveis são:
@@ -58,8 +95,16 @@ O nó de código não é elegível: o modo "uma vez por item" já roda todos os 
 
 ## Erros
 
-- Por nó continuam valendo `retry`, `timeout` e `onError` da spec 004.
-- No primeiro erro que para a execução, nenhum nó novo começa. Os nós que já estavam em andamento terminam e são registrados, e a execução termina com status `error`.
+- **Por nó:** continuam valendo `retry`, `timeout` e `onError` da spec 004. A spec 007 acrescenta `onError = errorOutput`:
+  - o nó ganha a saída `error`;
+  - nos nós por item (Set, HTTP, Postgres), os itens que falharam seguem por ela com o campo `error`, e os demais seguem pela saída normal;
+  - nos demais nós, uma falha desvia todos os itens de entrada para `error`.
+- **Erro que para a execução:** nenhum nó novo começa. Os nós que já estavam em andamento terminam e são registrados, e a execução termina com status `error`.
+- **Workflow de erro** (FR-014/FR-015):
+  - **Quando aciona:** quando uma execução de **produção** termina com erro (inclusive `worker_lost`), o workflow indicado em `settings.errorWorkflowId` é enfileirado.
+  - **Como:** o gatilho dele é `trigger.error`, com o payload do Error Trigger do N8N (`execution.id/url/error/lastNodeExecuted/mode`, `workflow.id/name`).
+  - **Sem recursão:** uma execução iniciada por um workflow de erro nunca aciona outro.
+  - **Detalhes:** ver [docs/nos/trigger.error.md](nos/trigger.error.md).
 
 ## Cancelamento e timeout global
 

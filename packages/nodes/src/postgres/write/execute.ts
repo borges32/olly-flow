@@ -1,6 +1,12 @@
 import type { Item, NodeOutput } from '@olly/shared-types';
 import type pg from 'pg';
-import { NodeParameterError, errorJson } from '../../errors.js';
+import {
+  NodeParameterError,
+  errorJson,
+  failedItem,
+  itemErrorMode,
+  type ItemErrorMode,
+} from '../../errors.js';
 import type { NodeContext, NodeExecuteInput } from '../../types.js';
 import type { ColumnCache } from '../catalog.js';
 import { connectionConfig, type PoolManager } from '../pool.js';
@@ -182,7 +188,9 @@ export async function executePostgresWrite(
     returning,
     skipOnConflict: options.skipOnConflict === true,
   };
-  const continueOnFail = ctx.node.settings?.onError === 'continue';
+  const mode = itemErrorMode(ctx.node.settings);
+  const continueOnFail = mode !== 'stop';
+  const failed: Item[] = [];
   const allItems = options.transaction === 'allItems';
   // Sem transação e com onError continue, item a item: um item ruim não derruba o lote.
   const batchSize = continueOnFail && !allItems ? 1 : positiveInt(options.batchSize, 100);
@@ -247,8 +255,18 @@ export async function executePostgresWrite(
       return results;
     } catch (error) {
       if (!continueOnFail || ctx.signal.aborted) throw error;
+      if (mode === 'errorOutput') {
+        failed.push(...unit.map((i) => failedItem(error, items[i]?.json ?? {}, i)));
+        return [];
+      }
       return unit.map((i) => ({ json: errorJson(error), pairedItem: { item: i } }));
     }
   });
-  return { main: out.flat() };
+  return withErrors(out.flat(), failed, mode);
 }
+
+/** Saída com a porta `error` quando o nó desvia os itens que falharam (spec 007, FR-013). */
+const withErrors = (main: Item[], failed: Item[], mode: ItemErrorMode): NodeOutput =>
+  mode === 'errorOutput'
+    ? { main, error: failed.sort((a, b) => (a.pairedItem?.item ?? 0) - (b.pairedItem?.item ?? 0)) }
+    : { main };

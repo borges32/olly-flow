@@ -1,0 +1,135 @@
+{
+  "description": "While de paginação (5 páginas) com acumulação; $('Nó') fora do laço vê a última iteração",
+  "requirements": ["FR-005", "FR-007", "FR-009", "SC-002", "HU-2.1"],
+  "definition": {
+    "nodes": [
+      {
+        "id": "m",
+        "type": "trigger.manual",
+        "name": "Início",
+        "params": {},
+        "position": [0, 0]
+      },
+      {
+        "id": "w",
+        "type": "logic.while",
+        "name": "Enquanto houver página",
+        "params": {
+          "condition": "={{ $loop.index < 5 }}",
+          "accumulate": "appendBodyOutput",
+          "maxIterations": 10
+        },
+        "position": [0, 0]
+      },
+      {
+        "id": "p",
+        "type": "data.set",
+        "name": "Página",
+        "params": {
+          "fields": [
+            {
+              "name": "page",
+              "type": "number",
+              "value": "={{ $loop.index + 1 }}"
+            },
+            {
+              "name": "total",
+              "type": "number",
+              "value": "={{ $loop.maxIterations }}"
+            }
+          ],
+          "includeOtherFields": false
+        },
+        "position": [0, 0]
+      },
+      {
+        "id": "f",
+        "type": "data.set",
+        "name": "Fim",
+        "params": {
+          "fields": [
+            {
+              "name": "ultima",
+              "type": "number",
+              "value": "={{ $('Página').last().json.page }}"
+            }
+          ],
+          "includeOtherFields": true
+        },
+        "position": [0, 0]
+      }
+    ],
+    "edges": [
+      {
+        "id": "m.main-w.main",
+        "from": "m",
+        "fromPort": "main",
+        "to": "w",
+        "toPort": "main"
+      },
+      {
+        "id": "w.loop-p.main",
+        "from": "w",
+        "fromPort": "loop",
+        "to": "p",
+        "toPort": "main"
+      },
+      {
+        "id": "p.main-w.continue",
+        "from": "p",
+        "fromPort": "main",
+        "to": "w",
+        "toPort": "continue"
+      },
+      {
+        "id": "w.done-f.main",
+        "from": "w",
+        "fromPort": "done",
+        "to": "f",
+        "toPort": "main"
+      }
+    ],
+    "settings": {}
+  },
+  "input": [
+    {
+      "json": {}
+    }
+  ],
+  "expected": {
+    "Fim": {
+      "main": [
+        {
+          "page": 1,
+          "total": 10,
+          "ultima": 5
+        },
+        {
+          "page": 2,
+          "total": 10,
+          "ultima": 5
+        },
+        {
+          "page": 3,
+          "total": 10,
+          "ultima": 5
+        },
+        {
+          "page": 4,
+          "total": 10,
+          "ultima": 5
+        },
+        {
+          "page": 5,
+          "total": 10,
+          "ultima": 5
+        }
+      ]
+    }
+  },
+  "runs": {
+    "Página": 5,
+    "Enquanto houver página": 6,
+    "Fim": 1
+  }
+}

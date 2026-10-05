@@ -35,6 +35,16 @@ export interface ExpressionData {
   execution: { id: string; mode: 'test' | 'production' };
   workflow: { id: string; name: string; active: boolean };
   timezone: string;
+  /** Spec 007, FR-007: laço que contém o nó (`$loop`); ausente fora de laços. */
+  loop?: LoopData;
+}
+
+export interface LoopData {
+  /** Voltas concluídas (0 na primeira passagem pelo corpo). */
+  index: number;
+  maxIterations: number;
+  /** Itens acumulados pelo nó de laço. */
+  accumulated: Item[];
 }
 
 export interface EvaluateRequest {

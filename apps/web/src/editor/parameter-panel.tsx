@@ -9,6 +9,7 @@ import { NodeIcon } from './node-icon';
 import { NodeSettings } from './node-settings';
 import { ParamOptionsContext } from './param-options';
 import { SchemaForm } from './schema-form';
+import { updateNodeGuarded } from './port-guard';
 import { WebhookPanel } from './webhook-panel';
 import { useEditorStore, type EditorState } from './store';
 
@@ -35,8 +36,9 @@ export function ParameterPanel({
 }) {
   const [tab, setTab] = useState<'params' | 'settings'>('params');
   const nodes = useEditorStore((s) => s.nodes);
-  const updateNode = (...args: Parameters<EditorState['updateNode']>) => {
-    useEditorStore.getState().updateNode(...args);
+  // Spec 007: parâmetros que mudam as portas (Merge, Switch) confirmam a remoção de conexões.
+  const updateNode = (...[id, patch, coalesceKey]: Parameters<EditorState['updateNode']>) => {
+    updateNodeGuarded(description, id, patch, coalesceKey);
   };
   // Rascunho só enquanto o nome digitado é inválido; nomes válidos vão direto para o nó.
   const [draft, setDraft] = useState<string | null>(null);
@@ -88,6 +90,7 @@ export function ParameterPanel({
         <div className="overflow-y-auto p-4">
           <NodeSettings
             node={node}
+            description={description}
             readOnly={readOnly}
             supportsParallelItems={description?.supportsParallelItems === true}
           />

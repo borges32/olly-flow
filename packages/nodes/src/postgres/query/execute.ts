@@ -1,5 +1,11 @@
 import type { Item, NodeOutput } from '@olly/shared-types';
-import { NodeParameterError, errorJson } from '../../errors.js';
+import {
+  NodeParameterError,
+  errorJson,
+  failedItem,
+  itemErrorMode,
+  type ItemErrorMode,
+} from '../../errors.js';
 import type { NodeContext, NodeExecuteInput } from '../../types.js';
 import { connectionConfig, type PoolManager } from '../pool.js';
 import { inTransaction, queryWithLimit } from '../sql.js';
@@ -56,7 +62,8 @@ export async function executePostgresQuery(
   };
   const perItem = ctx.getParam('mode', 0) === 'perItem';
   const runs = perItem ? Math.max(1, input.items.length) : 1;
-  const continueOnFail = ctx.node.settings?.onError === 'continue';
+  const mode = itemErrorMode(ctx.node.settings);
+  const failed: Item[] = [];
 
   // Spec 006, FR-009: no modo por item, os itens podem rodar em paralelo (ordem preservada).
   const out = await ctx.mapItems(
@@ -73,10 +80,20 @@ export async function executePostgresQuery(
         const json = rows.length > 0 ? rows : [{ success: true }];
         return json.map((row) => ({ json: row, pairedItem: { item: i } }));
       } catch (error) {
-        if (!continueOnFail || ctx.signal.aborted) throw error;
+        if (mode === 'stop' || ctx.signal.aborted) throw error;
+        if (mode === 'errorOutput') {
+          failed.push(failedItem(error, input.items[i]?.json ?? {}, i));
+          return [];
+        }
         return [{ json: errorJson(error), pairedItem: { item: i } }];
       }
     },
   );
-  return { main: out.flat() };
+  return withErrors(out.flat(), failed, mode);
 }
+
+/** Saída com a porta `error` quando o nó desvia os itens que falharam (spec 007, FR-013). */
+const withErrors = (main: Item[], failed: Item[], mode: ItemErrorMode): NodeOutput =>
+  mode === 'errorOutput'
+    ? { main, error: failed.sort((a, b) => (a.pairedItem?.item ?? 0) - (b.pairedItem?.item ?? 0)) }
+    : { main };

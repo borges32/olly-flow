@@ -7,7 +7,9 @@ import type { AppConfig } from '../config/config.js';
 import { CoreModule } from '../core/core.module.js';
 import { CredentialsModule } from '../credentials/credentials.module.js';
 import { ExecutionEventSink } from '../executions/execution-events.service.js';
+import { ErrorWorkflowTrigger } from '../executions/error-workflow.js';
 import { ExecutionRunner } from '../executions/execution-runner.js';
+import { QueueDispatcher } from '../queue/queue-dispatcher.js';
 import { ExpressionsModule } from '../expressions/expressions.module.js';
 import { NodeTypesModule } from '../node-types/node-types.module.js';
 import { ExecutionProcessor } from './execution-processor.js';
@@ -37,6 +39,9 @@ export class WorkerModule {
         { provide: ExecutionEventSink, useExisting: RedisEventPublisher },
         ExecutionRunner,
         ExecutionProcessor,
+        // Spec 007: o worker enfileira o workflow de erro das execuções que falham.
+        QueueDispatcher,
+        ErrorWorkflowTrigger,
       ],
     };
   }

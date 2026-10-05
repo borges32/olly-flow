@@ -38,6 +38,8 @@ interface Snapshot {
 /** Estado de um nó na última execução de teste (FR-012, FR-017). */
 export interface NodeRunView {
   status: NodeExecutionStatus;
+  /** Iteração (spec 007, FR-009): 0, 1, 2... */
+  runIndex?: number;
   itemsIn: number;
   itemsOut: number;
   /** Início (ISO), para a linha do tempo (spec 006, FR-013). */
@@ -65,6 +67,8 @@ export interface RunState {
   /** `cancelled`: interrompida (cancelamento ou timeout global, spec 006). */
   status: 'idle' | 'running' | 'success' | 'error' | 'cancelled';
   nodes: Record<string, NodeRunView>;
+  /** Todas as execuções de cada nó, por `runIndex` (laços, spec 007 FR-010). */
+  runs: Record<string, NodeRunView[]>;
   error: string | null;
   /** Assinaturas dos nós no início da execução corrente. */
   signatures: Record<string, string>;
@@ -74,6 +78,7 @@ const IDLE_RUN: RunState = {
   executionId: null,
   status: 'idle',
   nodes: {},
+  runs: {},
   error: null,
   signatures: {},
 };
@@ -131,7 +136,10 @@ export interface EditorState {
       Pick<WorkflowNode, 'name' | 'params' | 'disabled' | 'credentialId' | 'settings'>
     >,
     coalesceKey?: string,
+    /** Conexões a remover no mesmo passo (portas que deixaram de existir, spec 007). */
+    removeEdgeIds?: string[],
   ): void;
+  setSettings(patch: Partial<WorkflowSettings>): void;
   removeSelection(): void;
   removeEdge(edgeId: string): void;
   setSelection(selection: Selection): void;
@@ -286,7 +294,7 @@ export const useEditorStore = create<EditorState>()((set, get) => {
       if (!exists) commit({ edges: [...edges, { ...edge, id: newId() }] });
     },
 
-    updateNode: (id, patch, coalesceKey) => {
+    updateNode: (id, patch, coalesceKey, removeEdgeIds = []) => {
       const apply = (n: WorkflowNode): WorkflowNode => {
         const next = { ...n, ...patch };
         // `undefined` remove o campo (ex.: tirar a credencial do nó).
@@ -294,7 +302,22 @@ export const useEditorStore = create<EditorState>()((set, get) => {
         if ('settings' in patch && patch.settings === undefined) delete next.settings;
         return next;
       };
-      commit({ nodes: get().nodes.map((n) => (n.id === id ? apply(n) : n)) }, coalesceKey);
+      const remove = new Set(removeEdgeIds);
+      commit(
+        {
+          nodes: get().nodes.map((n) => (n.id === id ? apply(n) : n)),
+          ...(remove.size > 0 && { edges: get().edges.filter((e) => !remove.has(e.id)) }),
+        },
+        remove.size > 0 ? undefined : coalesceKey,
+      );
+    },
+
+    setSettings: (patch) => {
+      const merged: Record<string, unknown> = { ...get().settings, ...patch };
+      const settings = Object.fromEntries(
+        Object.entries(merged).filter(([, v]) => v !== undefined && v !== ''),
+      ) as WorkflowSettings;
+      set({ settings, dirty: true });
     },
 
     removeSelection: () => {
@@ -337,15 +360,18 @@ export const useEditorStore = create<EditorState>()((set, get) => {
     runStarted: (executionId, start = {}) => {
       const { run, edges } = get();
       let nodes: Record<string, NodeRunView> = {};
+      let runs: Record<string, NodeRunView[]> = {};
       if (start.destinationNodeId) {
         const stale = downstreamOf(start.destinationNodeId, edges);
         nodes = Object.fromEntries(Object.entries(run.nodes).filter(([id]) => !stale.has(id)));
+        runs = Object.fromEntries(Object.entries(run.runs).filter(([id]) => !stale.has(id)));
       }
       set({
         run: {
           executionId,
           status: 'running',
           nodes,
+          runs,
           error: null,
           signatures: start.signatures ?? {},
         },
@@ -379,34 +405,36 @@ export const useEditorStore = create<EditorState>()((set, get) => {
       const { run } = get();
       if (run.executionId !== e.executionId) return;
       const started = run.nodes[e.nodeId];
+      const view: NodeRunView = {
+        status: e.status,
+        runIndex: e.runIndex,
+        startedAt:
+          started?.status === 'running' && started.startedAt
+            ? started.startedAt
+            : new Date(Date.now() - e.durationMs).toISOString(),
+        itemsIn: e.itemsIn,
+        itemsOut: e.itemsOut,
+        durationMs: e.durationMs,
+        pinned: e.pinned,
+        reused: e.reused,
+        dataTruncated: e.dataTruncated,
+        error: e.error,
+        input: e.data.input,
+        output: e.data.output,
+        ...(e.console && { console: e.console }),
+        ...(e.dataRedacted && { dataRedacted: true }),
+        executionId: e.executionId,
+        ...(run.signatures[e.nodeId] !== undefined && {
+          signature: run.signatures[e.nodeId],
+        }),
+      };
+      const history = [...(run.runs[e.nodeId] ?? [])];
+      history[e.runIndex] = view;
       set({
         run: {
           ...run,
-          nodes: {
-            ...run.nodes,
-            [e.nodeId]: {
-              status: e.status,
-              startedAt:
-                started?.status === 'running' && started.startedAt
-                  ? started.startedAt
-                  : new Date(Date.now() - e.durationMs).toISOString(),
-              itemsIn: e.itemsIn,
-              itemsOut: e.itemsOut,
-              durationMs: e.durationMs,
-              pinned: e.pinned,
-              reused: e.reused,
-              dataTruncated: e.dataTruncated,
-              error: e.error,
-              input: e.data.input,
-              output: e.data.output,
-              ...(e.console && { console: e.console }),
-              ...(e.dataRedacted && { dataRedacted: true }),
-              executionId: e.executionId,
-              ...(run.signatures[e.nodeId] !== undefined && {
-                signature: run.signatures[e.nodeId],
-              }),
-            },
-          },
+          nodes: { ...run.nodes, [e.nodeId]: view },
+          runs: { ...run.runs, [e.nodeId]: history },
         },
       });
     },
@@ -427,9 +455,16 @@ export const useEditorStore = create<EditorState>()((set, get) => {
       const { run } = get();
       if (run.executionId !== detail.id) return;
       const nodes = { ...run.nodes };
+      const runs: Record<string, NodeRunView[]> = { ...run.runs };
+      const fresh = new Set<string>();
       for (const n of detail.nodes) {
-        nodes[n.nodeId] = {
+        if (!fresh.has(n.nodeId)) {
+          fresh.add(n.nodeId);
+          runs[n.nodeId] = [];
+        }
+        const view: NodeRunView = {
           status: n.status,
+          runIndex: n.runIndex,
           startedAt: n.startedAt,
           itemsIn: n.itemsIn,
           itemsOut: n.itemsOut,
@@ -447,9 +482,14 @@ export const useEditorStore = create<EditorState>()((set, get) => {
           executionId: detail.id,
           ...(run.signatures[n.nodeId] !== undefined && { signature: run.signatures[n.nodeId] }),
         };
+        (runs[n.nodeId] ??= [])[n.runIndex] = view;
+        const latest = nodes[n.nodeId];
+        if ((latest?.runIndex ?? -1) <= n.runIndex || latest?.executionId !== detail.id) {
+          nodes[n.nodeId] = view;
+        }
       }
       const status = finalStatus(detail.status, run.status);
-      set({ run: { ...run, nodes, status, error: detail.error?.message ?? run.error } });
+      set({ run: { ...run, nodes, runs, status, error: detail.error?.message ?? run.error } });
     },
 
     runFailed: (message) => {

@@ -4,6 +4,7 @@ import { QueueDispatcher } from '../queue/queue-dispatcher.js';
 import { RoutingDispatcher } from '../queue/routing-dispatcher.js';
 import { WorkerLostSweeper } from '../queue/worker-lost-sweeper.js';
 import { ExecutionDispatcher, InProcessDispatcher } from './dispatcher.js';
+import { ErrorWorkflowTrigger } from './error-workflow.js';
 import { ExecutionEventRelay } from './event-relay.js';
 import { ExecutionEventSink, ExecutionEventsService } from './execution-events.service.js';
 import { ExecutionRunner } from './execution-runner.js';
@@ -26,6 +27,7 @@ import { ExecutionsService } from './executions.service.js';
     QueueDispatcher,
     { provide: ExecutionDispatcher, useClass: RoutingDispatcher },
     WorkerLostSweeper,
+    ErrorWorkflowTrigger,
   ],
   exports: [ExecutionsService, ExecutionDispatcher, ExecutionEventsService, ExecutionEventSink],
 })

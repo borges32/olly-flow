@@ -3,9 +3,14 @@ import {
   Database,
   GitBranch,
   Globe,
+  Layers,
+  Merge,
   PenLine,
   Play,
+  Repeat,
   Reply,
+  Siren,
+  Split,
   Variable,
   Webhook,
   type LucideIcon,
@@ -22,6 +27,12 @@ export const NODE_ICONS: Record<string, LucideIcon> = {
   code: Code,
   webhook: Webhook,
   reply: Reply,
+  // Spec 007.
+  merge: Merge,
+  repeat: Repeat,
+  layers: Layers,
+  split: Split,
+  siren: Siren,
 };
 
 /** Ícones conhecidos (o teste garante que todo nó da plataforma tenha o seu). */

@@ -44,3 +44,20 @@ export function errorJson(error: unknown): { error: Record<string, unknown> } {
     },
   };
 }
+
+/** Como tratar a falha de um item (spec 004: `continue`; spec 007: `errorOutput`). */
+export type ItemErrorMode = 'stop' | 'continue' | 'errorOutput';
+
+export function itemErrorMode(settings: { onError?: string } | undefined): ItemErrorMode {
+  const mode = settings?.onError;
+  return mode === 'continue' || mode === 'errorOutput' ? mode : 'stop';
+}
+
+/** Item que falhou, para a saída `error` (spec 007, FR-013): o item original com `error`. */
+export function failedItem(
+  error: unknown,
+  json: Record<string, unknown>,
+  itemIndex: number,
+): { json: Record<string, unknown>; pairedItem: { item: number } } {
+  return { json: { ...json, ...errorJson(error) }, pairedItem: { item: itemIndex } };
+}

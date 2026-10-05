@@ -53,6 +53,8 @@ import { timelineRows } from './timeline';
 import { useCancelExecution, useTestRun } from './use-test-run';
 import { WorkflowEdgeView, type OllyFlowEdge } from './workflow-edge';
 import { WorkflowNodeView, type OllyFlowNode } from './workflow-node';
+import { edgeLoopInfo, invalidConnectionReason } from './loops';
+import { WorkflowSettingsButton } from './workflow-settings';
 
 const nodeTypes = { olly: WorkflowNodeView };
 const edgeTypes = { olly: WorkflowEdgeView };
@@ -196,6 +198,7 @@ export function Editor({
       })),
     [nodes, typesByName, errorsByNode, selection.nodeIds, measured, run.nodes, pinData],
   );
+  const loopEdges = useMemo(() => edgeLoopInfo(nodes, edges), [nodes, edges]);
   const flowEdges = useMemo<OllyFlowEdge[]>(
     () =>
       edges.map((e) => ({
@@ -208,9 +211,15 @@ export function Editor({
         selected: selection.edgeIds.includes(e.id),
         // Spec 006, FR-013: aresta animada enquanto o nó de destino executa.
         animated: run.nodes[e.to]?.status === 'running',
-        data: { hovered: hoveredEdgeId === e.id, readOnly, onHover: setHoveredEdgeId },
+        data: {
+          hovered: hoveredEdgeId === e.id,
+          readOnly,
+          onHover: setHoveredEdgeId,
+          back: loopEdges.back.has(e.id),
+          ...(loopEdges.invalid.has(e.id) && { invalidReason: loopEdges.invalid.get(e.id) }),
+        },
       })),
-    [edges, selection.edgeIds, hoveredEdgeId, readOnly, run.nodes],
+    [edges, selection.edgeIds, hoveredEdgeId, readOnly, run.nodes, loopEdges],
   );
   const timeline = useMemo(
     () => timelineRows(run.nodes, Object.fromEntries(nodes.map((n) => [n.id, n.name]))),
@@ -255,9 +264,13 @@ export function Editor({
 
   const onConnect = useCallback((c: Connection) => {
     if (!c.sourceHandle || !c.targetHandle) return;
-    useEditorStore
-      .getState()
-      .connect({ from: c.source, fromPort: c.sourceHandle, to: c.target, toPort: c.targetHandle });
+    const store = useEditorStore.getState();
+    const edge = { from: c.source, fromPort: c.sourceHandle, to: c.target, toPort: c.targetHandle };
+    // Spec 007, FR-016: ciclo só pela entrada "continue" de um nó de laço. A conexão é feita
+    // (o salvamento recusa e destaca os nós), mas o editor explica a regra na hora.
+    const reason = invalidConnectionReason(store.nodes, store.edges, edge);
+    if (reason) toast.warning('Ciclo inválido', { description: reason });
+    store.connect(edge);
   }, []);
 
   /** Garante que o nó na posição esteja visível; senão, centraliza a vista nele. */
@@ -498,6 +511,13 @@ export function Editor({
           >
             <ClipboardCopy /> Copiar para o editor
           </Button>
+        )}
+        {!execution && (
+          <WorkflowSettingsButton
+            workflowId={workflow.id}
+            projectId={workflow.projectId}
+            readOnly={readOnly}
+          />
         )}
         {!execution && (
           <PublishControls workflow={workflow} dirty={dirty} canPublish={canPublish} />

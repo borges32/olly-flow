@@ -1,6 +1,6 @@
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
 import type { NodeDescription } from '@olly/nodes';
-import type { WorkflowNode } from '@olly/shared-types';
+import { resolveNodePorts, type WorkflowNode } from '@olly/shared-types';
 import { AlertTriangle, Check, Loader2, Minus, Pin, Play, Square, X } from 'lucide-react';
 import { memo } from 'react';
 import { cn } from '@/lib/utils';
@@ -92,8 +92,10 @@ export const WorkflowNodeView = memo(function WorkflowNodeView({
 }: NodeProps<OllyFlowNode>) {
   const { node, description, errors, run, pinned } = data;
   const actions = useNodeActions();
-  const inputs = description?.inputs ?? [];
-  const outputs = description?.outputs ?? [];
+  // Portas efetivas: dinâmicas (Merge, Switch) e de erro (spec 007).
+  const { inputs, outputs } = description
+    ? resolveNodePorts(description, node)
+    : { inputs: [], outputs: [] };
   const hasError = errors.length > 0;
   return (
     <div
@@ -117,9 +119,18 @@ export const WorkflowNodeView = memo(function WorkflowNodeView({
           type="target"
           position={Position.Left}
           style={{ top: handleOffset(i, inputs.length) }}
-          className="!size-3 !border-2 !border-background !bg-muted-foreground"
+          className={cn(
+            '!size-3 !border-2 !border-background',
+            port.name === 'continue' ? '!bg-amber-500' : '!bg-muted-foreground',
+          )}
           title={port.displayName ?? port.name}
-        />
+        >
+          {inputs.length > 1 && (
+            <span className="pointer-events-none absolute right-3 -translate-y-1/2 text-[10px] whitespace-nowrap text-muted-foreground">
+              {port.displayName ?? port.name}
+            </span>
+          )}
+        </Handle>
       ))}
       <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-accent text-accent-foreground">
         <NodeIcon name={description?.icon} className="size-4" />
@@ -184,7 +195,10 @@ export const WorkflowNodeView = memo(function WorkflowNodeView({
           type="source"
           position={Position.Right}
           style={{ top: handleOffset(i, outputs.length) }}
-          className="!size-3 !border-2 !border-background !bg-primary"
+          className={cn(
+            '!size-3 !border-2 !border-background',
+            port.name === 'error' ? '!bg-destructive' : '!bg-primary',
+          )}
           title={port.displayName ?? port.name}
         >
           {outputs.length > 1 && (

@@ -40,7 +40,8 @@ const CONSOLE_PRELUDE = String.raw`
 })();
 `;
 
-const VARS = '$input, $, $node, $vars, $env, $execution, $workflow, $parameter, $now, $today';
+const VARS =
+  '$input, $, $node, $vars, $env, $execution, $loop, $workflow, $parameter, $now, $today';
 
 /**
  * Envolve o código do usuário numa função assíncrona com as variáveis do N8N (FR-009). No modo

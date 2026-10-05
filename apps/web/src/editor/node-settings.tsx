@@ -1,8 +1,9 @@
+import type { NodeDescription } from '@olly/nodes';
 import type { WorkflowNode, WorkflowNodeSettings } from '@olly/shared-types';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
-import { useEditorStore } from './store';
+import { updateNodeGuarded } from './port-guard';
 
 /** `undefined` remove a configuração. */
 type SettingsPatch = { [K in keyof WorkflowNodeSettings]?: WorkflowNodeSettings[K] | undefined };
@@ -22,10 +23,12 @@ const intOrUndefined = (raw: string, min: number, max: number) => {
  */
 export function NodeSettings({
   node,
+  description,
   readOnly,
   supportsParallelItems = false,
 }: {
   node: WorkflowNode;
+  description?: NodeDescription;
   readOnly: boolean;
   supportsParallelItems?: boolean;
 }) {
@@ -37,13 +40,12 @@ export function NodeSettings({
     const next = Object.fromEntries(
       Object.entries(merged).filter(([, v]) => v !== undefined),
     ) as WorkflowNodeSettings;
-    useEditorStore
-      .getState()
-      .updateNode(
-        node.id,
-        { settings: Object.keys(next).length > 0 ? next : undefined },
-        `${node.id}:settings`,
-      );
+    updateNodeGuarded(
+      description,
+      node.id,
+      { settings: Object.keys(next).length > 0 ? next : undefined },
+      `${node.id}:settings`,
+    );
   };
 
   return (
@@ -182,15 +184,25 @@ export function NodeSettings({
         <Select
           id="settings-on-error"
           data-testid="settings-on-error"
-          value={settings.onError === 'continue' ? 'continue' : 'stop'}
+          value={settings.onError ?? 'stop'}
           disabled={readOnly}
           onChange={(e) => {
-            update({ onError: e.target.value === 'continue' ? 'continue' : undefined });
+            const value = e.target.value;
+            update({
+              onError: value === 'continue' || value === 'errorOutput' ? value : undefined,
+            });
           }}
         >
           <option value="stop">Parar a execução</option>
           <option value="continue">Continuar (emite um item com o erro)</option>
+          <option value="errorOutput">Desviar para a saída de erro</option>
         </Select>
+        {settings.onError === 'errorOutput' && (
+          <p className="text-xs text-muted-foreground">
+            O nó ganha a saída <strong>Erro</strong>: os itens que falharem seguem por ela, com o
+            campo <code>error</code>; os demais seguem pela saída normal.
+          </p>
+        )}
       </div>
     </div>
   );

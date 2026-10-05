@@ -1,0 +1,301 @@
+{
+  "description": "Loop Over Items: 25 itens em lotes de 10",
+  "requirements": ["FR-011"],
+  "definition": {
+    "nodes": [
+      {
+        "id": "m",
+        "type": "trigger.manual",
+        "name": "Início",
+        "params": {},
+        "position": [0, 0]
+      },
+      {
+        "id": "l",
+        "type": "logic.loopOverItems",
+        "name": "Lotes",
+        "params": {
+          "batchSize": 10
+        },
+        "position": [0, 0]
+      },
+      {
+        "id": "p",
+        "type": "data.set",
+        "name": "Processa",
+        "params": {
+          "fields": [
+            {
+              "name": "dobro",
+              "type": "number",
+              "value": "={{ $json.i * 2 }}"
+            }
+          ],
+          "includeOtherFields": true
+        },
+        "position": [0, 0]
+      }
+    ],
+    "edges": [
+      {
+        "id": "m.main-l.main",
+        "from": "m",
+        "fromPort": "main",
+        "to": "l",
+        "toPort": "main"
+      },
+      {
+        "id": "l.loop-p.main",
+        "from": "l",
+        "fromPort": "loop",
+        "to": "p",
+        "toPort": "main"
+      },
+      {
+        "id": "p.main-l.continue",
+        "from": "p",
+        "fromPort": "main",
+        "to": "l",
+        "toPort": "continue"
+      }
+    ],
+    "settings": {}
+  },
+  "input": [
+    {
+      "json": {
+        "i": 0
+      }
+    },
+    {
+      "json": {
+        "i": 1
+      }
+    },
+    {
+      "json": {
+        "i": 2
+      }
+    },
+    {
+      "json": {
+        "i": 3
+      }
+    },
+    {
+      "json": {
+        "i": 4
+      }
+    },
+    {
+      "json": {
+        "i": 5
+      }
+    },
+    {
+      "json": {
+        "i": 6
+      }
+    },
+    {
+      "json": {
+        "i": 7
+      }
+    },
+    {
+      "json": {
+        "i": 8
+      }
+    },
+    {
+      "json": {
+        "i": 9
+      }
+    },
+    {
+      "json": {
+        "i": 10
+      }
+    },
+    {
+      "json": {
+        "i": 11
+      }
+    },
+    {
+      "json": {
+        "i": 12
+      }
+    },
+    {
+      "json": {
+        "i": 13
+      }
+    },
+    {
+      "json": {
+        "i": 14
+      }
+    },
+    {
+      "json": {
+        "i": 15
+      }
+    },
+    {
+      "json": {
+        "i": 16
+      }
+    },
+    {
+      "json": {
+        "i": 17
+      }
+    },
+    {
+      "json": {
+        "i": 18
+      }
+    },
+    {
+      "json": {
+        "i": 19
+      }
+    },
+    {
+      "json": {
+        "i": 20
+      }
+    },
+    {
+      "json": {
+        "i": 21
+      }
+    },
+    {
+      "json": {
+        "i": 22
+      }
+    },
+    {
+      "json": {
+        "i": 23
+      }
+    },
+    {
+      "json": {
+        "i": 24
+      }
+    }
+  ],
+  "expected": {
+    "Lotes": {
+      "done": [
+        {
+          "i": 0,
+          "dobro": 0
+        },
+        {
+          "i": 1,
+          "dobro": 2
+        },
+        {
+          "i": 2,
+          "dobro": 4
+        },
+        {
+          "i": 3,
+          "dobro": 6
+        },
+        {
+          "i": 4,
+          "dobro": 8
+        },
+        {
+          "i": 5,
+          "dobro": 10
+        },
+        {
+          "i": 6,
+          "dobro": 12
+        },
+        {
+          "i": 7,
+          "dobro": 14
+        },
+        {
+          "i": 8,
+          "dobro": 16
+        },
+        {
+          "i": 9,
+          "dobro": 18
+        },
+        {
+          "i": 10,
+          "dobro": 20
+        },
+        {
+          "i": 11,
+          "dobro": 22
+        },
+        {
+          "i": 12,
+          "dobro": 24
+        },
+        {
+          "i": 13,
+          "dobro": 26
+        },
+        {
+          "i": 14,
+          "dobro": 28
+        },
+        {
+          "i": 15,
+          "dobro": 30
+        },
+        {
+          "i": 16,
+          "dobro": 32
+        },
+        {
+          "i": 17,
+          "dobro": 34
+        },
+        {
+          "i": 18,
+          "dobro": 36
+        },
+        {
+          "i": 19,
+          "dobro": 38
+        },
+        {
+          "i": 20,
+          "dobro": 40
+        },
+        {
+          "i": 21,
+          "dobro": 42
+        },
+        {
+          "i": 22,
+          "dobro": 44
+        },
+        {
+          "i": 23,
+          "dobro": 46
+        },
+        {
+          "i": 24,
+          "dobro": 48
+        }
+      ]
+    }
+  },
+  "runs": {
+    "Processa": 3,
+    "Lotes": 4
+  }
+}

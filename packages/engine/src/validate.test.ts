@@ -73,7 +73,7 @@ describe('spec 002 — FR-004/FR-005: validação estrutural ao salvar', () => {
       registry,
     );
     expect(errors).toHaveLength(1);
-    expect(errors[0]).toMatchObject({ code: 'CYCLE', nodeIds: ['a', 'b', 'c'] });
+    expect(errors[0]).toMatchObject({ code: 'INVALID_CYCLE', nodeIds: ['a', 'b', 'c'] });
   });
 
   it('FR-004: laço de um nó para ele mesmo é ciclo', () => {
@@ -81,7 +81,7 @@ describe('spec 002 — FR-004/FR-005: validação estrutural ao salvar', () => {
       def([node('t', 'trigger.manual'), node('a')], [edge('t', 'a'), edge('a', 'a')]),
       registry,
     );
-    expect(errors.map((e) => [e.code, e.nodeIds])).toEqual([['CYCLE', ['a']]]);
+    expect(errors.map((e) => [e.code, e.nodeIds])).toEqual([['INVALID_CYCLE', ['a']]]);
   });
 
   it('FR-004: tipo de nó desconhecido é erro', () => {

@@ -1,7 +1,7 @@
 import type { BinaryRef, WorkflowNode } from '@olly/shared-types';
 import type { ResolvedCredential } from '../credentials/definitions.js';
 import { mapWithConcurrency } from '../shared/concurrency.js';
-import type { CodeMode, NodeContext, WebhookResponse } from '../types.js';
+import type { CodeMode, LoopState, NodeContext, WebhookResponse } from '../types.js';
 
 export interface FakeContext extends NodeContext {
   secrets: string[];
@@ -21,6 +21,7 @@ export function fakeContext(options: {
   credential?: ResolvedCredential;
   signal?: AbortSignal;
   runCode?: (request: { code: string; mode: CodeMode }) => Promise<unknown>;
+  loop?: LoopState;
 }): FakeContext {
   const responses: WebhookResponse[] = [];
   const perItem = Array.isArray(options.params) ? options.params : undefined;
@@ -74,6 +75,8 @@ export function fakeContext(options: {
       responses.push(response);
       return responses.length === 1;
     },
+    ...(options.loop && { loop: options.loop }),
+    maxLoopIterations: 10_000,
     // Como o motor, para um tipo com `supportsParallelItems` (spec 006, FR-009).
     mapItems: (items, fn) => {
       const parallel = node.settings?.parallelItems;

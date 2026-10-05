@@ -1,0 +1,126 @@
+{
+  "description": "onError = errorOutput: o item que falha vai para a saída error e os demais seguem",
+  "requirements": ["FR-013", "SC-006"],
+  "definition": {
+    "nodes": [
+      {
+        "id": "m",
+        "type": "trigger.manual",
+        "name": "Início",
+        "params": {},
+        "position": [0, 0]
+      },
+      {
+        "id": "c",
+        "type": "data.set",
+        "name": "Converte",
+        "params": {
+          "fields": [
+            {
+              "name": "n",
+              "type": "number",
+              "value": "={{ $json.n }}"
+            }
+          ],
+          "includeOtherFields": false
+        },
+        "position": [0, 0],
+        "settings": {
+          "onError": "errorOutput"
+        }
+      },
+      {
+        "id": "ok",
+        "type": "data.set",
+        "name": "Sucesso",
+        "params": {
+          "fields": [],
+          "includeOtherFields": true
+        },
+        "position": [0, 0]
+      },
+      {
+        "id": "t",
+        "type": "data.set",
+        "name": "Trata erro",
+        "params": {
+          "fields": [
+            {
+              "name": "falhou",
+              "type": "string",
+              "value": "={{ $json.n }}"
+            },
+            {
+              "name": "motivo",
+              "type": "string",
+              "value": "={{ $json.error.message }}"
+            }
+          ],
+          "includeOtherFields": false
+        },
+        "position": [0, 0]
+      }
+    ],
+    "edges": [
+      {
+        "id": "m.main-c.main",
+        "from": "m",
+        "fromPort": "main",
+        "to": "c",
+        "toPort": "main"
+      },
+      {
+        "id": "c.main-ok.main",
+        "from": "c",
+        "fromPort": "main",
+        "to": "ok",
+        "toPort": "main"
+      },
+      {
+        "id": "c.error-t.main",
+        "from": "c",
+        "fromPort": "error",
+        "to": "t",
+        "toPort": "main"
+      }
+    ],
+    "settings": {}
+  },
+  "input": [
+    {
+      "json": {
+        "n": "1"
+      }
+    },
+    {
+      "json": {
+        "n": "x"
+      }
+    },
+    {
+      "json": {
+        "n": "3"
+      }
+    }
+  ],
+  "expected": {
+    "Sucesso": {
+      "main": [
+        {
+          "n": 1
+        },
+        {
+          "n": 3
+        }
+      ]
+    },
+    "Trata erro": {
+      "main": [
+        {
+          "falhou": "x",
+          "motivo": "Parâmetro \"n\": valor \"x\" não é um número"
+        }
+      ]
+    }
+  }
+}

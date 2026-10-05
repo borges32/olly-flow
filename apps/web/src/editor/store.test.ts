@@ -139,6 +139,7 @@ describe('spec 003 — FR-016/FR-012: pin data e estado da execução no editor'
     store().nodeFinished({
       executionId: 'exec-1',
       nodeId: 'n1',
+      runIndex: 0,
       status: 'success',
       itemsIn: 1,
       itemsOut: 2,
@@ -166,6 +167,7 @@ describe('spec 003 — FR-016/FR-012: pin data e estado da execução no editor'
       store().nodeFinished({
         executionId,
         nodeId,
+        runIndex: 0,
         status: 'success',
         itemsIn: 1,
         itemsOut: 1,
@@ -247,6 +249,7 @@ describe('spec 005 — FR-012/FR-014: console e dados omitidos na execução', (
     store().nodeFinished({
       executionId: 'exec-c',
       nodeId: 'code',
+      runIndex: 0,
       status: 'success',
       itemsIn: 1,
       itemsOut: 1,
@@ -262,6 +265,7 @@ describe('spec 005 — FR-012/FR-014: console e dados omitidos na execução', (
     store().nodeFinished({
       executionId: 'exec-c',
       nodeId: 'outro',
+      runIndex: 0,
       status: 'success',
       itemsIn: 1,
       itemsOut: 1,
@@ -297,6 +301,7 @@ describe('spec 006 — FR-010/FR-013: nós simultâneos, linha do tempo e cancel
     store().nodeFinished({
       executionId: 'exec-p',
       nodeId: 'h1',
+      runIndex: 0,
       status: 'success',
       itemsIn: 1,
       itemsOut: 1,

@@ -1,0 +1,100 @@
+{
+  "description": "Switch enviando a todas as regras verdadeiras",
+  "requirements": ["FR-012"],
+  "definition": {
+    "nodes": [
+      {
+        "id": "m",
+        "type": "trigger.manual",
+        "name": "Início",
+        "params": {},
+        "position": [0, 0]
+      },
+      {
+        "id": "s",
+        "type": "logic.switch",
+        "name": "Regras",
+        "params": {
+          "mode": "rules",
+          "rules": [
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.uf }}",
+                    "rightValue": "SP",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "outputKey": ""
+            },
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.uf.length }}",
+                    "rightValue": "2",
+                    "operator": {
+                      "type": "number",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "outputKey": "duas letras"
+            }
+          ],
+          "options": {
+            "allMatchingOutputs": true
+          }
+        },
+        "position": [0, 0]
+      }
+    ],
+    "edges": [
+      {
+        "id": "m.main-s.main",
+        "from": "m",
+        "fromPort": "main",
+        "to": "s",
+        "toPort": "main"
+      }
+    ],
+    "settings": {}
+  },
+  "input": [
+    {
+      "json": {
+        "uf": "SP"
+      }
+    },
+    {
+      "json": {
+        "uf": "RJ"
+      }
+    }
+  ],
+  "expected": {
+    "Regras": {
+      "output0": [
+        {
+          "uf": "SP"
+        }
+      ],
+      "output1": [
+        {
+          "uf": "SP"
+        },
+        {
+          "uf": "RJ"
+        }
+      ]
+    }
+  }
+}

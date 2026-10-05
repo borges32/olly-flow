@@ -12,6 +12,14 @@ const expressionDataSchema = z.object({
   execution: z.object({ id: z.string(), mode: z.enum(['test', 'production']) }),
   workflow: z.object({ id: z.string(), name: z.string(), active: z.boolean() }),
   timezone: z.string(),
+  // Spec 007: `$loop` dentro de laços.
+  loop: z
+    .object({
+      index: z.number().int().min(0),
+      maxIterations: z.number().int().min(0),
+      accumulated: z.array(z.unknown()),
+    })
+    .optional(),
 });
 
 export const requestSchema = z.discriminatedUnion('type', [

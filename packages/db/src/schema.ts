@@ -58,6 +58,8 @@ export interface WorkflowsTable {
   /** Versão em produção (spec 005); `null` = nunca publicado. */
   published_version: number | null;
   active: Generated<boolean>;
+  /** Workflow de erro (spec 007, FR-014), espelho de `settings.errorWorkflowId`. */
+  error_workflow_id: ColumnType<string | null, string | null | undefined, string | null>;
   deleted_at: Timestamp | null;
   created_by: string | null;
   created_at: GeneratedTimestamp;

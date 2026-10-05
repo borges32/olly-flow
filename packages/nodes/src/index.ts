@@ -38,3 +38,9 @@ export {
 } from './trigger/webhook/definition.js';
 export { verifyWebhookAuth, hmacSignature, safeEqual } from './trigger/webhook/auth.js';
 export { respondToWebhookNode } from './http/respond-to-webhook/definition.js';
+export { mergeNode } from './logic/merge/definition.js';
+export { combineJson } from './logic/merge/execute.js';
+export { whileNode, WHILE_DEFAULT_MAX_ITERATIONS } from './logic/while/definition.js';
+export { loopOverItemsNode } from './logic/loop-over-items/definition.js';
+export { switchNode } from './logic/switch/definition.js';
+export { errorTrigger, SAMPLE_ERROR_PAYLOAD } from './trigger/error/definition.js';

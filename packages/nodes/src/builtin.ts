@@ -7,6 +7,10 @@ import {
   createHttpRequestNode,
 } from './http/request/definition.js';
 import { ifNode } from './logic/if/definition.js';
+import { loopOverItemsNode } from './logic/loop-over-items/definition.js';
+import { mergeNode } from './logic/merge/definition.js';
+import { switchNode } from './logic/switch/definition.js';
+import { whileNode } from './logic/while/definition.js';
 import { ColumnCache } from './postgres/catalog.js';
 import { PoolManager } from './postgres/pool.js';
 import { createPostgresQueryNode } from './postgres/query/definition.js';
@@ -14,6 +18,7 @@ import { createPostgresWriteNode } from './postgres/write/definition.js';
 import { NodeRegistry } from './registry.js';
 import { createHttpGuard, type HttpGuard } from './shared/http-guard.js';
 import { respondToWebhookNode } from './http/respond-to-webhook/definition.js';
+import { errorTrigger } from './trigger/error/definition.js';
 import { manualTrigger } from './trigger/manual/definition.js';
 import { webhookTrigger } from './trigger/webhook/definition.js';
 import type { NodeDefinition } from './types.js';
@@ -48,6 +53,12 @@ export function createBuiltinNodes(options: BuiltinNodeOptions = {}): NodeDefini
     webhookTrigger,
     respondToWebhookNode,
     codeJavascriptNode,
+    // Spec 007: controle de fluxo e workflow de erro.
+    mergeNode,
+    whileNode,
+    loopOverItemsNode,
+    switchNode,
+    errorTrigger,
   ];
 }
 

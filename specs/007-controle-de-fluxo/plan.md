@@ -156,3 +156,19 @@
 | Explosão de dados em laços longos | Truncamento por nó e limite de iterações |
 
 Ao concluir, atualizar `docs/execucao.md` (laços, merge, erros).
+
+## Histórico de alterações
+
+| Data | Alteração | Motivo |
+|---|---|---|
+| 05/10/2026 | §2: a análise de laços (`analyzeLoops`) e as portas dinâmicas (`resolveNodePorts`) ficam em `@olly/shared-types`, usadas pelo motor, pela validação e pelo editor | Uma única regra para os três (o editor não depende do motor) |
+| 05/10/2026 | §2: "dominador" verificado como entrada única do ciclo; o nó de laço do ciclo é o que só recebe conexões internas pela `continue`; laços aninhados por recursão sem as arestas de retorno | Para um ciclo alcançável, equivale à dominância e é O(V+E); a regra do nó de laço distingue o externo do interno |
+| 05/10/2026 | §2: o nó de laço recebe a `continue` só quando todo o corpo terminou a volta (sem nó em andamento nem laço interno ativo); nós fora do laço esperam o fim e veem a última iteração; `runIndex` também para nós pulados | Determinismo com paralelismo (FR-017) e semântica de "última iteração fora do laço" (FR-009) |
+| 05/10/2026 | §3: While sem itens termina (emite `done`), mesmo com a condição verdadeira | Evita voltas vazias até o limite |
+| 05/10/2026 | §1: `pairedItem` do Merge aponta o item da primeira entrada que contribuiu (`{ item, input }`) | O `Item` tem um único `pairedItem` |
+| 05/10/2026 | §6: item desviado para `error` = item original + `error`; o workflow de erro usa a versão publicada (ou a última salva), também é acionado por `worker_lost`, e o payload não traz `execution.error.stack` | Mantém os dados para tratar o erro; o Olly Flow não expõe a pilha interna |
+| 05/10/2026 | §7: a conexão que cria ciclo inválido é feita, mas fica destacada (tracejada, vermelha, com a regra no tooltip) e o editor avisa na hora; o salvamento recusa e destaca os nós | Preserva o comportamento da spec 002 (FR-005: destacar os nós do ciclo ao salvar) |
+| 05/10/2026 | §7: portas que deixam de existir (Merge, Switch, saída de erro): confirmação e remoção das conexões no mesmo passo de desfazer | Plano pedia confirmação; o desfazer devolve as conexões |
+| 05/10/2026 | §7: configurações do workflow (workflow de erro, timeout, paralelismo) num diálogo do editor | A spec exige indicar o workflow de erro; não havia tela para `settings` |
+| 05/10/2026 | §8: 16 casos (o caso 16 cobre `$('Nó')` na iteração atual); o caso 15 executa o workflow de erro com o payload, e o disparo fica no teste de integração | O disparo depende da fila e da API |
+

@@ -1,0 +1,72 @@
+{
+  "description": "While cuja condição nunca fica falsa falha ao atingir o limite",
+  "requirements": ["FR-006", "SC-003"],
+  "definition": {
+    "nodes": [
+      {
+        "id": "m",
+        "type": "trigger.manual",
+        "name": "Início",
+        "params": {},
+        "position": [0, 0]
+      },
+      {
+        "id": "w",
+        "type": "logic.while",
+        "name": "Sem fim",
+        "params": {
+          "condition": "={{ true }}",
+          "maxIterations": 3
+        },
+        "position": [0, 0]
+      },
+      {
+        "id": "b",
+        "type": "data.set",
+        "name": "Corpo",
+        "params": {
+          "fields": [
+            {
+              "name": "x",
+              "type": "number",
+              "value": "1"
+            }
+          ],
+          "includeOtherFields": false
+        },
+        "position": [0, 0]
+      }
+    ],
+    "edges": [
+      {
+        "id": "m.main-w.main",
+        "from": "m",
+        "fromPort": "main",
+        "to": "w",
+        "toPort": "main"
+      },
+      {
+        "id": "w.loop-b.main",
+        "from": "w",
+        "fromPort": "loop",
+        "to": "b",
+        "toPort": "main"
+      },
+      {
+        "id": "b.main-w.continue",
+        "from": "b",
+        "fromPort": "main",
+        "to": "w",
+        "toPort": "continue"
+      }
+    ],
+    "settings": {}
+  },
+  "input": [
+    {
+      "json": {}
+    }
+  ],
+  "expected": {},
+  "expectError": "Limite de 3 iterações atingido"
+}

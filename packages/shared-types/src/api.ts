@@ -157,6 +157,8 @@ export interface NodeExecutionError {
 export interface NodeExecutionDetail {
   nodeId: string;
   nodeName: string;
+  /** Execução do nó dentro de um laço (spec 007, FR-009): 0, 1, 2... */
+  runIndex: number;
   status: NodeExecutionStatus;
   startedAt: string;
   finishedAt: string | null;
@@ -236,12 +238,15 @@ export interface ExecutionStartedEvent {
 export interface NodeStartedEvent {
   executionId: string;
   nodeId: string;
+  runIndex: number;
   startedAt: string;
 }
 
 export interface NodeFinishedEvent {
   executionId: string;
   nodeId: string;
+  /** Iteração (spec 007, FR-009). */
+  runIndex: number;
   status: NodeExecutionStatus;
   itemsIn: number;
   itemsOut: number;

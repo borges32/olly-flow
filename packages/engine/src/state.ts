@@ -1,4 +1,12 @@
-import type { Item, NodeOutput, WorkflowDefinition } from '@olly/shared-types';
+import {
+  LOOP_CONTINUE_PORT,
+  type Edge,
+  type Item,
+  type LoopAnalysis,
+  type LoopInfo,
+  type NodeOutput,
+  type WorkflowDefinition,
+} from '@olly/shared-types';
 
 export type NodeRunStatus = 'pending' | 'running' | 'success' | 'error' | 'skipped' | 'cancelled';
 
@@ -40,21 +48,45 @@ export interface RunView {
 
 const FINISHED: ReadonlySet<NodeRunStatus> = new Set(['success', 'skipped', 'error', 'cancelled']);
 
+const EMPTY_LOOPS: LoopAnalysis = { loops: [], invalid: [], backEdges: new Set() };
+
 /**
- * Estado de uma execução: status e saída de cada nó. A entrada de um nó é montada quando ele
- * fica pronto, a partir das saídas dos pais **na ordem das arestas na definição** (spec 006,
- * FR-008), nunca pela ordem em que os pais terminaram.
+ * Estado de uma execução: status e saída corrente de cada nó. A entrada de um nó é montada
+ * quando ele fica pronto, a partir das saídas dos pais **na ordem das arestas na definição**
+ * (spec 006, FR-008), nunca pela ordem em que os pais terminaram.
+ *
+ * Laços (spec 007, plan §2): as arestas de retorno (para a porta `continue`) não contam na
+ * prontidão comum. Enquanto um laço está ativo, quem está fora dele não enxerga o corpo nem a
+ * saída `done` como resolvidos; a cada volta, o corpo é reaberto (estado limpo), e a saída
+ * corrente de cada nó do corpo é sempre a da iteração atual.
  */
 export class ExecutionState implements RunView {
   readonly nodes = new Map<string, NodeRunState>();
-  private readonly incoming = new Map<string, WorkflowDefinition['edges']>();
+  private readonly incoming = new Map<string, Edge[]>();
+  private readonly loopsByHeader = new Map<string, LoopInfo>();
+  /** Laços que contêm cada nó (como membro), do mais externo ao mais interno. */
+  private readonly loopsOfNode = new Map<string, LoopInfo[]>();
+  /** Laços em andamento (emitiram `loop` e ainda não `done`). */
+  readonly active = new Set<string>();
+  /** Execuções já registradas por nó (o próximo `runIndex`). */
+  private readonly runCounts = new Map<string, number>();
 
-  constructor(def: WorkflowDefinition) {
+  constructor(
+    def: WorkflowDefinition,
+    private readonly loops: LoopAnalysis = EMPTY_LOOPS,
+  ) {
     for (const node of def.nodes) {
       this.nodes.set(node.id, { inputs: {}, sources: {}, status: 'pending' });
       this.incoming.set(node.id, []);
     }
     for (const edge of def.edges) this.incoming.get(edge.to)?.push(edge);
+    const bySize = [...loops.loops].sort((a, b) => b.members.size - a.members.size);
+    for (const loop of bySize) {
+      this.loopsByHeader.set(loop.header, loop);
+      for (const id of loop.members) {
+        this.loopsOfNode.set(id, [...(this.loopsOfNode.get(id) ?? []), loop]);
+      }
+    }
   }
 
   get(nodeId: string): NodeRunState {
@@ -72,13 +104,46 @@ export class ExecutionState implements RunView {
     return FINISHED.has(this.get(nodeId).status);
   }
 
-  /** Estado de cada porta de entrada conectada (FR-007). */
+  isBackEdge(edge: Edge): boolean {
+    return this.loops.backEdges.has(edge.id);
+  }
+
+  loopOf(header: string): LoopInfo | undefined {
+    return this.loopsByHeader.get(header);
+  }
+
+  /** O laço mais interno que contém o nó (inclusive o próprio nó de laço). */
+  innermostLoop(nodeId: string): LoopInfo | undefined {
+    return this.loopsOfNode.get(nodeId)?.at(-1);
+  }
+
+  /** O nó está dentro de algum laço (nunca reaproveita saída anterior, FR-020). */
+  inLoop(nodeId: string): boolean {
+    return (this.loopsOfNode.get(nodeId)?.length ?? 0) > 0;
+  }
+
+  /** Próximo índice de execução do nó (FR-009). */
+  nextRunIndex(nodeId: string): number {
+    const n = this.runCounts.get(nodeId) ?? 0;
+    this.runCounts.set(nodeId, n + 1);
+    return n;
+  }
+
+  /** A aresta atravessa a fronteira de um laço ativo (de dentro para fora): ainda não resolvida. */
+  private blocked(edge: Edge): boolean {
+    return (this.loopsOfNode.get(edge.from) ?? []).some(
+      (loop) => this.active.has(loop.header) && !loop.members.has(edge.to),
+    );
+  }
+
+  /** Estado de cada porta de entrada conectada (FR-007), sem as arestas de retorno. */
   portStates(nodeId: string): Record<string, PortState> {
     const states: Record<string, PortState> = {};
     for (const edge of this.incoming.get(nodeId) ?? []) {
+      if (this.isBackEdge(edge)) continue;
       const current = states[edge.toPort];
       const source = this.get(edge.from);
-      if (!FINISHED.has(source.status)) {
+      if (!FINISHED.has(source.status) || this.blocked(edge)) {
         states[edge.toPort] = 'unresolved';
         continue;
       }
@@ -104,21 +169,51 @@ export class ExecutionState implements RunView {
     return this.readiness(nodeId) !== 'waiting';
   }
 
-  /** Monta a entrada do nó a partir das saídas dos pais, na ordem das arestas (cópias). */
-  collect(nodeId: string): void {
+  /**
+   * O nó de laço pode receber a volta (`continue`): o laço está ativo, o nó não está executando
+   * e o corpo terminou a iteração (todos os nós finalizados, sem laço interno ativo).
+   */
+  continueReady(header: string): boolean {
+    const loop = this.loopsByHeader.get(header);
+    if (!loop || !this.active.has(header) || this.get(header).status !== 'success') return false;
+    for (const id of loop.body) {
+      if (!this.isFinished(id) || this.active.has(id)) return false;
+    }
+    return true;
+  }
+
+  /**
+   * Monta a entrada do nó a partir das saídas dos pais, na ordem das arestas (cópias). Para o
+   * nó de laço, `continue` usa só as arestas de retorno; o normal, as demais.
+   */
+  collect(nodeId: string, which: 'normal' | 'continue' = 'normal'): void {
     const target = this.get(nodeId);
     const inputs: Record<string, Item[]> = {};
     const sources: Record<string, SourceRef[]> = {};
     for (const edge of this.incoming.get(nodeId) ?? []) {
+      const back = this.isBackEdge(edge);
+      if ((which === 'continue') !== back) continue;
+      const port = back ? LOOP_CONTINUE_PORT : edge.toPort;
       const items = this.get(edge.from).output?.[edge.fromPort] ?? [];
-      inputs[edge.toPort] = [...(inputs[edge.toPort] ?? []), ...structuredClone(items)];
-      sources[edge.toPort] = [
-        ...(sources[edge.toPort] ?? []),
+      inputs[port] = [...(inputs[port] ?? []), ...structuredClone(items)];
+      sources[port] = [
+        ...(sources[port] ?? []),
         ...items.map((_, index) => ({ nodeId: edge.from, port: edge.fromPort, index })),
       ];
     }
+    if (which === 'continue') inputs[LOOP_CONTINUE_PORT] ??= [];
     target.inputs = inputs;
     target.sources = sources;
+  }
+
+  /** Nova volta do laço: o corpo (e os laços aninhados) recomeça do zero. */
+  openIteration(header: string): void {
+    const loop = this.loopsByHeader.get(header);
+    if (!loop) return;
+    for (const id of loop.body) {
+      this.nodes.set(id, { inputs: {}, sources: {}, status: 'pending' });
+      this.active.delete(id);
+    }
   }
 
   inputsOf(nodeId: string): Record<string, Item[]> | undefined {

@@ -6,17 +6,24 @@ import {
   type NodeContext,
   type NodeDefinition,
   type NodeLogger,
+  type LoopState,
   type NodeRegistry,
   type ResolvedCredential,
   type WebhookResponse,
 } from '@olly/nodes';
 import { findCodeReferences, type CodeRunner, type ExpressionEvaluator } from '@olly/expressions';
-import type {
-  BinaryRef,
-  Item,
-  NodeOutput,
-  WorkflowDefinition,
-  WorkflowNode,
+import {
+  ERROR_PORT,
+  LOOP_CONTINUE_PORT,
+  LOOP_NODE_TYPES,
+  analyzeLoops,
+  resolveNodePorts,
+  type BinaryRef,
+  type Item,
+  type LoopAnalysis,
+  type NodeOutput,
+  type WorkflowDefinition,
+  type WorkflowNode,
 } from '@olly/shared-types';
 import {
   buildExpressionData,
@@ -27,12 +34,13 @@ import {
 import { fillPairedItems } from './paired.js';
 import { redactSecrets } from './redact.js';
 import { ExecutionState, type NodeRunStatus, type SourceRef } from './state.js';
-import { findCycles } from './validate.js';
 
 /** Registro do que aconteceu com um nó (para o log de execução e eventos em tempo real). */
 export interface NodeRunRecord {
   nodeId: string;
   nodeName: string;
+  /** Execução do nó: 0, ou a iteração dentro de laços (spec 007, FR-009). */
+  runIndex: number;
   status: 'success' | 'error' | 'skipped' | 'cancelled';
   startedAt: Date;
   finishedAt: Date;
@@ -52,7 +60,7 @@ export interface NodeRunRecord {
 }
 
 export interface RunCallbacks {
-  onNodeStart?(nodeId: string, startedAt: Date): void | Promise<void>;
+  onNodeStart?(nodeId: string, startedAt: Date, runIndex: number): void | Promise<void>;
   onNodeSuccess?(nodeId: string, output: NodeOutput): void | Promise<void>;
   onNodeError?(nodeId: string, error: Error): void | Promise<void>;
   /** Para todo nó que terminou: sucesso, erro ou sem dados (`skipped`). */
@@ -98,6 +106,32 @@ export class ExecutionCancelledError extends Error {
     super(message);
   }
 }
+
+/** Laço que passou do limite de iterações (spec 007, FR-006). */
+export class LoopLimitExceededError extends Error {
+  override name = 'LoopLimitExceededError';
+  constructor(nodeName: string, limit: number) {
+    super(`Nó "${nodeName}": limite de ${String(limit)} iterações atingido`);
+  }
+}
+
+/** Teto global padrão de iterações por laço (`OLLY_MAX_LOOP_ITERATIONS`). */
+export const DEFAULT_MAX_LOOP_ITERATIONS = 10_000;
+
+/** Laços estruturados da definição (spec 007, FR-008). */
+export function loopAnalysis(def: WorkflowDefinition): LoopAnalysis {
+  const typeOf = new Map(def.nodes.map((n) => [n.id, n.type]));
+  const names = new Map(def.nodes.map((n) => [n.id, n.name]));
+  return analyzeLoops(
+    def.nodes.map((n) => n.id),
+    def.edges,
+    (id) => LOOP_NODE_TYPES.includes(typeOf.get(id) ?? ''),
+    (id) => names.get(id) ?? id,
+  );
+}
+
+/** Portas efetivas do nó (dinâmicas e de erro, spec 007). */
+export const portsOf = (type: NodeDefinition, node: WorkflowNode) => resolveNodePorts(type, node);
 
 /** Paralelismo padrão entre nós prontos (`settings.maxParallel`, spec 006). */
 export const DEFAULT_MAX_PARALLEL = 8;
@@ -151,6 +185,8 @@ export interface RunOptions {
   signal?: AbortSignal;
   logger?: NodeLogger;
   callbacks?: RunCallbacks;
+  /** Teto global de iterações por laço (spec 007, NFR-001). Padrão: 10 000. */
+  maxLoopIterations?: number;
 }
 
 export interface NodeRunResult {
@@ -196,6 +232,7 @@ interface ContextDeps {
   logger: NodeLogger;
   runCode: NodeContext['runCode'];
   respondToWebhook: NodeContext['respondToWebhook'];
+  loop: LoopState | undefined;
 }
 
 /** Concorrência por item do nó (spec 006, FR-009): 1 se o tipo não suporta ou está desligado. */
@@ -215,6 +252,7 @@ function createContext({
   logger,
   runCode,
   respondToWebhook,
+  loop,
 }: ContextDeps): NodeContext {
   const binary = () => options.binary ?? unavailable('Armazenamento de binários');
   return {
@@ -243,6 +281,8 @@ function createContext({
     runCode,
     respondToWebhook,
     mapItems: (items, fn) => mapWithConcurrency(items, itemConcurrency(node, type), fn, signal),
+    ...(loop && { loop }),
+    maxLoopIterations: options.maxLoopIterations ?? DEFAULT_MAX_LOOP_ITERATIONS,
     helpers: {
       pairedItem: (item, itemIndex, input) => ({
         ...item,
@@ -337,16 +377,20 @@ function sleep(ms: number, signal: AbortSignal | undefined): Promise<void> {
   });
 }
 
-/** Ordem topológica estável (Kahn), desempatando pela ordem dos nós na definição. */
-function topologicalOrder(def: WorkflowDefinition): string[] {
+/**
+ * Ordem topológica estável (Kahn), desempatando pela ordem dos nós na definição. As arestas de
+ * retorno dos laços (spec 007) não entram.
+ */
+function topologicalOrder(def: WorkflowDefinition, backEdges: Set<string>): string[] {
+  const edges = def.edges.filter((e) => !backEdges.has(e.id));
   const indegree = new Map(def.nodes.map((n) => [n.id, 0]));
-  for (const e of def.edges) indegree.set(e.to, (indegree.get(e.to) ?? 0) + 1);
+  for (const e of edges) indegree.set(e.to, (indegree.get(e.to) ?? 0) + 1);
   const queue = def.nodes.filter((n) => indegree.get(n.id) === 0).map((n) => n.id);
   const order: string[] = [];
   while (queue.length > 0) {
     const id = queue.shift() as string;
     order.push(id);
-    for (const e of def.edges) {
+    for (const e of edges) {
       if (e.from !== id) continue;
       const remaining = (indegree.get(e.to) ?? 0) - 1;
       indegree.set(e.to, remaining);
@@ -395,11 +439,18 @@ function pickStartNode(
 }
 
 /** Nó desabilitado: repassa a primeira entrada para a primeira saída (FR-016 da spec 002). */
-function passThrough(def: NodeDefinition, inputs: Record<string, Item[]>): NodeOutput {
+function passThrough(
+  ports: ReturnType<typeof resolveNodePorts>,
+  inputs: Record<string, Item[]>,
+): NodeOutput {
   const firstInput =
-    def.inputs.map((p) => inputs[p.name]).find((items) => items !== undefined) ?? [];
-  return { [def.outputs[0]?.name ?? 'main']: firstInput };
+    ports.inputs.map((p) => inputs[p.name]).find((items) => items !== undefined) ?? [];
+  return { [ports.outputs[0]?.name ?? 'main']: firstInput };
 }
+
+/** Itens que servem de `$json`/`$input` nas expressões do nó. */
+const primaryItems = (inputs: Record<string, Item[]>): Item[] =>
+  inputs.main ?? inputs[LOOP_CONTINUE_PORT] ?? inputs.input1 ?? Object.values(inputs)[0] ?? [];
 
 const countItems = (data: Record<string, Item[]> | undefined) =>
   Object.values(data ?? {}).reduce((n, items) => n + items.length, 0);
@@ -417,14 +468,8 @@ export async function runWorkflow(
   registry: NodeRegistry,
   options: RunOptions = {},
 ): Promise<RunResult> {
-  if (
-    findCycles(
-      def.nodes.map((n) => n.id),
-      def.edges,
-    ).length > 0
-  ) {
-    throw new WorkflowRunError('O workflow contém ciclo');
-  }
+  const [invalidCycle] = loopAnalysis(def).invalid;
+  if (invalidCycle) throw new WorkflowRunError(invalidCycle.reason);
   const start = pickStartNode(def, registry, options.startNodeId);
   let scope = walk(start.id, def, 'down');
   if (options.destinationNodeId) {
@@ -439,7 +484,11 @@ export async function runWorkflow(
     nodes: def.nodes.filter((n) => scope.has(n.id)),
     edges: def.edges.filter((e) => scope.has(e.from) && scope.has(e.to)),
   };
-  const state = new ExecutionState(scoped);
+  const loops = loopAnalysis(scoped);
+  const state = new ExecutionState(scoped, loops);
+  const maxLoopIterations = options.maxLoopIterations ?? DEFAULT_MAX_LOOP_ITERATIONS;
+  /** Estado de cada laço em andamento, por nó de laço (`$loop`, plan §3). */
+  const loopStates = new Map<string, LoopState>();
   const nodesById = new Map(scoped.nodes.map((n) => [n.id, n]));
   state.get(start.id).inputs = { main: structuredClone(options.triggerItems ?? []) };
   for (const node of scoped.nodes) {
@@ -450,7 +499,21 @@ export async function runWorkflow(
 
   const executionId = options.executionId ?? 'local';
   const vars: Record<string, unknown> = {};
-  const expressionScope = (): ExpressionScope => ({
+  const expressionScope = (nodeId: string): ExpressionScope => {
+    const loop = state.innermostLoop(nodeId);
+    const current = loop ? loopStates.get(loop.header) : undefined;
+    return {
+      ...baseScope(),
+      ...(current && {
+        loop: {
+          index: current.index,
+          maxIterations: current.maxIterations,
+          accumulated: current.accumulated,
+        },
+      }),
+    };
+  };
+  const baseScope = (): ExpressionScope => ({
     executionId,
     mode: options.mode ?? 'test',
     workflow: {
@@ -491,7 +554,7 @@ export async function runWorkflow(
         node,
         items,
         [],
-        expressionScope(),
+        expressionScope(node.id),
         findCodeReferences(code),
       );
       const result = await options.codeRunner.runCode({ executionId, code, mode, data });
@@ -516,7 +579,8 @@ export async function runWorkflow(
   ): Promise<NodeOutput> => {
     const { retry, timeoutMs, onError } = node.settings ?? {};
     const maxTries = Math.max(1, retry?.maxTries ?? 1);
-    const items = inputs.main ?? [];
+    const items = primaryItems(inputs);
+    const ports = portsOf(type, node);
     for (let attempt = 1; ; attempt++) {
       onAttempt(attempt);
       try {
@@ -528,7 +592,7 @@ export async function runWorkflow(
               state,
               node,
               items,
-              expressionScope(),
+              expressionScope(node.id),
               options.evaluator,
             );
             const ctx = createContext({
@@ -542,6 +606,7 @@ export async function runWorkflow(
               logger,
               runCode: runCodeFor(node, items),
               respondToWebhook,
+              loop: loopStates.get(node.id),
             });
             return type.execute({ inputs, items }, ctx);
           },
@@ -558,12 +623,24 @@ export async function runWorkflow(
           );
           continue;
         }
+        if (onError === 'errorOutput') {
+          // Spec 007, FR-013: falha do nó inteiro → todos os itens de entrada vão para `error`.
+          logger.warn(`Nó "${node.name}" falhou; itens desviados para a saída de erro`, {
+            error: error instanceof Error ? error.message : String(error),
+          });
+          const errorData = redactSecrets(errorJson(error), secrets);
+          const failed = (items.length > 0 ? items : [{ json: {} }]).map((item, i) => ({
+            json: { ...item.json, ...errorData },
+            pairedItem: { item: i },
+          }));
+          return { [ports.outputs[0]?.name ?? 'main']: [], [ERROR_PORT]: failed };
+        }
         if (onError !== 'continue') throw error;
         logger.warn(`Nó "${node.name}" falhou; seguindo (onError: continue)`, {
           error: error instanceof Error ? error.message : String(error),
         });
         return {
-          [type.outputs[0]?.name ?? 'main']: [
+          [ports.outputs[0]?.name ?? 'main']: [
             { json: redactSecrets(errorJson(error), secrets), pairedItem: { item: 0 } },
           ],
         };
@@ -571,7 +648,7 @@ export async function runWorkflow(
     }
   };
 
-  const order = topologicalOrder(scoped);
+  const order = topologicalOrder(scoped, loops.backEdges);
   const rank = new Map(order.map((id, i) => [id, i]));
   const maxParallel = Math.max(1, scoped.settings.maxParallel ?? defaultMaxParallel());
   const running = new Map<string, Promise<void>>();
@@ -581,12 +658,19 @@ export async function runWorkflow(
     failures.length > 0 || cancelled !== undefined || options.signal?.aborted === true;
 
   const recorder =
-    (nodeId: string, node: WorkflowNode, startedAt: Date, attempts: () => number) =>
+    (
+      nodeId: string,
+      node: WorkflowNode,
+      startedAt: Date,
+      attempts: () => number,
+      runIndex: number,
+    ) =>
     (status: NodeRunRecord['status'], extra: Partial<NodeRunRecord> = {}): NodeRunRecord => {
       const run = state.get(nodeId);
       return {
         nodeId,
         nodeName: node.name,
+        runIndex,
         status,
         startedAt,
         finishedAt: new Date(),
@@ -601,23 +685,52 @@ export async function runWorkflow(
       };
     };
 
-  /** Executa um nó já marcado como `running`; nunca rejeita por falha do nó. */
-  const runNode = async (node: WorkflowNode, type: NodeDefinition): Promise<void> => {
+  /**
+   * Executa um nó já marcado como `running`; nunca rejeita por falha do nó. O nó de laço
+   * (spec 007) recebe `main` (início, `$loop.index` 0) ou `continue` (cada volta).
+   */
+  const runNode = async (
+    node: WorkflowNode,
+    type: NodeDefinition,
+    phase: 'normal' | 'continue' = 'normal',
+  ): Promise<void> => {
     const nodeId = node.id;
     const run = state.get(nodeId);
     const startedAt = new Date();
     let attempts = 1;
-    const record = recorder(nodeId, node, startedAt, () => attempts);
-    await cb.onNodeStart?.(nodeId, startedAt);
+    const runIndex = state.nextRunIndex(nodeId);
+    const record = recorder(nodeId, node, startedAt, () => attempts, runIndex);
+    const ports = portsOf(type, node);
+    const loop = state.loopOf(nodeId);
+    await cb.onNodeStart?.(nodeId, startedAt, runIndex);
     try {
       options.signal?.throwIfAborted();
+      if (LOOP_NODE_TYPES.includes(type.type)) {
+        if (phase === 'normal') {
+          loopStates.set(nodeId, {
+            index: 0,
+            maxIterations: maxLoopIterations,
+            accumulated: [],
+            data: {},
+          });
+        } else {
+          const current = loopStates.get(nodeId);
+          if (current) {
+            current.index++;
+            // NFR-001: teto global, além do limite do próprio nó.
+            if (current.index > maxLoopIterations) {
+              throw new LoopLimitExceededError(node.name, maxLoopIterations);
+            }
+          }
+        }
+      }
       const pinned = options.pinData?.[nodeId];
       let output: NodeOutput;
       if (pinned) {
         run.pinned = true;
-        output = { [type.outputs[0]?.name ?? 'main']: structuredClone(pinned) };
+        output = { [ports.outputs[0]?.name ?? 'main']: structuredClone(pinned) };
       } else if (node.disabled) {
-        output = passThrough(type, run.inputs);
+        output = passThrough(ports, run.inputs);
       } else {
         output = await executeWithResilience(node, type, run.inputs, (n) => {
           attempts = n;
@@ -626,6 +739,15 @@ export async function runWorkflow(
       output = fillPairedItems(output, countItems(run.inputs));
       run.status = 'success';
       run.output = output;
+      if (loop) {
+        // Spec 007: emitir em `loop` abre uma nova volta do corpo; `done` encerra o laço.
+        if ((output.loop?.length ?? 0) > 0) {
+          state.active.add(nodeId);
+          state.openIteration(nodeId);
+        } else {
+          state.active.delete(nodeId);
+        }
+      }
       await cb.onNodeSuccess?.(nodeId, output);
       await finish(record('success', { output }));
     } catch (err) {
@@ -659,6 +781,20 @@ export async function runWorkflow(
       for (const nodeId of order) {
         if (stopped()) return;
         const run = state.get(nodeId);
+        // Spec 007: o corpo do laço terminou a volta → o nó de laço recebe a `continue`.
+        if (state.continueReady(nodeId)) {
+          if (running.size >= maxParallel) continue;
+          const header = nodesById.get(nodeId) as WorkflowNode;
+          state.collect(nodeId, 'continue');
+          run.status = 'running';
+          running.set(
+            nodeId,
+            runNode(header, registry.get(header.type) as NodeDefinition, 'continue').finally(() =>
+              running.delete(nodeId),
+            ),
+          );
+          continue;
+        }
         const readiness =
           nodeId === start.id
             ? run.status === 'pending'
@@ -668,12 +804,14 @@ export async function runWorkflow(
         if (readiness === 'waiting') continue;
         const node = nodesById.get(nodeId) as WorkflowNode;
         const type = registry.get(node.type) as NodeDefinition;
-        const record = recorder(nodeId, node, new Date(), () => 1);
+        const record = () =>
+          recorder(nodeId, node, new Date(), () => 1, state.nextRunIndex(nodeId));
 
         const reused =
           nodeId !== options.destinationNodeId &&
           !options.pinData?.[nodeId] &&
-          !type.rerunOnPartialExecution
+          !type.rerunOnPartialExecution &&
+          !state.inLoop(nodeId)
             ? options.runData?.[nodeId]
             : undefined;
         if (reused) {
@@ -683,7 +821,7 @@ export async function runWorkflow(
           run.output = structuredClone(reused.output);
           run.status = 'success';
           run.reused = true;
-          await finish(record('success', { output: run.output }));
+          await finish(record()('success', { output: run.output }));
           changed = true;
           continue;
         }
@@ -692,7 +830,7 @@ export async function runWorkflow(
           state.collect(nodeId);
           run.status = 'skipped';
           run.output = {};
-          await finish(record('skipped'));
+          await finish(record()('skipped'));
           changed = true;
           continue;
         }

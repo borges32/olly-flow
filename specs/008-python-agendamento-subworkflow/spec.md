@@ -98,11 +98,11 @@ Vault/KMS, versionamento visual, MCP, AI Agent e Kubernetes.
 
 ## Pré-requisitos humanos
 
-- Confirmar a lista inicial de bibliotecas Python permitidas.
+Nenhum.
 
 ## Pontos em aberto
 
-- [PRECISA ESCLARECIMENTO: bibliotecas Python adicionais necessárias além de pandas, numpy, python-dateutil, pytz, regex, orjson e unidecode?]
+Nenhum.
 
 ## Histórico de alterações
 

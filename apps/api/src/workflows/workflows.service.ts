@@ -93,6 +93,41 @@ export class WorkflowsService {
     if (issues.length > 0) throw new UnprocessableError('Credencial inválida em nós', { issues });
   }
 
+  /**
+   * Spec 007, FR-014/FR-015: o workflow de erro precisa existir no mesmo projeto, não pode ser o
+   * próprio workflow e precisa começar por um "Gatilho de erro". Devolve o id para a coluna.
+   */
+  private async errorWorkflowOf(
+    projectId: string,
+    workflowId: string | null,
+    definition: WorkflowDefinition,
+  ): Promise<string | null> {
+    const target = definition.settings.errorWorkflowId;
+    if (!target) return null;
+    const fail = (message: string) =>
+      new UnprocessableError(message, {
+        issues: [{ code: 'INVALID_ERROR_WORKFLOW', message, nodeIds: [] }],
+      });
+    if (target === workflowId) throw fail('Um workflow não pode ser o próprio workflow de erro');
+    const row = await this.db
+      .selectFrom('workflows as w')
+      .innerJoin('workflow_versions as v', (join) =>
+        join.onRef('v.workflow_id', '=', 'w.id').onRef('v.version', '=', 'w.version'),
+      )
+      .select(['w.project_id', 'v.definition'])
+      .where('w.id', '=', target)
+      .where('w.deleted_at', 'is', null)
+      .executeTakeFirst();
+    if (row?.project_id !== projectId) {
+      throw fail('Workflow de erro não encontrado neste projeto');
+    }
+    const nodes = (row.definition as WorkflowDefinition).nodes;
+    if (!nodes.some((n) => n.type === 'trigger.error')) {
+      throw fail('O workflow de erro precisa começar por um nó "Gatilho de erro"');
+    }
+    return target;
+  }
+
   /** Recusa com 422 se houver erros estruturais; devolve os avisos. */
   private validate(definition: WorkflowDefinition): Issue[] {
     const { errors, warnings } = validateWorkflow(definition, this.registry);
@@ -113,10 +148,16 @@ export class WorkflowsService {
     const definition = body.definition ?? EMPTY_DEFINITION;
     const warnings = this.validate(definition);
     await this.checkCredentialRefs(user, projectId, definition);
+    const errorWorkflowId = await this.errorWorkflowOf(projectId, null, definition);
     const id = await this.db.transaction().execute(async (trx) => {
       const wf = await trx
         .insertInto('workflows')
-        .values({ project_id: projectId, name: body.name, created_by: ctx.userId })
+        .values({
+          project_id: projectId,
+          name: body.name,
+          created_by: ctx.userId,
+          error_workflow_id: errorWorkflowId,
+        })
         .returning('id')
         .executeTakeFirstOrThrow();
       await trx
@@ -223,6 +264,7 @@ export class WorkflowsService {
     const warnings = this.validate(body.definition);
     const current = await this.get(id);
     await this.checkCredentialRefs(user, current.projectId, body.definition, current.definition);
+    const errorWorkflowId = await this.errorWorkflowOf(current.projectId, id, body.definition);
     await this.db.transaction().execute(async (trx) => {
       const updated = await trx
         .updateTable('workflows')
@@ -230,6 +272,7 @@ export class WorkflowsService {
           version: eb('version', '+', 1),
           updated_at: sql<Date>`now()`,
           name: body.name ?? eb.ref('name'),
+          error_workflow_id: errorWorkflowId,
         }))
         .where('id', '=', id)
         .where('version', '=', body.baseVersion)

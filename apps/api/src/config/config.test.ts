@@ -123,4 +123,20 @@ describe('configuração da API (validação zod na inicialização)', () => {
       /OLLY_DEFAULT_MAX_PARALLEL/,
     );
   });
+
+  it('spec 007 — NFR-001/FR-014: teto global de iterações e endereço público', () => {
+    const config = loadConfig(valid);
+    expect(config.execution.maxLoopIterations).toBe(10_000);
+    expect(config.publicUrl).toBe('http://localhost:5173');
+    const custom = loadConfig({
+      ...valid,
+      OLLY_MAX_LOOP_ITERATIONS: '50',
+      OLLY_PUBLIC_URL: 'https://olly.interno/',
+    });
+    expect(custom.execution.maxLoopIterations).toBe(50);
+    expect(custom.publicUrl).toBe('https://olly.interno');
+    expect(() => loadConfig({ ...valid, OLLY_MAX_LOOP_ITERATIONS: '0' })).toThrow(
+      /OLLY_MAX_LOOP_ITERATIONS/,
+    );
+  });
 });

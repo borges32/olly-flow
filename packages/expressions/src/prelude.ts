@@ -119,6 +119,7 @@ export const PRELUDE_SOURCE = String.raw`
       $vars: d.vars,
       $env: d.env,
       $execution: d.execution,
+      $loop: d.loop,
       $workflow: d.workflow,
       $parameter: d.params,
       $now: L.DateTime.now().setZone(zone),
@@ -141,7 +142,7 @@ export const PRELUDE_SOURCE = String.raw`
 /** Envolve o corpo compilado do template numa função de um argumento (índice do item). */
 export function wrapTemplateFunction(body: string): string {
   return `(function (__olly_i) {
-  const { $json, $binary, $itemIndex, $input, $, $node, $vars, $env, $execution, $workflow, $parameter, $now, $today } = __olly_ctx(__olly_i);
+  const { $json, $binary, $itemIndex, $input, $, $node, $vars, $env, $execution, $loop, $workflow, $parameter, $now, $today } = __olly_ctx(__olly_i);
   ${body}
 })`;
 }

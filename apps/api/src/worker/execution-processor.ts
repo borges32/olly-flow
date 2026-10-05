@@ -11,6 +11,7 @@ import { createRedisConnection } from '../core/redis.js';
 import { DB, REDIS } from '../core/tokens.js';
 import { ExecutionEventSink } from '../executions/execution-events.service.js';
 import type { CancelMessage, ExecutionJob } from '../executions/execution-job.js';
+import { ErrorWorkflowTrigger } from '../executions/error-workflow.js';
 import { ExecutionRunner } from '../executions/execution-runner.js';
 import { ResultPublisher } from '../executions/result-bus.js';
 import { CANCEL_CHANNEL, EXECUTIONS_QUEUE, type ExecutionJobData } from '../queue/constants.js';
@@ -58,10 +59,18 @@ export class ExecutionProcessor {
     @Inject(ExecutionRunner) private readonly runner: ExecutionRunner,
     @Inject(ExecutionEventSink) events: ExecutionEventSink,
     @Inject(BINARY_STORAGE) private readonly binaries: S3BinaryStorage | null,
+    @Inject(ErrorWorkflowTrigger) private readonly errorWorkflows: ErrorWorkflowTrigger,
   ) {
     this.results = new ResultPublisher(redis);
     this.quota = new ProjectQuota(redis, config.queue.staleAfterMs);
-    this.lost = { db, events, results: this.results, quota: this.quota, logger: this.logger };
+    this.lost = {
+      db,
+      events,
+      results: this.results,
+      quota: this.quota,
+      logger: this.logger,
+      errorWorkflows,
+    };
   }
 
   get stats(): WorkerStats {
@@ -115,6 +124,7 @@ export class ExecutionProcessor {
       .select([
         'e.status',
         'e.mode',
+        'e.trigger_type',
         'e.definition',
         'e.project_id',
         'w.id as workflow_id',
@@ -173,6 +183,18 @@ export class ExecutionProcessor {
       });
       if (outcome.status === 'success') this.counters.processed++;
       else this.counters.failed++;
+      if (outcome.status === 'error') {
+        await this.errorWorkflows.trigger({
+          executionId,
+          workflowId: execution.workflow_id,
+          workflowName: execution.workflow_name,
+          projectId,
+          mode: execution.mode,
+          triggerType: execution.trigger_type,
+          definition: executionJob.definition,
+          error: outcome.error ?? { message: 'Erro desconhecido' },
+        });
+      }
     } finally {
       this.active.delete(executionId);
       this.earlyCancels.delete(executionId);

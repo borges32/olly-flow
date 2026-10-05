@@ -1,5 +1,10 @@
 import type { NodeDescription } from '@olly/nodes';
-import type { ExpressionPreviewResponse, Item, WorkflowNode } from '@olly/shared-types';
+import {
+  resolveNodePorts,
+  type ExpressionPreviewResponse,
+  type Item,
+  type WorkflowNode,
+} from '@olly/shared-types';
 import { Pin, PinOff, Play, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useApi } from '@/api/api-provider';
@@ -138,11 +143,16 @@ export function NodeDetailsView({
         .filter((n): n is WorkflowNode => n !== undefined),
     [node.id, edges, nodes],
   );
-  const runOf = (id: string) => run.nodes[id];
+  // Spec 007, FR-010: nó em laço tem várias execuções; o painel mostra a escolhida.
+  const runs = run.runs[node.id] ?? [];
+  const [runChoice, setRunChoice] = useState<number | null>(null);
+  const selectedRun = runChoice !== null && runs[runChoice] ? runs[runChoice] : run.nodes[node.id];
+  const runOf = (id: string) => (id === node.id ? selectedRun : run.nodes[id]);
+  const ports = description ? resolveNodePorts(description, node) : { inputs: [], outputs: [] };
 
   // Entrada: a registrada na execução ou, se o nó não rodou, o que os pais produziram.
   const inputData = useMemo((): Record<string, Item[]> | undefined => {
-    const recorded = run.nodes[node.id]?.input;
+    const recorded = selectedRun?.input;
     if (recorded && Object.keys(recorded).length > 0) return recorded;
     const fromParents: Item[] = [];
     let any = false;
@@ -154,7 +164,7 @@ export function NodeDetailsView({
       }
     }
     return any ? { main: fromParents } : undefined;
-  }, [run, edges, node.id]);
+  }, [run, edges, node.id, selectedRun]);
 
   const sourceNode = ancestors.find((a) => a.id === source);
   const leftData = sourceNode ? runOf(sourceNode.id)?.output : inputData;
@@ -162,10 +172,10 @@ export function NodeDetailsView({
     ? { kind: 'node', name: sourceNode.name }
     : { kind: 'input' };
 
-  const firstPort = description?.outputs[0]?.name ?? 'main';
+  const firstPort = ports.outputs[0]?.name ?? 'main';
   const outputData = pinned ? { [firstPort]: pinned } : runOf(node.id)?.output;
   const portLabels = Object.fromEntries(
-    (description?.outputs ?? []).map((p) => [p.name, p.displayName ?? p.name]),
+    ports.outputs.map((p) => [p.name, p.displayName ?? p.name]),
   );
 
   // Os dados de cada nó podem vir de execuções diferentes (FR-020): usa a do nó ou de um pai.
@@ -252,7 +262,7 @@ export function NodeDetailsView({
                 sourceNode ? runOf(sourceNode.id)?.dataTruncated : runOf(node.id)?.dataTruncated
               }
               empty={
-                description?.inputs.length === 0
+                ports.inputs.length === 0
                   ? 'Gatilho: não recebe entrada.'
                   : 'Execute o workflow (ou os nós anteriores) para ver os dados de entrada.'
               }
@@ -302,6 +312,26 @@ export function NodeDetailsView({
               />
             ) : (
               <div className="flex min-h-0 flex-col">
+                {runs.length > 1 && (
+                  <div className="flex items-center gap-2 border-b px-3 py-1.5 text-xs">
+                    <span className="text-muted-foreground">Iteração do laço</span>
+                    <Select
+                      aria-label="Iteração do laço"
+                      data-testid="ndv-run-select"
+                      className="h-7 w-auto text-xs"
+                      value={String(selectedRun?.runIndex ?? runs.length - 1)}
+                      onChange={(e) => {
+                        setRunChoice(Number(e.target.value));
+                      }}
+                    >
+                      {runs.map((_, i) => (
+                        <option key={i} value={i}>
+                          Execução {i + 1} de {runs.length}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                )}
                 <DataPanel
                   title={pinned ? 'Saída (dados fixados)' : 'Saída'}
                   testId="ndv-output"

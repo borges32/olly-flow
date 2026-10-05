@@ -24,10 +24,10 @@ export class ExecutionRecorder {
 
   callbacks(): RunCallbacks {
     return {
-      onNodeStart: (nodeId, startedAt) => {
+      onNodeStart: (nodeId, startedAt, runIndex) => {
         this.events.emit(
           'nodeStarted',
-          { executionId: this.executionId, nodeId, startedAt: startedAt.toISOString() },
+          { executionId: this.executionId, nodeId, runIndex, startedAt: startedAt.toISOString() },
           this.workflowId,
         );
       },
@@ -85,6 +85,7 @@ export class ExecutionRecorder {
       execution_id: this.executionId,
       node_id: record.nodeId,
       node_name: record.nodeName,
+      run_index: record.runIndex,
       status: record.status,
       pinned: record.pinned,
       reused: record.reused,
@@ -112,6 +113,7 @@ export class ExecutionRecorder {
       {
         executionId: this.executionId,
         nodeId: record.nodeId,
+        runIndex: record.runIndex,
         status: record.status,
         itemsIn: record.itemsIn,
         itemsOut: record.itemsOut,

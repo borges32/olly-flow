@@ -1,0 +1,115 @@
+{
+  "description": "Switch por regras com saída padrão",
+  "requirements": ["FR-012"],
+  "definition": {
+    "nodes": [
+      {
+        "id": "m",
+        "type": "trigger.manual",
+        "name": "Início",
+        "params": {},
+        "position": [0, 0]
+      },
+      {
+        "id": "s",
+        "type": "logic.switch",
+        "name": "Por UF",
+        "params": {
+          "mode": "rules",
+          "rules": [
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.uf }}",
+                    "rightValue": "SP",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "outputKey": "São Paulo"
+            },
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.uf }}",
+                    "rightValue": "RJ",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "outputKey": ""
+            }
+          ],
+          "options": {
+            "fallbackOutput": "extra"
+          }
+        },
+        "position": [0, 0]
+      }
+    ],
+    "edges": [
+      {
+        "id": "m.main-s.main",
+        "from": "m",
+        "fromPort": "main",
+        "to": "s",
+        "toPort": "main"
+      }
+    ],
+    "settings": {}
+  },
+  "input": [
+    {
+      "json": {
+        "uf": "SP"
+      }
+    },
+    {
+      "json": {
+        "uf": "RJ"
+      }
+    },
+    {
+      "json": {
+        "uf": "MG"
+      }
+    },
+    {
+      "json": {
+        "uf": "SP"
+      }
+    }
+  ],
+  "expected": {
+    "Por UF": {
+      "output0": [
+        {
+          "uf": "SP"
+        },
+        {
+          "uf": "SP"
+        }
+      ],
+      "output1": [
+        {
+          "uf": "RJ"
+        }
+      ],
+      "fallback": [
+        {
+          "uf": "MG"
+        }
+      ]
+    }
+  }
+}

@@ -1,7 +1,7 @@
 import type { Item, NodeOutput } from '@olly/shared-types';
 import { set } from 'lodash-es';
 import type { NodeContext, NodeExecuteInput } from '../../types.js';
-import { NodeParameterError, settle } from '../../errors.js';
+import { NodeParameterError, errorJson, failedItem, itemErrorMode, settle } from '../../errors.js';
 import { SET_FIELD_TYPES, type SetFieldType } from './definition.js';
 
 interface SetField {
@@ -82,18 +82,31 @@ function includeOtherFields(ctx: NodeContext, i: number): boolean {
 }
 
 export function executeSet(input: NodeExecuteInput, ctx: NodeContext): Promise<NodeOutput> {
-  return settle(() => ({ main: setFields(input, ctx) }));
+  return settle(() => setFields(input, ctx));
 }
 
-function setFields(input: NodeExecuteInput, ctx: NodeContext): Item[] {
-  const output: Item[] = input.items.map((item, i) => {
-    const fields = parseFields(ctx.getParam('fields', i));
-    const includeOthers = includeOtherFields(ctx, i);
-    const json: Record<string, unknown> = includeOthers ? structuredClone(item.json) : {};
-    for (const field of fields) set(json, field.name, convertValue(field));
-    const result: Item = { json, pairedItem: { item: i } };
-    if (includeOthers && item.binary) result.binary = item.binary;
-    return result;
+/**
+ * Um item por entrada. Item que falha (expressão ou conversão): com `onError: continue`, vira
+ * `{ error }` na saída; com `errorOutput` (spec 007, FR-013), vai para a saída `error`.
+ */
+function setFields(input: NodeExecuteInput, ctx: NodeContext): NodeOutput {
+  const mode = itemErrorMode(ctx.node.settings);
+  const main: Item[] = [];
+  const failed: Item[] = [];
+  input.items.forEach((item, i) => {
+    try {
+      const fields = parseFields(ctx.getParam('fields', i));
+      const includeOthers = includeOtherFields(ctx, i);
+      const json: Record<string, unknown> = includeOthers ? structuredClone(item.json) : {};
+      for (const field of fields) set(json, field.name, convertValue(field));
+      const result: Item = { json, pairedItem: { item: i } };
+      if (includeOthers && item.binary) result.binary = item.binary;
+      main.push(result);
+    } catch (error) {
+      if (mode === 'stop') throw error;
+      if (mode === 'errorOutput') failed.push(failedItem(error, item.json, i));
+      else main.push({ json: errorJson(error), pairedItem: { item: i } });
+    }
   });
-  return output;
+  return mode === 'errorOutput' ? { main, error: failed } : { main };
 }

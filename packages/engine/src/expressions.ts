@@ -1,4 +1,5 @@
 import type { NodeRegistry } from '@olly/nodes';
+import { resolveNodePorts } from '@olly/shared-types';
 import {
   ExpressionError,
   collectExpressions,
@@ -23,6 +24,8 @@ export interface ExpressionScope {
   vars: Record<string, unknown>;
   env: Record<string, string>;
   timezone: string;
+  /** Spec 007, FR-007: laço mais interno que contém o nó. */
+  loop?: { index: number; maxIterations: number; accumulated: Item[] };
 }
 
 /** Devolve o parâmetro resolvido para o item, ou lança `ExpressionError`. */
@@ -50,10 +53,11 @@ export function buildExpressionData(
   for (const name of names) {
     const ref = byName.get(name);
     if (!ref) continue;
+    const refType = registry.get(ref.type);
     nodes[name] = {
       executed: view.isExecuted(ref.id),
       outputs: view.outputOf(ref.id) ?? {},
-      outputOrder: registry.get(ref.type)?.outputs.map((p) => p.name) ?? ['main'],
+      outputOrder: refType ? resolveNodePorts(refType, ref).outputs.map((p) => p.name) : ['main'],
       params: ref.params,
     };
   }
@@ -80,6 +84,7 @@ export function buildExpressionData(
     execution: { id: scope.executionId, mode: scope.mode },
     workflow: scope.workflow,
     timezone: scope.timezone,
+    ...(scope.loop && { loop: structuredClone(scope.loop) }),
   };
 }
 

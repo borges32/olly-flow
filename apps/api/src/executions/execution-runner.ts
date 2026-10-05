@@ -113,6 +113,7 @@ export class ExecutionRunner {
         ...(this.binaries && { binary: this.binaries.forExecution(executionId) }),
         ...(hooks.onWebhookResponse && { onWebhookResponse: hooks.onWebhookResponse }),
         signal: controller.signal,
+        maxLoopIterations: this.config.execution.maxLoopIterations,
         logger: this.nodeLogger(executionId),
         callbacks,
       });
@@ -181,6 +182,8 @@ export class ExecutionRunner {
       .where('e.workflow_id', '=', workflowId)
       .where('ne.status', '=', 'success')
       .where('ne.data_truncated', '=', false)
+      // Nó em laço (spec 007) tem várias execuções; nunca é reaproveitado, mas fica a última.
+      .orderBy('ne.run_index')
       .where((eb) =>
         eb.or(
           pairs.map(([nodeId, executionId]) =>

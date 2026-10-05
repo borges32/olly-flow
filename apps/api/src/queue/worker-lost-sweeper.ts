@@ -10,6 +10,7 @@ import type { Redis } from 'ioredis';
 import { APP_CONFIG, type AppConfig } from '../config/config.js';
 import { DB, REDIS } from '../core/tokens.js';
 import { ExecutionEventSink } from '../executions/execution-events.service.js';
+import { ErrorWorkflowTrigger } from '../executions/error-workflow.js';
 import { ResultPublisher } from '../executions/result-bus.js';
 import { ProjectQuota } from './quota.js';
 import { markWorkerLost, type WorkerLostDeps } from './worker-lost.js';
@@ -30,8 +31,10 @@ export class WorkerLostSweeper implements OnModuleInit, OnModuleDestroy {
     @Inject(DB) db: Db,
     @Inject(REDIS) redis: Redis,
     @Inject(ExecutionEventSink) events: ExecutionEventSink,
+    @Inject(ErrorWorkflowTrigger) errorWorkflows: ErrorWorkflowTrigger,
   ) {
     this.deps = {
+      errorWorkflows,
       db,
       events,
       results: new ResultPublisher(redis),

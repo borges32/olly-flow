@@ -103,6 +103,8 @@ const VARIABLES: Suggestion[] = [
   { label: '$vars', insert: '$vars', detail: 'Variáveis da execução' },
   { label: '$env', insert: '$env', detail: 'Variáveis OLLY_EXPOSED_*' },
   { label: '$execution', insert: '$execution', detail: 'id e modo da execução' },
+  { label: '$loop.index', insert: '$loop.index', detail: 'Voltas concluídas do laço' },
+  { label: '$loop.accumulated', insert: '$loop.accumulated', detail: 'Itens acumulados no laço' },
   { label: '$workflow', insert: '$workflow', detail: 'id e nome do workflow' },
   { label: '$itemIndex', insert: '$itemIndex', detail: 'Índice do item' },
   { label: '$now', insert: '$now', detail: 'Data e hora atuais (Luxon)' },

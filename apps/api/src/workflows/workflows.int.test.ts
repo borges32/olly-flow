@@ -197,7 +197,7 @@ describe('spec 002 — FR-004/FR-005: validação ao salvar', () => {
     });
     expect(res.statusCode).toBe(422);
     expect(res.json<ApiErrorBody>().error.issues).toEqual([
-      expect.objectContaining({ code: 'CYCLE', nodeIds: ['s', 's2'] }) as unknown,
+      expect.objectContaining({ code: 'INVALID_CYCLE', nodeIds: ['s', 's2'] }) as unknown,
     ]);
   });
 
@@ -256,11 +256,21 @@ describe('spec 002 — FR-006: catálogo de tipos de nó', () => {
       'http.request',
       'http.respondToWebhook',
       'logic.if',
+      // Spec 007: controle de fluxo e workflow de erro.
+      'logic.loopOverItems',
+      'logic.merge',
+      'logic.switch',
+      'logic.while',
       'postgres.query',
       'postgres.write',
+      'trigger.error',
       'trigger.manual',
       'trigger.webhook',
     ]);
+    // Portas calculadas pelos parâmetros (spec 007) vão ao editor de forma declarativa.
+    expect(types.find((t) => t.type === 'logic.merge')?.dynamicPorts).toEqual({
+      kind: 'mergeInputs',
+    });
     expect(types.find((t) => t.type === 'http.request')?.credentialTypes).toContain('httpBearer');
     const set = types.find((t) => t.type === 'data.set');
     expect(set).toMatchObject({

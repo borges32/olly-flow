@@ -409,6 +409,7 @@ export class ExecutionsService implements OnModuleInit, OnModuleDestroy {
       .selectAll()
       .where('execution_id', '=', executionId)
       .orderBy('started_at')
+      .orderBy('run_index')
       .execute();
     return {
       id: execution.id,
@@ -427,6 +428,7 @@ export class ExecutionsService implements OnModuleInit, OnModuleDestroy {
       nodes: nodes.map((n) => ({
         nodeId: n.node_id,
         nodeName: n.node_name,
+        runIndex: n.run_index,
         status: n.status as NodeExecutionStatus,
         startedAt: n.started_at.toISOString(),
         finishedAt: iso(n.finished_at),
@@ -473,6 +475,8 @@ export class ExecutionsService implements OnModuleInit, OnModuleDestroy {
         .selectFrom('node_executions')
         .select(['node_id', 'status', 'input_data', 'input_sources', 'output_data'])
         .where('execution_id', '=', body.executionId)
+        // Em laços (spec 007), vale a última iteração de cada nó.
+        .orderBy('run_index')
         .execute();
       view = new RecordedRun(
         rows.map((r) => ({

@@ -56,6 +56,7 @@ CREATE TABLE workflows (
   created_by UUID REFERENCES users(id), created_at TIMESTAMPTZ DEFAULT now(), updated_at TIMESTAMPTZ
   -- active, published_version: spec 005
 );
+-- workflows.error_workflow_id UUID REFERENCES workflows(id) ON DELETE SET NULL  -- 0008 (spec 007)
 CREATE TABLE workflow_versions (
   workflow_id UUID REFERENCES workflows(id), version INT, definition JSONB NOT NULL,
   message TEXT, created_by UUID REFERENCES users(id), created_at TIMESTAMPTZ DEFAULT now(),

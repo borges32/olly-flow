@@ -1,7 +1,14 @@
 import type { BinaryRef, Item, NodeOutput } from '@olly/shared-types';
 import { FormData, Headers, type Response } from 'undici';
 import type { ResolvedCredential } from '../../credentials/definitions.js';
-import { NodeExecutionError, NodeParameterError, errorJson } from '../../errors.js';
+import {
+  NodeExecutionError,
+  NodeParameterError,
+  errorJson,
+  failedItem,
+  itemErrorMode,
+  type ItemErrorMode,
+} from '../../errors.js';
 import type { HttpGuard } from '../../shared/http-guard.js';
 import type { NodeContext, NodeExecuteInput } from '../../types.js';
 import { applyHttpCredential, type OAuth2TokenCache } from '../auth.js';
@@ -322,20 +329,25 @@ export async function executeHttpRequest(
   const items = input.items.length > 0 ? input.items : [{ json: {} }];
   let cached: Promise<ResolvedCredential> | undefined;
   const credential = () => (cached ??= ctx.getCredential());
-  const continueOnFail = ctx.node.settings?.onError === 'continue';
+  const mode = itemErrorMode(ctx.node.settings);
+  const failed: Item[] = [];
   const { batchSize, batchIntervalMs } = readOptions(ctx.getParam('options', 0));
 
   const run = async (item: Item, i: number): Promise<Item[]> => {
     try {
       return await requestItem(ctx, item, i, deps, credential);
     } catch (error) {
-      if (!continueOnFail || ctx.signal.aborted) throw error;
+      if (mode === 'stop' || ctx.signal.aborted) throw error;
+      if (mode === 'errorOutput') {
+        failed.push(failedItem(error, item.json, i));
+        return [];
+      }
       return [{ json: errorJson(error), pairedItem: { item: i } }];
     }
   };
   // Spec 006, FR-009: itens em paralelo, com a concorrência do nó, no lugar dos lotes.
   if (ctx.node.settings?.parallelItems?.enabled) {
-    return { main: (await ctx.mapItems(items, run)).flat() };
+    return withErrors((await ctx.mapItems(items, run)).flat(), failed, mode);
   }
 
   const results: Item[][] = [];
@@ -346,5 +358,11 @@ export async function executeHttpRequest(
       .map((item, offset) => run(item, start + offset));
     results.push(...(await Promise.all(batch)));
   }
-  return { main: results.flat() };
+  return withErrors(results.flat(), failed, mode);
 }
+
+/** Saída com a porta `error` quando o nó desvia os itens que falharam (spec 007, FR-013). */
+const withErrors = (main: Item[], failed: Item[], mode: ItemErrorMode): NodeOutput =>
+  mode === 'errorOutput'
+    ? { main, error: failed.sort((a, b) => (a.pairedItem?.item ?? 0) - (b.pairedItem?.item ?? 0)) }
+    : { main };

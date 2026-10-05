@@ -73,6 +73,9 @@ const envSchema = z.object({
   OLLY_PROJECT_MAX_CONCURRENT: z.coerce.number().int().min(1).max(10_000).default(20),
   // Lido também pelo motor (`@olly/engine`); validado aqui para falhar cedo.
   OLLY_DEFAULT_MAX_PARALLEL: z.coerce.number().int().min(1).max(1000).default(8),
+  // Spec 007: teto global de iterações por laço e endereço público (link no workflow de erro).
+  OLLY_MAX_LOOP_ITERATIONS: z.coerce.number().int().min(1).max(1_000_000).default(10_000),
+  OLLY_PUBLIC_URL: z.url({ protocol: /^https?$/ }).default('http://localhost:5173'),
 });
 
 export interface AppConfig {
@@ -93,7 +96,11 @@ export interface AppConfig {
     workflowTimeoutMs: number;
     /** Paralelismo padrão entre nós (`settings.maxParallel` prevalece). */
     defaultMaxParallel: number;
+    /** Teto global de iterações por laço (spec 007, NFR-001). */
+    maxLoopIterations: number;
   };
+  /** Endereço público do Olly Flow (links como `execution.url` do workflow de erro). */
+  publicUrl: string;
   credentials: { keyProvider: 'env'; masterKey: string };
   http: { allowlist: string[]; maxResponseBytes: number };
   postgres: { poolMax: number };
@@ -166,7 +173,9 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
       timezone: e.OLLY_TIMEZONE,
       workflowTimeoutMs: Math.floor(e.OLLY_DEFAULT_WORKFLOW_TIMEOUT * 1000),
       defaultMaxParallel: e.OLLY_DEFAULT_MAX_PARALLEL,
+      maxLoopIterations: e.OLLY_MAX_LOOP_ITERATIONS,
     },
+    publicUrl: e.OLLY_PUBLIC_URL.replace(/\/+$/, ''),
     credentials: { keyProvider: e.OLLY_KEY_PROVIDER, masterKey: e.OLLY_MASTER_KEY },
     http: {
       allowlist: e.OLLY_HTTP_ALLOWLIST.split(',')
