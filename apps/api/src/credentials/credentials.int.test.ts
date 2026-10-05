@@ -199,6 +199,10 @@ describe('spec 004 — FR-002/FR-007: API de credenciais e permissões', () => {
       'httpQueryAuth',
       'oauth2ClientCredentials',
       'postgres',
+      // Spec 005: autenticação de webhooks recebidos.
+      'webhookBasicAuth',
+      'webhookHeaderAuth',
+      'webhookHmac',
     ]);
     expect(
       types.find((t) => t.name === 'postgres')?.properties.properties.password?.['x-secret'],

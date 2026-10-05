@@ -140,6 +140,54 @@ export const postgresCredential: CredentialTypeDefinition = {
   },
 };
 
+/** Autenticação de webhooks recebidos (spec 005, FR-004). */
+export const webhookHeaderAuthCredential: CredentialTypeDefinition = {
+  name: 'webhookHeaderAuth',
+  displayName: 'Webhook: header',
+  description: 'O webhook só aceita chamadas com este cabeçalho e valor.',
+  properties: {
+    type: 'object',
+    required: ['name', 'value'],
+    properties: { name: nameField, value: secret('Valor') },
+  },
+};
+
+export const webhookBasicAuthCredential: CredentialTypeDefinition = {
+  name: 'webhookBasicAuth',
+  displayName: 'Webhook: Basic auth',
+  description: 'O webhook exige `Authorization: Basic` com este usuário e senha.',
+  properties: {
+    type: 'object',
+    required: ['user', 'password'],
+    properties: {
+      user: { type: 'string', title: 'Usuário', minLength: 1 },
+      password: secret('Senha'),
+    },
+  },
+};
+
+export const webhookHmacCredential: CredentialTypeDefinition = {
+  name: 'webhookHmac',
+  displayName: 'Webhook: assinatura HMAC',
+  description:
+    'O webhook exige um cabeçalho com o HMAC do corpo (aceita o prefixo `sha256=`, como no GitHub).',
+  properties: {
+    type: 'object',
+    required: ['secret'],
+    properties: {
+      secret: secret('Segredo'),
+      headerName: { type: 'string', title: 'Cabeçalho', minLength: 1, default: 'X-Signature' },
+      algorithm: {
+        type: 'string',
+        title: 'Algoritmo',
+        enum: ['sha256', 'sha1', 'sha512'],
+        default: 'sha256',
+      },
+      encoding: { type: 'string', title: 'Codificação', enum: ['hex', 'base64'], default: 'hex' },
+    },
+  },
+};
+
 export const builtinCredentialTypes: readonly CredentialTypeDefinition[] = [
   httpBearerCredential,
   httpBasicCredential,
@@ -147,6 +195,9 @@ export const builtinCredentialTypes: readonly CredentialTypeDefinition[] = [
   httpQueryAuthCredential,
   oauth2ClientCredentialsCredential,
   postgresCredential,
+  webhookHeaderAuthCredential,
+  webhookBasicAuthCredential,
+  webhookHmacCredential,
 ];
 
 /** Tipos usados pelo `http.request` (autenticação por credencial). */

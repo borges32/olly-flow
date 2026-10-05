@@ -11,6 +11,9 @@ Cada nó vive em `packages/nodes/src/<categoria>/<nome>/` (`definition.ts`, `exe
 | `http.request` | Requisição HTTP | 004 | [http.request.md](http.request.md) |
 | `postgres.query` | PostgreSQL: consulta | 004 | [postgres.query.md](postgres.query.md) |
 | `postgres.write` | PostgreSQL: gravar | 004 | [postgres.write.md](postgres.write.md) |
+| `trigger.webhook` | Webhook | 005 | [trigger.webhook.md](trigger.webhook.md) |
+| `http.respondToWebhook` | Responder ao webhook | 005 | [http.respondToWebhook.md](http.respondToWebhook.md) |
+| `code.javascript` | Código (JavaScript) | 005 | [code.javascript.md](code.javascript.md) |
 
 Os nós de integração recebem as dependências da API por `createBuiltinNodes({ httpGuard, httpMaxResponseBytes, pools })`: filtro anti-SSRF com a allowlist, limite de resposta e pools Postgres. Credenciais: [docs/credenciais.md](../credenciais.md).
 
@@ -40,6 +43,7 @@ Use `title` (rótulo), `description` (ajuda abaixo do campo) e `default` (valor 
 | `x-hidden` | Parâmetro aceito, mas não exibido no editor (ex.: aliases legados). |
 | `x-no-expression` | Campo sem modo expressão: o editor não oferece o alternador e o salvamento recusa valor iniciado por `=` (erro `EXPRESSION_NOT_ALLOWED`). Ex.: SQL do `postgres.query` (spec 004). |
 | `x-multiline` | Área de texto em vez de linha única (spec 004). |
+| `x-code-editor` | Campo editado no editor de código (Monaco), com autocomplete das variáveis e dos nós. Valor: a linguagem (`javascript`) (spec 005). |
 | `x-load-options` | Opções buscadas no catálogo do banco da credencial do nó: `postgresSchemas`, `postgresTables` (do `schema` irmão) ou `postgresColumns` (de `schema` e `table`). Sem credencial, o campo vira texto (spec 004). |
 
 Exemplo:

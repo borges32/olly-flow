@@ -14,8 +14,9 @@
 | `workflows` | Cabeçalho do workflow; `version` = última versão salva | 002 | `published_version`, `active` (005); `error_workflow_id` (007) |
 | `workflow_versions` | Definição completa (JSONB) por versão | 002 | Mensagem de versão (009) |
 | `webhooks` | Rotas `path` + método → workflow/nó | 002 / 005 | Ativadas na publicação |
-| `executions` | Execução de workflow | 003 | **Particionada por mês** (`olly_ensure_partitions`). `project_id` copiado do workflow. `trace_id` (012), `parent_execution_id` (008) |
-| `node_executions` | Execução de cada nó (por `run_index`) | 003 | **Particionada por mês**. `input_sources` (origem dos itens, para *paired items*), `pinned`, `reused` (saída reaproveitada de execução anterior, FR-020), `data_truncated`. Dados mascarados na spec 009 |
+| `executions` | Execução de workflow | 003 | **Particionada por mês** (`olly_ensure_partitions`). `project_id` copiado do workflow. `definition` (definição executada, spec 005). `trace_id` (012), `parent_execution_id` (008) |
+| `node_executions` | Execução de cada nó (por `run_index`) | 003 | **Particionada por mês**. `input_sources` (origem dos itens, para *paired items*), `pinned`, `reused` (saída reaproveitada de execução anterior, FR-020), `data_truncated`, `console` (saída do nó de código, spec 005). Dados mascarados na spec 009 |
+| `workflows.published_version`, `workflows.active` | Versão em produção e se as rotas estão ativas (spec 005, `0006_publish_console`) | 005 | |
 | `credentials` | Credenciais cifradas por projeto (`data_encrypted` = envelope AES-256-GCM, `key_version` da chave mestra); nome único no projeto | 004 | Ver [docs/credenciais.md](../credenciais.md) |
 | `execution_payloads` | Payload do gatilho para o worker | 006 | Ou object storage se grande |
 | `execution_state` | Estado serializado para retomada (`waiting`) | 008 | Usado por Wait e aprovação humana |

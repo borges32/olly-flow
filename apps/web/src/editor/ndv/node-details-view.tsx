@@ -13,6 +13,23 @@ import { useEditorStore } from '../store';
 import { DataPanel, type DragSource } from './data-views';
 import { ExpressionContext, type ExpressionHelpers } from './expression-context';
 
+/** Saída do `console` do nó de código (spec 005, FR-012). */
+function ConsoleOutput({ lines }: { lines: string[] | undefined }) {
+  if (!lines || lines.length === 0) return null;
+  return (
+    <section
+      aria-label="Console"
+      data-testid="ndv-console"
+      className="max-h-48 shrink-0 overflow-y-auto border-t"
+    >
+      <h4 className="sticky top-0 bg-background px-3 py-1.5 text-xs font-semibold">
+        Console ({lines.length})
+      </h4>
+      <pre className="px-3 pb-2 font-mono text-xs whitespace-pre-wrap">{lines.join('\n')}</pre>
+    </section>
+  );
+}
+
 /** Ancestores do nó (para escolher a origem dos dados e sugerir `$('Nó')`). */
 function ancestorsOf(nodeId: string, edges: { from: string; to: string }[]): string[] {
   const seen = new Set<string>();
@@ -91,6 +108,7 @@ export function NodeDetailsView({
   workflowId,
   readOnly,
   projectId,
+  published,
   canExecute,
   onRunToNode,
   onClose,
@@ -100,6 +118,7 @@ export function NodeDetailsView({
   workflowId: string;
   readOnly: boolean;
   projectId: string;
+  published: boolean;
   canExecute: boolean;
   onRunToNode: (nodeId: string) => void;
   onClose: () => void;
@@ -197,6 +216,11 @@ export function NodeDetailsView({
           onFocusOutside={(e) => {
             e.preventDefault();
           }}
+          // Esc no editor de código fecha as sugestões do Monaco, não o painel (spec 005).
+          onEscapeKeyDown={(e) => {
+            if (e.target instanceof Element && e.target.closest('.monaco-editor'))
+              e.preventDefault();
+          }}
           className="fixed inset-4 z-50 flex flex-col overflow-hidden rounded-lg border bg-background shadow-lg"
         >
           <header className="flex items-center gap-2 border-b px-4 py-2">
@@ -259,6 +283,9 @@ export function NodeDetailsView({
                   description={description}
                   readOnly={readOnly}
                   projectId={projectId}
+                  workflowId={workflowId}
+                  canExecute={canExecute}
+                  published={published}
                 />
               </ExpressionContext.Provider>
             </div>
@@ -274,72 +301,77 @@ export function NodeDetailsView({
                 }}
               />
             ) : (
-              <DataPanel
-                title={pinned ? 'Saída (dados fixados)' : 'Saída'}
-                testId="ndv-output"
-                data={outputData}
-                portLabels={portLabels}
-                truncated={!pinned && runOf(node.id)?.dataTruncated}
-                empty={
-                  runOf(node.id)?.error ? (
-                    <span className="text-destructive">{runOf(node.id)?.error?.message}</span>
-                  ) : (
-                    'Execute para ver a saída deste nó.'
-                  )
-                }
-                toolbar={
-                  <div className="flex gap-1">
-                    {canExecute && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={run.status === 'running'}
-                        onClick={() => {
-                          onRunToNode(node.id);
-                        }}
-                      >
-                        <Play /> Executar este nó
-                      </Button>
-                    )}
-                    {!readOnly && pinned && (
-                      <>
+              <div className="flex min-h-0 flex-col">
+                <DataPanel
+                  title={pinned ? 'Saída (dados fixados)' : 'Saída'}
+                  testId="ndv-output"
+                  data={outputData}
+                  portLabels={portLabels}
+                  truncated={!pinned && runOf(node.id)?.dataTruncated}
+                  empty={
+                    runOf(node.id)?.error ? (
+                      <span className="text-destructive">{runOf(node.id)?.error?.message}</span>
+                    ) : runOf(node.id)?.dataRedacted ? (
+                      'Sem a permissão execution:readData: os dados desta execução não são exibidos.'
+                    ) : (
+                      'Execute para ver a saída deste nó.'
+                    )
+                  }
+                  toolbar={
+                    <div className="flex gap-1">
+                      {canExecute && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={run.status === 'running'}
+                          onClick={() => {
+                            onRunToNode(node.id);
+                          }}
+                        >
+                          <Play /> Executar este nó
+                        </Button>
+                      )}
+                      {!readOnly && pinned && (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              setEditingPin(true);
+                            }}
+                          >
+                            Editar
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              store().setPinData(node.id, null);
+                            }}
+                          >
+                            <PinOff /> Desafixar
+                          </Button>
+                        </>
+                      )}
+                      {!readOnly && !pinned && (
                         <Button
                           size="sm"
                           variant="ghost"
+                          title="Fixar estes dados: as próximas execuções usam-nos sem executar o nó"
                           onClick={() => {
-                            setEditingPin(true);
+                            const items = outputData?.[firstPort];
+                            if (items) store().setPinData(node.id, items);
+                            else setEditingPin(true);
                           }}
                         >
-                          Editar
+                          <Pin /> Fixar dados
                         </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => {
-                            store().setPinData(node.id, null);
-                          }}
-                        >
-                          <PinOff /> Desafixar
-                        </Button>
-                      </>
-                    )}
-                    {!readOnly && !pinned && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        title="Fixar estes dados: as próximas execuções usam-nos sem executar o nó"
-                        onClick={() => {
-                          const items = outputData?.[firstPort];
-                          if (items) store().setPinData(node.id, items);
-                          else setEditingPin(true);
-                        }}
-                      >
-                        <Pin /> Fixar dados
-                      </Button>
-                    )}
-                  </div>
-                }
-              />
+                      )}
+                    </div>
+                  }
+                />
+                <ConsoleOutput lines={runOf(node.id)?.console} />
+              </div>
             )}
           </div>
         </DialogPrimitive.Content>

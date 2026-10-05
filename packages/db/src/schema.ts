@@ -53,6 +53,9 @@ export interface WorkflowsTable {
   project_id: string;
   name: string;
   version: Generated<number>;
+  /** Versão em produção (spec 005); `null` = nunca publicado. */
+  published_version: number | null;
+  active: Generated<boolean>;
   deleted_at: Timestamp | null;
   created_by: string | null;
   created_at: GeneratedTimestamp;
@@ -92,6 +95,8 @@ export interface ExecutionsTable {
   finished_at: Timestamp | null;
   /** JSONB: insira com `JSON.stringify`. */
   error: ColumnType<unknown, string | null | undefined, string | null>;
+  /** Definição executada (spec 005): execuções de teste rodam o rascunho não salvo. */
+  definition: ColumnType<unknown, string | null | undefined, string | null>;
 }
 
 export interface NodeExecutionsTable {
@@ -115,6 +120,8 @@ export interface NodeExecutionsTable {
   data_truncated: Generated<boolean>;
   data_ref: string | null;
   error: ColumnType<unknown, string | null | undefined, string | null>;
+  /** Saída do `console` do nó de código (spec 005, FR-012). */
+  console: ColumnType<unknown, string | null | undefined, string | null>;
 }
 
 export interface CredentialsTable {

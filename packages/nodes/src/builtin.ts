@@ -1,3 +1,4 @@
+import { codeJavascriptNode } from './code/javascript/definition.js';
 import { setNode } from './data/set/definition.js';
 import { setVariableNode } from './data/set-variable/definition.js';
 import { OAuth2TokenCache } from './http/auth.js';
@@ -12,7 +13,9 @@ import { createPostgresQueryNode } from './postgres/query/definition.js';
 import { createPostgresWriteNode } from './postgres/write/definition.js';
 import { NodeRegistry } from './registry.js';
 import { createHttpGuard, type HttpGuard } from './shared/http-guard.js';
+import { respondToWebhookNode } from './http/respond-to-webhook/definition.js';
 import { manualTrigger } from './trigger/manual/definition.js';
+import { webhookTrigger } from './trigger/webhook/definition.js';
 import type { NodeDefinition } from './types.js';
 
 /** Dependências dos nós de integração (spec 004, plan §10): a API passa as da sua configuração. */
@@ -42,6 +45,9 @@ export function createBuiltinNodes(options: BuiltinNodeOptions = {}): NodeDefini
     }),
     createPostgresQueryNode({ pools }),
     createPostgresWriteNode({ pools, columns: options.columns ?? new ColumnCache() }),
+    webhookTrigger,
+    respondToWebhookNode,
+    codeJavascriptNode,
   ];
 }
 

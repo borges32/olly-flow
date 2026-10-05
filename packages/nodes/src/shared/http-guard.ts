@@ -59,6 +59,12 @@ function inAllowlist(ip: ipaddr.IPv4 | ipaddr.IPv6, allowlist: Allowlist): boole
   return allowlist.cidrs.some(([net, bits]) => net.kind() === ip.kind() && ip.match(net, bits));
 }
 
+/** O IP está na lista de IPs/CIDRs (ex.: allowlist de IP do webhook, spec 005, FR-006). */
+export function ipInList(address: string, entries: readonly string[]): boolean {
+  if (!ipaddr.isValid(address)) return false;
+  return inAllowlist(normalize(address), parseAllowlist(entries));
+}
+
 /** Motivo do bloqueio, ou `null` se o endereço pode ser acessado. */
 export function blockedReason(address: string, allowlist: Allowlist): string | null {
   if (!ipaddr.isValid(address)) return 'endereço inválido';

@@ -9,6 +9,7 @@ import { NodeIcon } from './node-icon';
 import { NodeSettings } from './node-settings';
 import { ParamOptionsContext } from './param-options';
 import { SchemaForm } from './schema-form';
+import { WebhookPanel } from './webhook-panel';
 import { useEditorStore, type EditorState } from './store';
 
 /**
@@ -20,11 +21,17 @@ export function ParameterPanel({
   description,
   readOnly,
   projectId,
+  workflowId,
+  canExecute,
+  published,
 }: {
   node: WorkflowNode;
   description: NodeDescription | undefined;
   readOnly: boolean;
   projectId: string;
+  workflowId: string;
+  canExecute: boolean;
+  published: boolean;
 }) {
   const [tab, setTab] = useState<'params' | 'settings'>('params');
   const nodes = useEditorStore((s) => s.nodes);
@@ -117,6 +124,14 @@ export function ParameterPanel({
             />
             Desabilitar nó (repassa a entrada sem executar)
           </label>
+          {node.type === 'trigger.webhook' && (
+            <WebhookPanel
+              node={node}
+              workflowId={workflowId}
+              canExecute={canExecute}
+              published={published}
+            />
+          )}
           <CredentialField
             node={node}
             description={description}

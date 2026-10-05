@@ -1,9 +1,9 @@
 # ADR-0008 — Provedor de LLM e camada de IA
 
-**Status:** Proposta — **depende de informação da instituição**
+**Status:** Aceita — **Data**: 04/10/2026
 
-- **Decisão proposta:** nós de IA construídos sobre **LangChain.js / LangGraph.js**, com provedor de LLM **configurável por credencial** (não acoplar a um único fornecedor). MCP via SDK oficial `@modelcontextprotocol/sdk`.
-- **Pendência:** confirmar quais provedores/modelos estão aprovados pela instituição (contratos, LGPD, residência de dados) e se há necessidade de modelos on-premises.
+- **Decisão:** nós de IA construídos sobre **LangChain.js / LangGraph.js**, com provedor de LLM **configurável por credencial** (não acoplar a um único fornecedor). MCP via SDK oficial `@modelcontextprotocol/sdk`.
+- **Decisão:** Permitir modelos da Open AI, Claude, Google
 
 ---
 Índice: [README](README.md)

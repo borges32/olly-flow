@@ -1,6 +1,6 @@
 # Relatório — Spec 004: Credenciais, HTTP Request e PostgreSQL
 
-**Status:** Implementada (com pendência humana não bloqueante; nenhum comando falhando)
+**Status:** Verificada (revisão humana em 04/10/2026)
 **Data:** 04/10/2026
 
 ## Resumo

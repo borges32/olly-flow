@@ -32,7 +32,9 @@ pnpm dev
 
 > **`.env` criado antes da spec 004?** Acrescente `OLLY_MASTER_KEY` (copie do `.env.example` ou gere com `openssl rand -base64 32`): a API não sobe sem a chave mestra das credenciais. Ver [docs/credenciais.md](docs/credenciais.md).
 
-Abra <http://localhost:5173> e entre com um usuário de teste (senha `olly123`). Só `admin@olly.local` (grupo `admin` do IdP) tem acesso global; os demais precisam ser adicionados a um projeto em **Administração** para ver e editar workflows.
+Abra <http://localhost:5173> e entre com um usuário de teste (senha `olly123`).
+
+Webhooks publicados respondem em `http://localhost:5173/webhook/<caminho>` (e `/webhook-test/<caminho>` enquanto o editor escuta), pelo proxy do frontend; direto na API, em `http://localhost:3000/webhook/<caminho>`. Ver [docs/nos/trigger.webhook.md](docs/nos/trigger.webhook.md). Só `admin@olly.local` (grupo `admin` do IdP) tem acesso global; os demais precisam ser adicionados a um projeto em **Administração** para ver e editar workflows.
 
 | Usuário | Papel |
 |---|---|

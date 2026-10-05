@@ -15,6 +15,9 @@ export default defineConfig(({ mode }) => {
     '/health': apiTarget,
     // Eventos de execução em tempo real (socket.io).
     '/socket.io': { target: apiTarget, ws: true },
+    // Webhooks de produção e de teste (spec 005): a URL exibida no editor usa esta origem.
+    '/webhook': apiTarget,
+    '/webhook-test': apiTarget,
   };
 
   return {

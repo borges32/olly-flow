@@ -104,6 +104,10 @@ export interface WorkflowDetail extends WorkflowSummary {
   createdBy: string | null;
   /** Avisos da validação estrutural (ex.: nós órfãos). */
   warnings: WorkflowIssue[];
+  /** Versão em produção (spec 005, FR-001); `null` = nunca publicado. */
+  publishedVersion: number | null;
+  /** Publicado e com as rotas de webhook ativas. */
+  active: boolean;
 }
 
 export interface WorkflowVersionSummary {
@@ -165,6 +169,8 @@ export interface NodeExecutionDetail {
   dataTruncated: boolean;
   input: Record<string, Item[]> | null;
   output: NodeOutput | null;
+  /** Saída do `console` do nó de código (spec 005, FR-012). */
+  console: string[] | null;
   error: NodeExecutionError | null;
 }
 
@@ -181,7 +187,33 @@ export interface ExecutionDetail {
   startedAt: string;
   finishedAt: string | null;
   error: { message: string; nodeId?: string } | null;
+  /** Spec 005, FR-014: sem `execution:readData`, entrada, saída e console vêm omitidos. */
+  dataRedacted: boolean;
+  /** Definição executada (pode ser um rascunho não salvo, nas execuções de teste). */
+  definition: WorkflowDefinition | null;
   nodes: NodeExecutionDetail[];
+}
+
+/** Linha de `GET /executions` (spec 005, FR-013). */
+export interface ExecutionSummary {
+  id: string;
+  workflowId: string;
+  workflowName: string;
+  projectId: string;
+  workflowVersion: number | null;
+  mode: 'test' | 'production';
+  triggerType: string;
+  triggeredBy: string | null;
+  status: ExecutionStatus;
+  startedAt: string;
+  finishedAt: string | null;
+  durationMs: number | null;
+}
+
+/** Paginação por cursor (`started_at`, `id`). */
+export interface ExecutionList {
+  items: ExecutionSummary[];
+  nextCursor: string | null;
 }
 
 /** Eventos do namespace WebSocket `/executions`, sala `execution:<id>` (FR-012). */
@@ -208,7 +240,19 @@ export interface NodeFinishedEvent {
   reused: boolean;
   dataTruncated: boolean;
   data: { input: Record<string, Item[]>; output: NodeOutput };
+  /** Sem `execution:readData`, `data` vem vazio (spec 005, FR-014). */
+  dataRedacted?: boolean;
+  console?: string[];
   error: NodeExecutionError | null;
+}
+
+/** Chamada recebida na URL de teste do webhook (spec 005, FR-007). */
+export interface TestWebhookReceivedEvent {
+  executionId: string;
+  workflowId: string;
+  nodeId: string;
+  /** Item entregue ao gatilho; omitido para quem não tem `execution:readData`. */
+  payload?: Item;
 }
 
 export interface ExecutionFinishedEvent {
@@ -223,6 +267,26 @@ export interface ExecutionEvents {
   nodeStarted: NodeStartedEvent;
   nodeFinished: NodeFinishedEvent;
   executionFinished: ExecutionFinishedEvent;
+  testWebhookReceived: TestWebhookReceivedEvent;
+}
+
+/** `POST /workflows/:id/publish` (spec 005, FR-001). */
+export interface PublishRequest {
+  /** Versão a publicar; padrão: a última salva. */
+  version?: number;
+}
+
+export interface PublishResponse {
+  publishedVersion: number | null;
+  active: boolean;
+  webhooks: { method: string; path: string }[];
+  warnings: WorkflowIssue[];
+}
+
+/** `POST /workflows/:id/listen-test-webhook` (spec 005, FR-007). */
+export interface ListenTestWebhookResponse {
+  webhooks: { nodeId: string; method: string; path: string }[];
+  expiresAt: string;
 }
 
 /** `POST /workflows/:id/expressions/preview` (FR-018). */

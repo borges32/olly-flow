@@ -197,3 +197,4 @@ export class IsolateEvaluator implements ExpressionEvaluator {
     if (session && !session.isolate.isDisposed) session.isolate.dispose();
   }
 }
+export { CodeSandbox, MAX_CONSOLE_LINES, wrapUserCode, type CodeSandboxOptions } from './code.js';

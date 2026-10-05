@@ -22,3 +22,5 @@ overrides:
   fastify: ^5.12.5
   # @nestjs/swagger usa js-yaml 5.x vulnerável a DoS por merge keys.
   'js-yaml@>=5.0.0 <5.4.1': ^5.4.1
+  # monaco-editor 0.57 fixa dompurify 3.4.15 (IN_PLACE + hook: XSS; correção de patch em 3.4.16).
+  'dompurify@<3.4.16': ^3.4.16

@@ -46,6 +46,24 @@ const envSchema = z.object({
   S3_ACCESS_KEY: z.string().min(1).optional(),
   S3_SECRET_KEY: z.string().min(1).optional(),
   S3_BUCKET: z.string().min(1).default('olly'),
+  // Spec 005: despacho, webhooks e código JS.
+  OLLY_MAX_CONCURRENT_EXECUTIONS: z.coerce.number().int().min(1).max(1000).default(10),
+  // Em MB e em segundos.
+  OLLY_WEBHOOK_MAX_BODY: z.coerce.number().positive().max(1024).default(16),
+  OLLY_WEBHOOK_RESPONSE_TIMEOUT: z.coerce.number().positive().max(3600).default(120),
+  OLLY_WEBHOOK_RATE_LIMIT_PER_MIN: z.coerce.number().int().min(1).default(120),
+  OLLY_REQUIRE_WEBHOOK_AUTH: z
+    .enum(['true', 'false', '1', '0'])
+    .default('false')
+    .transform((v) => v === 'true' || v === '1'),
+  OLLY_CODE_TIMEOUT_MS: z.coerce.number().int().min(100).max(600_000).default(30_000),
+  OLLY_CODE_MEMORY_MB: z.coerce.number().int().min(16).max(4096).default(128),
+  // Atrás de proxy reverso (ex.: nginx do compose): usa X-Forwarded-For como IP do cliente
+  // (allowlist de IP do webhook). Só ligue com um proxy confiável na frente.
+  OLLY_TRUST_PROXY: z
+    .enum(['true', 'false', '1', '0'])
+    .default('false')
+    .transform((v) => v === 'true' || v === '1'),
 });
 
 export interface AppConfig {
@@ -53,6 +71,7 @@ export interface AppConfig {
   logLevel: (typeof LOG_LEVELS)[number];
   port: number;
   host: string;
+  trustProxy?: boolean;
   databaseUrl: string;
   redisUrl: string;
   oidc: { issuerUrl: string; discoveryUrl?: string; audience: string; adminGroup: string };
@@ -65,6 +84,14 @@ export interface AppConfig {
   credentials: { keyProvider: 'env'; masterKey: string };
   http: { allowlist: string[]; maxResponseBytes: number };
   postgres: { poolMax: number };
+  dispatcher: { maxConcurrent: number };
+  webhook: {
+    maxBodyBytes: number;
+    responseTimeoutMs: number;
+    rateLimitPerMin: number;
+    requireAuth: boolean;
+  };
+  code: { timeoutMs: number; memoryMb: number };
   s3?: { endpoint: string; region: string; accessKey: string; secretKey: string; bucket: string };
 }
 
@@ -92,6 +119,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     logLevel: e.LOG_LEVEL,
     port: e.API_PORT,
     host: e.API_HOST,
+    trustProxy: e.OLLY_TRUST_PROXY,
     databaseUrl: e.DATABASE_URL,
     redisUrl: e.REDIS_URL,
     oidc: {
@@ -114,6 +142,14 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
       maxResponseBytes: Math.floor(e.OLLY_HTTP_MAX_RESPONSE_MB * 1024 * 1024),
     },
     postgres: { poolMax: e.OLLY_PG_POOL_MAX },
+    dispatcher: { maxConcurrent: e.OLLY_MAX_CONCURRENT_EXECUTIONS },
+    webhook: {
+      maxBodyBytes: Math.floor(e.OLLY_WEBHOOK_MAX_BODY * 1024 * 1024),
+      responseTimeoutMs: Math.floor(e.OLLY_WEBHOOK_RESPONSE_TIMEOUT * 1000),
+      rateLimitPerMin: e.OLLY_WEBHOOK_RATE_LIMIT_PER_MIN,
+      requireAuth: e.OLLY_REQUIRE_WEBHOOK_AUTH,
+    },
+    code: { timeoutMs: e.OLLY_CODE_TIMEOUT_MS, memoryMb: e.OLLY_CODE_MEMORY_MB },
     ...(e.S3_ENDPOINT &&
       e.S3_ACCESS_KEY &&
       e.S3_SECRET_KEY && {

@@ -1,0 +1,25 @@
+{
+  "nodes": [
+    {
+      "id": "webhook",
+      "type": "trigger.webhook",
+      "name": "Webhook",
+      "params": { "httpMethod": "POST", "path": "pedidos", "responseMode": "lastNode" },
+      "position": [0, 0]
+    },
+    {
+      "id": "calcular",
+      "type": "code.javascript",
+      "name": "Calcular",
+      "params": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const itens = $input.first().json.body.itens;\nconst total = itens.reduce((soma, i) => soma + i.q * i.p, 0);\nreturn [{ json: { total, quantidade: itens.length } }];"
+      },
+      "position": [260, 0]
+    }
+  ],
+  "edges": [
+    { "id": "e1", "from": "webhook", "fromPort": "main", "to": "calcular", "toPort": "main" }
+  ],
+  "settings": {}
+}

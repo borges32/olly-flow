@@ -11,10 +11,11 @@ import { EditorPage } from '@/editor/editor-page';
 import { AdminPage } from '@/pages/admin-page';
 import { AuthCallbackPage } from '@/pages/auth-callback-page';
 import { CredentialsPage } from '@/pages/credentials-page';
+import { ExecutionPage } from '@/pages/execution-page';
+import { ExecutionsPage } from '@/pages/executions-page';
 import { HomePage } from '@/pages/home-page';
 import { NotFoundPage } from '@/pages/not-found-page';
 import { WorkflowsPage } from '@/pages/workflows-page';
-import { PlaceholderPage } from '@/pages/placeholder-page';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -36,7 +37,8 @@ const router = createBrowserRouter([
           { index: true, element: <HomePage /> },
           { path: 'workflows', element: <WorkflowsPage /> },
           { path: 'workflows/:id', element: <EditorPage /> },
-          { path: 'executions', element: <PlaceholderPage title="Execuções" spec="003" /> },
+          { path: 'executions', element: <ExecutionsPage /> },
+          { path: 'executions/:id', element: <ExecutionPage /> },
           { path: 'credentials', element: <CredentialsPage /> },
           { path: 'admin', element: <AdminPage /> },
           { path: '*', element: <NotFoundPage /> },

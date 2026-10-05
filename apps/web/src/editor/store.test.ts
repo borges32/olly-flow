@@ -25,6 +25,8 @@ const workflow: WorkflowDetail = {
   createdBy: null,
   warnings: [],
   definition: { nodes: [], edges: [], settings: {} },
+  publishedVersion: null,
+  active: false,
 };
 
 const store = () => useEditorStore.getState();
@@ -236,5 +238,48 @@ describe('spec 004 — FR-007/FR-017: credencial e configurações do nó', () =
     });
     store().updateNode(id, { settings: undefined });
     expect(store().definition().nodes[0]).not.toHaveProperty('settings');
+  });
+});
+
+describe('spec 005 — FR-012/FR-014: console e dados omitidos na execução', () => {
+  it('FR-012/FR-014: o evento leva o console; sem readData, o nó fica marcado como sem dados', () => {
+    store().runStarted('exec-c');
+    store().nodeFinished({
+      executionId: 'exec-c',
+      nodeId: 'code',
+      status: 'success',
+      itemsIn: 1,
+      itemsOut: 1,
+      durationMs: 3,
+      pinned: false,
+      reused: false,
+      dataTruncated: false,
+      data: { input: {}, output: {} },
+      console: ['olá'],
+      error: null,
+    });
+    expect(store().run.nodes.code?.console).toEqual(['olá']);
+    store().nodeFinished({
+      executionId: 'exec-c',
+      nodeId: 'outro',
+      status: 'success',
+      itemsIn: 1,
+      itemsOut: 1,
+      durationMs: 3,
+      pinned: false,
+      reused: false,
+      dataTruncated: false,
+      dataRedacted: true,
+      data: { input: {}, output: {} },
+      error: null,
+    });
+    expect(store().run.nodes.outro?.dataRedacted).toBe(true);
+  });
+
+  it('FR-007: estado da escuta do webhook de teste', () => {
+    store().setWebhookListening('2026-10-04T12:00:00.000Z');
+    expect(store().webhookListening).toBe('2026-10-04T12:00:00.000Z');
+    store().reset();
+    expect(store().webhookListening).toBeNull();
   });
 });

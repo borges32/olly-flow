@@ -4,6 +4,7 @@ import type {
   NodeFinishedEvent,
   NodeStartedEvent,
   TestRunResponse,
+  TestWebhookReceivedEvent,
 } from '@olly/shared-types';
 import { useCallback, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
@@ -77,6 +78,19 @@ export function useTestRun(workflowId: string) {
         else toast.error('Execução com erro', { description: e.error?.message });
       });
     };
+    // Spec 005, FR-007: a chamada de teste inicia uma execução que o editor ainda não conhece.
+    const onTestWebhook = (e: TestWebhookReceivedEvent) => {
+      if (e.workflowId !== workflowId) return;
+      const signatures = store().webhookSignatures;
+      store().setWebhookListening(null);
+      // Execução até o Webhook: mantém o que não depende dele e permite reaproveitá-lo depois.
+      store().runStarted(e.executionId, { signatures, destinationNodeId: e.nodeId });
+      for (const apply of pending.get(e.executionId) ?? []) apply(e.executionId);
+      pending.delete(e.executionId);
+      toast.success('Chamada de teste recebida', {
+        description: 'Execute os próximos nós pelo botão ▶ de cada nó.',
+      });
+    };
     const joinWorkflow = () => {
       socket.emit('joinWorkflow', { workflowId });
     };
@@ -84,12 +98,14 @@ export function useTestRun(workflowId: string) {
     socket.on('nodeStarted', onNodeStarted);
     socket.on('nodeFinished', onNodeFinished);
     socket.on('executionFinished', onFinished);
+    socket.on('testWebhookReceived', onTestWebhook);
     socket.on('connect', joinWorkflow);
     if (socket.connected) joinWorkflow();
     return () => {
       socket.off('nodeStarted', onNodeStarted);
       socket.off('nodeFinished', onNodeFinished);
       socket.off('executionFinished', onFinished);
+      socket.off('testWebhookReceived', onTestWebhook);
       socket.off('connect', joinWorkflow);
       socket.emit('leaveWorkflow', { workflowId });
       pending.clear();

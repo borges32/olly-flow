@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| **Status** | Aprovada |
+| **Status** | Implementada |
 | **Fase** | 1 — MVP |
 | **Depende de** | 004 |
 | **Requisitos de produto** | PR-06, PR-07, PR-08, PR-09, PR-17 (parcial), PR-19 (parcial) |
@@ -32,6 +32,9 @@ Como **sistema externo**, quero acionar um workflow publicado por uma URL autent
 ### HU-2 — Testar webhook no editor (P1)
 
 Como **editor**, quero escutar uma chamada de teste e ver o payload chegar no editor.
+
+**Cenários de aceite:**
+1. **Dado** que cliquei em "Escutar chamada de teste" no nó Webhook, **quando** a URL de teste recebe uma chamada, **então** só o nó Webhook executa, com o payload recebido, e os nós seguintes esperam que eu os execute um a um (botão de executar do nó), reaproveitando esse payload.
 
 ### HU-3 — Código JavaScript (P1)
 
@@ -63,7 +66,7 @@ Como **administrador**, quero evidência automatizada de que cada papel só faz 
 - **FR-004**: O nó `trigger.webhook` DEVE aceitar caminho (com parâmetros), método HTTP e autenticação (nenhuma, header, Basic ou HMAC). A saída DEVE conter headers (sem os sensíveis), params, query e body.
 - **FR-005**: O webhook DEVE suportar os modos de resposta: imediata (202 + id), saída do último nó, e nó de resposta.
 - **FR-006**: O webhook DEVE aplicar limite de tamanho do payload, rate limit por rota e, opcionalmente, CORS e allowlist de IP.
-- **FR-007**: DEVE existir uma URL de teste que, enquanto o editor escuta, entrega o payload ao editor em tempo real.
+- **FR-007**: DEVE existir uma URL de teste que, enquanto o editor escuta, entrega o payload ao editor em tempo real. A escuta iniciada no nó Webhook executa só esse nó (como a execução de um nó, FR-020 da spec 003); os seguintes são executados pelo usuário.
 - **FR-008**: O nó `http.respondToWebhook` DEVE configurar status, headers e corpo (primeiro item, todos os itens, texto, vazio, binário). Apenas a primeira resposta vale.
 - **FR-009**: O nó `code.javascript` DEVE executar código de usuário isolado, nos modos "uma vez para todos os itens" e "uma vez por item", com a API do N8N, `console.log` capturado e suporte a `async/await`.
 - **FR-010**: O código JS NÃO DEVE ter acesso a módulos, processo, rede ou sistema de arquivos, e DEVE respeitar limites de memória e tempo.
@@ -116,3 +119,4 @@ Fila/workers, paralelismo, Merge, While, Python, cron, OAuth2 Authorization Code
 |---|---|---|
 | 03/10/2026 | Criação a partir do prompt da Sprint 4 | Migração para SDD |
 | 03/10/2026 | Permissões RBAC explicitadas no plano (seção e tarefa T089), sem mudança de requisito | Decisão humana sobre permissões por spec |
+| 05/10/2026 | HU-2.1 e FR-007: a escuta iniciada no nó executa só o Webhook | Teste de UX: a chamada de teste disparava o fluxo inteiro; esperado comportamento do N8N |

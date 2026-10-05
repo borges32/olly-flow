@@ -1,11 +1,13 @@
 import type { BinaryRef, WorkflowNode } from '@olly/shared-types';
 import type { ResolvedCredential } from '../credentials/definitions.js';
-import type { NodeContext } from '../types.js';
+import type { CodeMode, NodeContext, WebhookResponse } from '../types.js';
 
 export interface FakeContext extends NodeContext {
   secrets: string[];
   logs: string[];
   binaries: Map<string, Uint8Array>;
+  /** Respostas de webhook pedidas pelo nó (a primeira vale). */
+  responses: WebhookResponse[];
 }
 
 /**
@@ -17,7 +19,9 @@ export function fakeContext(options: {
   node?: Partial<WorkflowNode>;
   credential?: ResolvedCredential;
   signal?: AbortSignal;
+  runCode?: (request: { code: string; mode: CodeMode }) => Promise<unknown>;
 }): FakeContext {
+  const responses: WebhookResponse[] = [];
   const perItem = Array.isArray(options.params) ? options.params : undefined;
   const base = perItem ? (perItem[0] ?? {}) : (options.params as Record<string, unknown>);
   const secrets: string[] = [];
@@ -64,8 +68,14 @@ export function fakeContext(options: {
         secrets.push(value);
       },
     },
+    runCode: options.runCode ?? (() => Promise.reject(new Error('sem sandbox de código'))),
+    respondToWebhook: (response) => {
+      responses.push(response);
+      return responses.length === 1;
+    },
     secrets,
     logs,
     binaries,
+    responses,
   };
 }

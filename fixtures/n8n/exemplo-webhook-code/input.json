@@ -1,0 +1,18 @@
+{
+  "trigger": "Webhook",
+  "items": [
+    {
+      "json": {
+        "headers": { "content-type": "application/json" },
+        "params": {},
+        "query": {},
+        "body": {
+          "itens": [
+            { "q": 2, "p": 5 },
+            { "q": 3, "p": 10 }
+          ]
+        }
+      }
+    }
+  ]
+}

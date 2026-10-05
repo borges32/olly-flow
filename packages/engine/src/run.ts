@@ -1,12 +1,15 @@
 import {
+  NodeExecutionError,
   errorJson,
+  type CodeMode,
   type NodeContext,
   type NodeDefinition,
   type NodeLogger,
   type NodeRegistry,
   type ResolvedCredential,
+  type WebhookResponse,
 } from '@olly/nodes';
-import type { ExpressionEvaluator } from '@olly/expressions';
+import { findCodeReferences, type CodeRunner, type ExpressionEvaluator } from '@olly/expressions';
 import type {
   BinaryRef,
   Item,
@@ -14,7 +17,12 @@ import type {
   WorkflowDefinition,
   WorkflowNode,
 } from '@olly/shared-types';
-import { resolveNodeParams, type ExpressionScope, type ParamResolver } from './expressions.js';
+import {
+  buildExpressionData,
+  resolveNodeParams,
+  type ExpressionScope,
+  type ParamResolver,
+} from './expressions.js';
 import { fillPairedItems } from './paired.js';
 import { redactSecrets } from './redact.js';
 import { ExecutionState, type NodeRunStatus, type SourceRef } from './state.js';
@@ -36,6 +44,8 @@ export interface NodeRunRecord {
   reused: boolean;
   /** Tentativas feitas (spec 004, FR-017): 1 sem retry. */
   attempts: number;
+  /** Saída do `console` do nó de código (spec 005, FR-012). */
+  console?: string[];
   itemsIn: number;
   itemsOut: number;
 }
@@ -104,6 +114,10 @@ export interface RunOptions {
   timezone?: string;
   credentials?: CredentialResolver;
   binary?: BinaryStore;
+  /** Sandbox do nó de código (task runner, spec 005). */
+  codeRunner?: CodeRunner;
+  /** Recebe a resposta do webhook (nó "Responder ao webhook"); chamado no máximo uma vez. */
+  onWebhookResponse?: (response: WebhookResponse) => void;
   signal?: AbortSignal;
   logger?: NodeLogger;
   callbacks?: RunCallbacks;
@@ -144,6 +158,8 @@ interface ContextDeps {
   secrets: Set<string>;
   signal: AbortSignal;
   logger: NodeLogger;
+  runCode: NodeContext['runCode'];
+  respondToWebhook: NodeContext['respondToWebhook'];
 }
 
 function createContext({
@@ -155,6 +171,8 @@ function createContext({
   secrets,
   signal,
   logger,
+  runCode,
+  respondToWebhook,
 }: ContextDeps): NodeContext {
   const binary = () => options.binary ?? unavailable('Armazenamento de binários');
   return {
@@ -180,6 +198,8 @@ function createContext({
     },
     signal,
     logger,
+    runCode,
+    respondToWebhook,
     helpers: {
       pairedItem: (item, itemIndex, input) => ({
         ...item,
@@ -390,7 +410,44 @@ export async function runWorkflow(
   let failure: RunResult['error'];
   const secrets = new Set<string>();
   const logger = redactingLogger(options.logger ?? noopLogger, secrets);
-  const finish = (record: NodeRunRecord) => cb.onNodeFinish?.(redactSecrets(record, secrets));
+  const consoleByNode = new Map<string, string[]>();
+  const finish = (record: NodeRunRecord) => {
+    const lines = consoleByNode.get(record.nodeId);
+    return cb.onNodeFinish?.(
+      redactSecrets(lines ? { ...record, console: lines } : record, secrets),
+    );
+  };
+  let responded = false;
+  const respondToWebhook = (response: WebhookResponse): boolean => {
+    if (responded) return false;
+    responded = true;
+    options.onWebhookResponse?.(response);
+    return true;
+  };
+  /** Nó de código (spec 005): contexto como o das expressões, com os nós citados no código. */
+  const runCodeFor =
+    (node: WorkflowNode, items: Item[]) =>
+    async ({ code, mode }: { code: string; mode: CodeMode }): Promise<unknown> => {
+      if (!options.codeRunner) return unavailable('Nó de código');
+      const data = buildExpressionData(
+        scoped,
+        registry,
+        state,
+        node,
+        items,
+        [],
+        expressionScope(),
+        findCodeReferences(code),
+      );
+      const result = await options.codeRunner.runCode({ executionId, code, mode, data });
+      consoleByNode.set(node.id, result.console);
+      if (!result.ok) {
+        throw new NodeExecutionError(`Erro no código: ${result.error.message}`, {
+          description: `tipo: ${result.error.kind}`,
+        });
+      }
+      return result.result;
+    };
 
   /**
    * Resolve as expressões e executa o nó com retry, timeout e `onError` (spec 004, FR-017,
@@ -428,6 +485,8 @@ export async function runWorkflow(
               secrets,
               signal,
               logger,
+              runCode: runCodeFor(node, items),
+              respondToWebhook,
             });
             return type.execute({ inputs, items }, ctx);
           },

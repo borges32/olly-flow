@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { IsolateEvaluator } from '@olly/expressions/isolate';
+import { CodeSandbox, IsolateEvaluator } from '@olly/expressions/isolate';
 import { createNodeRegistry } from '@olly/nodes';
 import type { Item, WorkflowDefinition } from '@olly/shared-types';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -16,6 +16,7 @@ const cases = readdirSync(join(root, 'n8n'), { withFileTypes: true })
 
 // Limite folgado: estes testes verificam semântica, não o timeout (ver sandbox.test.ts).
 const evaluator = new IsolateEvaluator({ timeoutMs: 2000 });
+const codeRunner = new CodeSandbox({ timeoutMs: 5000 });
 afterAll(() => {
   evaluator.disposeAll();
 });
@@ -36,6 +37,7 @@ describe('spec 003 — FR-019/SC-002: fixtures aplicáveis', () => {
 
     const result = await runWorkflow(definition, createNodeRegistry(), {
       evaluator,
+      codeRunner,
       ...(trigger && { startNodeId: trigger.id }),
       triggerItems: input.items,
     });

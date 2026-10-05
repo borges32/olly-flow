@@ -27,3 +27,13 @@ export {
 } from './postgres/catalog.js';
 export { createPostgresQueryNode } from './postgres/query/definition.js';
 export { createPostgresWriteNode } from './postgres/write/definition.js';
+export { codeJavascriptNode, DEFAULT_CODE } from './code/javascript/definition.js';
+export { normalizeItems } from './code/javascript/normalize.js';
+export {
+  webhookTrigger,
+  WEBHOOK_AUTH_CREDENTIAL,
+  WEBHOOK_METHODS,
+  WEBHOOK_RESPONSE_MODES,
+} from './trigger/webhook/definition.js';
+export { verifyWebhookAuth, hmacSignature, safeEqual } from './trigger/webhook/auth.js';
+export { respondToWebhookNode } from './http/respond-to-webhook/definition.js';

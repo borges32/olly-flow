@@ -49,6 +49,14 @@ export async function startTestContext(
     credentials: { keyProvider: 'env', masterKey: randomBytes(32).toString('base64') },
     http: { allowlist: [], maxResponseBytes: 50 * 1024 * 1024 },
     postgres: { poolMax: 5 },
+    dispatcher: { maxConcurrent: 10 },
+    webhook: {
+      maxBodyBytes: 16 * 1024 * 1024,
+      responseTimeoutMs: 120_000,
+      rateLimitPerMin: 120,
+      requireAuth: false,
+    },
+    code: { timeoutMs: 30_000, memoryMb: 128 },
     ...overrides,
   };
   const app = await createApp(config, options);

@@ -62,3 +62,29 @@ export interface ExpressionEvaluator {
   /** Libera o isolate da execução. */
   disposeExecution(executionId: string): Promise<void>;
 }
+
+/** Modos do nó de código (spec 005, FR-009), com os nomes do N8N. */
+export type CodeMode = 'runOnceForAllItems' | 'runOnceForEachItem';
+
+export interface RunCodeRequest {
+  executionId: string;
+  code: string;
+  mode: CodeMode;
+  /** Mesmo contexto das expressões (`$input`, `$('Nó')`, `$vars`...), sem congelar. */
+  data: ExpressionData;
+}
+
+export type CodeErrorKind = EvaluationErrorKind | 'crashed';
+
+/**
+ * `result`: retorno do código (uma vez) ou lista com o retorno de cada item (por item), ainda
+ * não normalizado em itens. `console`: linhas do `console.*` (até 500).
+ */
+export type RunCodeResult =
+  | { ok: true; result: unknown; console: string[] }
+  | { ok: false; error: { kind: CodeErrorKind; message: string }; console: string[] };
+
+/** Executa código JavaScript de usuário isolado (task runner; ADR-0003). */
+export interface CodeRunner {
+  runCode(request: RunCodeRequest): Promise<RunCodeResult>;
+}

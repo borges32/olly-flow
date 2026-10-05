@@ -73,7 +73,7 @@ export interface NodeDefinition {
 }
 ```
 
-`NodeContext` oferece, entre outros: `getParam(name, itemIndex)` (com expressões já resolvidas para o item; erros de expressão são lançados como `ExpressionError` na leitura), `setVariable(name, value)` (variável da execução, lida em `$vars`; spec 003), `getCredential()` (spec 004: devolve `{ id, type, data, updatedAt }`, a credencial do nó decifrada e verificada contra o projeto do workflow), `signal` (`AbortSignal`, abortado pelo timeout do nó ou pelo cancelamento), `logger` e `helpers` (paired items, binários no object storage e `registerSecret(valor)`, que inclui um segredo derivado, como um token OAuth2, no mascaramento). `NodeExecuteInput` traz `inputs` (itens por porta) e `items` (atalho para `inputs.main`).
+`NodeContext` oferece, entre outros: `getParam(name, itemIndex)` (com expressões já resolvidas para o item; erros de expressão são lançados como `ExpressionError` na leitura), `setVariable(name, value)` (variável da execução, lida em `$vars`; spec 003), `getCredential()` (spec 004: devolve `{ id, type, data, updatedAt }`, a credencial do nó decifrada e verificada contra o projeto do workflow), `signal` (`AbortSignal`, abortado pelo timeout do nó ou pelo cancelamento), `logger`, `helpers` (paired items, binários no object storage e `registerSecret(valor)`, que inclui um segredo derivado, como um token OAuth2, no mascaramento), `runCode({ code, mode })` (spec 005: código de usuário no task runner com o contexto do nó; o `console` vai para o registro do nó) e `respondToWebhook(resposta)` (spec 005: resposta do webhook; só a primeira vale, as seguintes devolvem `false`). `NodeExecuteInput` traz `inputs` (itens por porta) e `items` (atalho para `inputs.main`).
 
 `NodeRegistry` (`register`, `get(type, version?)`, `list()` sem `execute`) recusa nós cujo `paramsSchema` não seja um JSON Schema draft-07 válido com `type: "object"` na raiz. Palavras-chave desconhecidas são erro; as extensões aceitas são `x-display-options`, `x-secret` e `x-hidden` (ver [docs/nos/README.md](../nos/README.md)).
 
@@ -129,4 +129,11 @@ Matriz por papel: [`docs/rbac-matriz.md`](../rbac-matriz.md), gerada pelo teste 
 - Autenticação no handshake (`auth.token` = access token). Salas, com `execution:read` verificado no projeto a cada pedido (resposta `{ ok: false, error: 'not_found' }` sem permissão):
   - `join { executionId }` → sala `execution:<id>`;
   - `joinWorkflow { workflowId }` → sala `workflow:<id>`, que recebe os eventos de todas as execuções do workflow desde o início (o editor entra ao abrir, antes de conhecer o id da execução).
-- Eventos (tipos `ExecutionEvents` em `@olly/shared-types`): `executionStarted` · `nodeStarted` · `nodeFinished` (status, contagens, duração, dados truncados, `pinned`, `reused`; `runIndex` a partir da spec 007) · `executionFinished` · `agentStep` (spec 011) · `testWebhookReceived` (spec 005).
+- Eventos (tipos `ExecutionEvents` em `@olly/shared-types`): `executionStarted` · `nodeStarted` · `nodeFinished` (status, contagens, duração, dados truncados, `pinned`, `reused`, `console`; `runIndex` a partir da spec 007) · `executionFinished` · `testWebhookReceived` (spec 005: id da execução, nó e o item recebido) · `agentStep` (spec 011).
+- **Dados de execução (spec 005, FR-014):** quem tem `execution:readData` entra na variante `…:data` da sala e recebe os eventos completos; os demais recebem `nodeFinished` sem `data`/`console` (`dataRedacted: true`) e `testWebhookReceived` sem `payload`.
+
+## Despacho de execuções (spec 005)
+
+- `ExecutionDispatcher` (API): `dispatch(job)`, `waitForResult(executionId, timeoutMs, untilResponse?)` e `saturated`. O `ExecutionJob` é serializável (execução, definição, modo, itens do gatilho, nó inicial, pin data, destino, reaproveitamento), para que a fila da spec 006 o leve a um worker.
+- `InProcessDispatcher`: execução no processo da API com no máximo `OLLY_MAX_CONCURRENT_EXECUTIONS`; o excedente fica `queued`.
+- Webhooks: `/webhook/<path>` (publicado) e `/webhook-test/<path>` (escuta do editor), fora de `/api/v1`, com autenticação própria por credencial. Publicação: `POST /workflows/:id/publish { version? }` e `POST /workflows/:id/unpublish` (`workflow:publish`). Escuta: `POST`/`DELETE /workflows/:id/listen-test-webhook` (`workflow:execute`). Execuções: `GET /executions` (filtros e cursor; `execution:read`).

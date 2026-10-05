@@ -52,6 +52,24 @@ describe('configuração da API (validação zod na inicialização)', () => {
     }
   });
 
+  it('spec 005 — NFR-001/NFR-002/FR-003: padrões de webhook, código e concorrência', () => {
+    const config = loadConfig(valid);
+    expect(config.webhook).toEqual({
+      maxBodyBytes: 16 * 1024 * 1024,
+      responseTimeoutMs: 120_000,
+      rateLimitPerMin: 120,
+      requireAuth: false,
+    });
+    expect(config.code).toEqual({ timeoutMs: 30_000, memoryMb: 128 });
+    expect(config.dispatcher.maxConcurrent).toBe(10);
+    expect(loadConfig({ ...valid, OLLY_REQUIRE_WEBHOOK_AUTH: 'true' }).webhook.requireAuth).toBe(
+      true,
+    );
+    expect(() => loadConfig({ ...valid, OLLY_REQUIRE_WEBHOOK_AUTH: 'talvez' })).toThrow(
+      /OLLY_REQUIRE_WEBHOOK_AUTH/,
+    );
+  });
+
   it('spec 004 — FR-008/NFR-001/NFR-002: allowlist, limites e S3 opcional', () => {
     const config = loadConfig({
       ...valid,

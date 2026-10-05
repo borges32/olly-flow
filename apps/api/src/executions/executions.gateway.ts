@@ -10,7 +10,12 @@ import type { Namespace, Socket } from 'socket.io';
 import { Authenticator, type Authentication } from '../auth/authenticator.js';
 import { AbilityFactory, canInProject } from '../rbac/ability.factory.js';
 import { ResourceResolver } from '../rbac/resource-resolver.js';
-import { ExecutionEventsService, executionRoom, workflowRoom } from './execution-events.service.js';
+import {
+  ExecutionEventsService,
+  dataRoom,
+  executionRoom,
+  workflowRoom,
+} from './execution-events.service.js';
 import { joinSchema, joinWorkflowSchema } from './executions.schemas.js';
 
 export type JoinAck = { ok: true } | { ok: false; error: 'invalid' | 'not_found' };
@@ -55,9 +60,10 @@ export class ExecutionsGateway implements OnGatewayInit {
     const auth = this.sessions.get(socket);
     if (!parsed.success || !auth) return { ok: false, error: 'invalid' };
     const { executionId } = parsed.data;
-    if (!(await this.canRead(auth, 'execution', executionId)))
-      return { ok: false, error: 'not_found' };
-    await socket.join(executionRoom(executionId));
+    const access = await this.access(auth, 'execution', executionId);
+    if (!access.read) return { ok: false, error: 'not_found' };
+    const room = executionRoom(executionId);
+    await socket.join(access.readData ? dataRoom(room) : room);
     return { ok: true };
   }
 
@@ -74,9 +80,11 @@ export class ExecutionsGateway implements OnGatewayInit {
     const auth = this.sessions.get(socket);
     if (!parsed.success || !auth) return { ok: false, error: 'invalid' };
     const { workflowId } = parsed.data;
-    if (!(await this.canRead(auth, 'workflow', workflowId)))
-      return { ok: false, error: 'not_found' };
-    await socket.join(workflowRoom(workflowId));
+    const access = await this.access(auth, 'workflow', workflowId);
+    if (!access.read) return { ok: false, error: 'not_found' };
+    const room = workflowRoom(workflowId);
+    // Spec 005, FR-014: sem `execution:readData`, a sala recebe os eventos sem dados.
+    await socket.join(access.readData ? dataRoom(room) : room);
     return { ok: true };
   }
 
@@ -86,20 +94,28 @@ export class ExecutionsGateway implements OnGatewayInit {
     @MessageBody() body: unknown,
   ): Promise<{ ok: boolean }> {
     const parsed = joinWorkflowSchema.safeParse(body);
-    if (parsed.success) await socket.leave(workflowRoom(parsed.data.workflowId));
+    if (parsed.success) {
+      const room = workflowRoom(parsed.data.workflowId);
+      await socket.leave(room);
+      await socket.leave(dataRoom(room));
+    }
     return { ok: parsed.success };
   }
 
-  /** `execution:read` no projeto do recurso, com permissões recalculadas a cada pedido. */
-  private async canRead(
+  /** `execution:read` e `execution:readData` no projeto, com permissões recalculadas a cada pedido. */
+  private async access(
     auth: Authentication,
     kind: 'workflow' | 'execution',
     id: string,
-  ): Promise<boolean> {
+  ): Promise<{ read: boolean; readData: boolean }> {
     const projectId = await this.resources.projectIdFor(kind, id);
-    if (!projectId) return false;
+    if (!projectId) return { read: false, readData: false };
     const user = await this.authenticator.toUser(auth.account, auth.claims);
-    return canInProject(this.abilities.forUser(user), 'execution:read', projectId);
+    const ability = this.abilities.forUser(user);
+    return {
+      read: canInProject(ability, 'execution:read', projectId),
+      readData: canInProject(ability, 'execution:readData', projectId),
+    };
   }
 
   @SubscribeMessage('leave')
@@ -108,7 +124,11 @@ export class ExecutionsGateway implements OnGatewayInit {
     @MessageBody() body: unknown,
   ): Promise<{ ok: boolean }> {
     const parsed = joinSchema.safeParse(body);
-    if (parsed.success) await socket.leave(executionRoom(parsed.data.executionId));
+    if (parsed.success) {
+      const room = executionRoom(parsed.data.executionId);
+      await socket.leave(room);
+      await socket.leave(dataRoom(room));
+    }
     return { ok: parsed.success };
   }
 }

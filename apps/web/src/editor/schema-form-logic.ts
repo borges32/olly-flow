@@ -17,6 +17,8 @@ export type ParamSchema = JSONSchema7 & {
   'x-multiline'?: boolean;
   /** Opções buscadas no catálogo do banco da credencial do nó. */
   'x-load-options'?: LoadOptionsSource;
+  /** Editor de código (spec 005): linguagem. */
+  'x-code-editor'?: string;
 };
 
 export function asSchema(def: JSONSchema7Definition | undefined): ParamSchema {

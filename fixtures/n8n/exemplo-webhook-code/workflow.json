@@ -1,0 +1,33 @@
+{
+  "name": "Exemplo sintético: webhook + código",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "pedidos",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "8d3f0a52-1c1e-4c38-9f2f-0d6a2c1b7e01",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "00000000-0000-4000-8000-000000000001"
+    },
+    {
+      "parameters": {
+        "jsCode": "const itens = $input.first().json.body.itens;\nconst total = itens.reduce((soma, i) => soma + i.q * i.p, 0);\nreturn [{ json: { total, quantidade: itens.length } }];"
+      },
+      "id": "8d3f0a52-1c1e-4c38-9f2f-0d6a2c1b7e02",
+      "name": "Calcular",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [260, 0]
+    }
+  ],
+  "connections": {
+    "Webhook": { "main": [[{ "node": "Calcular", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" }
+}

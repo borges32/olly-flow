@@ -128,8 +128,10 @@ test.describe('spec 002 — editor visual', () => {
     await page.keyboard.press('Control+z');
     await expect(edge).toHaveCount(1);
 
-    // Também pela seleção + Delete, com a conexão selecionada destacada.
-    await edge.click({ force: true });
+    // Também pela seleção + Delete, com a conexão selecionada destacada. O clique fica perto do
+    // início da conexão: no meio dela está o botão de excluir.
+    const box = await edge.boundingBox();
+    await page.mouse.click((box?.x ?? 0) + 12, (box?.y ?? 0) + (box?.height ?? 0) / 2);
     await expect(edge).toHaveClass(/selected/);
     await expect(page.getByRole('button', { name: 'Excluir conexão' })).toBeVisible();
     await page.keyboard.press('Delete');

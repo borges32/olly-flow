@@ -99,6 +99,19 @@
 - **`fixtures.int.test.ts`:** executa cada caso com `input.json` e compara a saída por nó com `expected.json`.
 - Casos não recriáveis são listados no relatório.
 
+### §10 Decisões de implementação (04/10/2026)
+- **Dados (migration `0006_publish_console`):** `workflows.published_version` e `workflows.active`; `executions.definition` (definição executada: execuções de teste rodam o rascunho não salvo, e a tela de execuções mostra o que de fato rodou); `node_executions.console` (saída do `console` do nó de código).
+- **Contrato de nó (constituição IX.3):** `NodeContext.runCode({ code, mode })` executa código de usuário no task runner com os dados do nó (o motor monta o contexto, como nas expressões, e guarda a saída do console no registro do nó); `NodeContext.respondToWebhook(resposta)` grava a resposta do webhook, e só a primeira vale (devolve `false` nas seguintes).
+- **Código JS:** `CodeRunner.runCode` no `@olly/expressions` (isolate novo por execução de nó, 128 MB, `OLLY_CODE_TIMEOUT_MS`), mensagem `runCode` no task runner. Os dados **não** são congelados (no N8N é comum alterar `item.json` e devolver `$input.all()`). `_` vem do bundle UMD do `lodash`. Nomes de nós citados no código são achados por `findCodeReferences` (mesma análise estática das expressões).
+- **Despacho:** `ExecutionDispatcher` recebe um trabalho serializável (`ExecutionJob`: execução, definição, modo, gatilho, itens do gatilho, pin data, destino, reaproveitamento), para que a fila da spec 006 o leve a um worker. `InProcessDispatcher` limita a concorrência e marca o excedente como `queued`. Execuções de teste e de produção passam pelo mesmo despacho.
+- **Gateway de webhooks:** rotas Fastify `/webhook/*` e `/webhook-test/*` registradas num escopo próprio, que recebe o corpo cru (HMAC sobre os bytes recebidos) e fica fora dos guards da API. A resolução usa um casamento simples por segmentos (`:param`), com rota estática antes de rota com parâmetro, sem dependência nova. O rate limit é uma janela fixa em memória por rota (`OLLY_WEBHOOK_RATE_LIMIT_PER_MIN`, padrão 120), também sem dependência nova; com a fila da spec 006, passa a ser distribuído.
+- **Modo `lastNode`:** responde com o JSON do primeiro item do último nó que terminou com dados (padrão `firstEntryJson` do N8N). **Modo `responseNode`:** responde assim que o nó de resposta executa (não espera o fim do workflow); se o workflow terminar sem resposta, 500 com o id da execução.
+- **Webhook de teste:** `POST /api/v1/workflows/:id/listen-test-webhook { definition }` (`workflow:execute`) escuta por 2 min a definição do editor (que pode não estar salva). A primeira chamada consome a escuta, emite `testWebhookReceived` e inicia uma execução de teste pelo nó de webhook. Com `destinationNodeId` igual ao nó de webhook (escuta iniciada no painel do nó, como o "Listen for test event" do N8N), a execução para no Webhook e a chamada recebe 202 com o id da execução, qualquer que seja o modo de resposta; o editor registra o nó com a assinatura da definição escutada, para que o ▶ dos nós seguintes reaproveite o payload (FR-020 da spec 003).
+- **`execution:readData` também no tempo real:** quem não tem a permissão entra numa sala que recebe os eventos sem dados (`dataRedacted: true`). O preview de expressão ignora a execução indicada para quem não tem a permissão.
+- **"Copiar para o editor" (FR-015):** fixa, no rascunho, a saída do nó inicial da execução (o gatilho, com os dados que vieram de fora), como o "Debug in editor" do N8N. Os demais nós executam de novo. Exige `workflow:update` e `execution:readData`.
+- **Matriz RBAC:** `rbac-matrix.int.test.ts` roda contra a API real e escreve `docs/rbac-matriz.md` quando o arquivo não existe ou com `OLLY_UPDATE_RBAC_MATRIX=1`; senão, falha se o conteúdo divergir.
+- **Editor de código:** Monaco empacotado localmente (sem CDN), carregado sob demanda só para o nó de código, com os workers do Vite. A extensão `x-code-editor: "javascript"` de `paramsSchema` indica o campo.
+
 ## Configuração
 
 | Variável | Padrão | Descrição |
@@ -154,3 +167,5 @@ O teste da matriz papel × ação (FR-017) gera `docs/rbac-matriz.md` a partir d
 | Data | Alteração | Motivo |
 |---|---|---|
 | 03/10/2026 | Seção "Permissões RBAC" e tarefa T089 | Decisão humana: cada spec acrescenta e garante as permissões que cria |
+| 04/10/2026 | Decisões de implementação (§10) | Lacunas do plano encontradas ao implementar |
+| 05/10/2026 | Escuta de teste pelo nó executa só o Webhook (`destinationNodeId` na escuta) | Teste de UX (FR-007, HU-2.1) |

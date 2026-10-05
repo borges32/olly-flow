@@ -9,6 +9,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { Logger } from 'nestjs-pino';
 import { AppModule, type AppOptions } from './app.module.js';
 import type { AppConfig } from './config/config.js';
+import { WebhookGateway } from './webhooks/webhook-gateway.js';
 
 const REQUEST_ID = /^[A-Za-z0-9._-]{1,128}$/;
 
@@ -27,7 +28,7 @@ export async function createApp(
 ): Promise<NestFastifyApplication> {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule.forRoot(config, options),
-    new FastifyAdapter({ genReqId: requestId }),
+    new FastifyAdapter({ genReqId: requestId, trustProxy: config.trustProxy ?? false }),
     { bufferLogs: true },
   );
   app.useLogger(app.get(Logger));
@@ -35,6 +36,8 @@ export async function createApp(
   app.useWebSocketAdapter(new IoAdapter(app));
   app.enableShutdownHooks();
   app.setGlobalPrefix('api/v1', { exclude: ['health', 'metrics'] });
+  // Spec 005: /webhook e /webhook-test ficam fora do prefixo e dos guards (autenticação própria).
+  app.get(WebhookGateway).register(app.getHttpAdapter().getInstance());
 
   app
     .getHttpAdapter()

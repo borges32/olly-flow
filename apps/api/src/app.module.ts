@@ -16,6 +16,7 @@ import { HealthModule } from './health/health.module.js';
 import { NodeTypesModule } from './node-types/node-types.module.js';
 import { ProjectsModule } from './projects/projects.module.js';
 import { UsersModule } from './users/users.module.js';
+import { WebhooksModule } from './webhooks/webhooks.module.js';
 import { WorkflowsModule } from './workflows/workflows.module.js';
 
 export interface AppOptions {
@@ -64,6 +65,7 @@ export class AppModule {
         WorkflowsModule,
         ExpressionsModule,
         ExecutionsModule,
+        WebhooksModule,
       ],
       providers: [{ provide: APP_FILTER, useClass: DomainExceptionFilter }],
     };

@@ -6,11 +6,13 @@ import {
   type OnApplicationShutdown,
   type OnModuleInit,
 } from '@nestjs/common';
-import type { ExpressionEvaluator } from '@olly/expressions';
+import type { CodeRunner, ExpressionEvaluator } from '@olly/expressions';
 import { TaskRunnerClient } from '@olly/task-runner';
 import { APP_CONFIG, type AppConfig } from '../config/config.js';
 
 export const EXPRESSION_EVALUATOR = Symbol('EXPRESSION_EVALUATOR');
+/** Sandbox do nó de código (spec 005): o mesmo processo do task runner. */
+export const CODE_RUNNER = Symbol('CODE_RUNNER');
 
 /** Avaliador de expressões: o task runner em processo separado (ADR-0003, plan §2). */
 @Global()
@@ -24,6 +26,8 @@ export const EXPRESSION_EVALUATOR = Symbol('EXPRESSION_EVALUATOR');
         return new TaskRunnerClient({
           timeoutMs: config.execution.expressionTimeoutMs,
           memoryMb: config.execution.isolateMemoryMb,
+          codeTimeoutMs: config.code.timeoutMs,
+          codeMemoryMb: config.code.memoryMb,
           logger: {
             info: (m) => {
               logger.log(m);
@@ -35,8 +39,13 @@ export const EXPRESSION_EVALUATOR = Symbol('EXPRESSION_EVALUATOR');
         });
       },
     },
+    {
+      provide: CODE_RUNNER,
+      inject: [EXPRESSION_EVALUATOR],
+      useFactory: (runner: TaskRunnerClient): CodeRunner => runner,
+    },
   ],
-  exports: [EXPRESSION_EVALUATOR],
+  exports: [EXPRESSION_EVALUATOR, CODE_RUNNER],
 })
 export class ExpressionsModule implements OnModuleInit, OnApplicationShutdown {
   private readonly logger = new Logger(ExpressionsModule.name);

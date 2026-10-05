@@ -47,6 +47,10 @@ export interface NodeRunView {
   error: NodeExecutionError | null;
   input?: Record<string, Item[]>;
   output?: NodeOutput;
+  /** Saída do `console` do nó de código (spec 005, FR-012). */
+  console?: string[];
+  /** Sem `execution:readData`, os dados não vêm (spec 005, FR-014). */
+  dataRedacted?: boolean;
   /** Execução que produziu estes dados; pode ser anterior à corrente (FR-020). */
   executionId?: string;
   /** `nodeSignature` do nó quando executou: diferente da atual → dados velhos. */
@@ -101,6 +105,11 @@ export interface EditorState {
   clipboard: Clipboard | null;
   /** Última execução de teste; não entra no histórico de desfazer. */
   run: RunState;
+  /** Escuta do webhook de teste: até quando (ISO), ou `null` (spec 005, FR-007). */
+  webhookListening: string | null;
+  /** Assinaturas da definição escutada: o ▶ dos próximos nós reaproveita o Webhook (HU-2.1). */
+  webhookSignatures: Record<string, string>;
+  setWebhookListening(expiresAt: string | null, signatures?: Record<string, string>): void;
 
   load(workflow: WorkflowDetail): void;
   reset(): void;
@@ -157,6 +166,8 @@ const INITIAL = {
   errors: [],
   warnings: [],
   run: IDLE_RUN,
+  webhookListening: null,
+  webhookSignatures: {},
 } satisfies Partial<EditorState>;
 
 export const useEditorStore = create<EditorState>()((set, get) => {
@@ -198,6 +209,7 @@ export const useEditorStore = create<EditorState>()((set, get) => {
         errors: [],
         warnings: wf.warnings,
         run: IDLE_RUN,
+        webhookListening: null,
       });
     },
 
@@ -369,6 +381,8 @@ export const useEditorStore = create<EditorState>()((set, get) => {
               error: e.error,
               input: e.data.input,
               output: e.data.output,
+              ...(e.console && { console: e.console }),
+              ...(e.dataRedacted && { dataRedacted: true }),
               executionId: e.executionId,
               ...(run.signatures[e.nodeId] !== undefined && {
                 signature: run.signatures[e.nodeId],
@@ -409,6 +423,8 @@ export const useEditorStore = create<EditorState>()((set, get) => {
           error: n.error,
           ...(n.input && { input: n.input }),
           ...(n.output && { output: n.output }),
+          ...(n.console && { console: n.console }),
+          ...(detail.dataRedacted && { dataRedacted: true }),
           executionId: detail.id,
           ...(run.signatures[n.nodeId] !== undefined && { signature: run.signatures[n.nodeId] }),
         };
@@ -424,6 +440,13 @@ export const useEditorStore = create<EditorState>()((set, get) => {
 
     runFailed: (message) => {
       set({ run: { ...get().run, status: 'error', error: message } });
+    },
+
+    setWebhookListening: (expiresAt, signatures) => {
+      set({
+        webhookListening: expiresAt,
+        ...(signatures && { webhookSignatures: signatures }),
+      });
     },
 
     setSelection: (selection) => {

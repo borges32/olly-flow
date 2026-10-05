@@ -1,9 +1,10 @@
 # ADR-0006 — Infraestrutura de execução
 
-**Status:** Proposta — **depende de informação da instituição**
+**Status:** Aceita **Data:** 04/10/2026
 
-- **Decisão proposta:** **Docker Compose** para desenvolvimento e homologação; **Kubernetes (Helm)** em produção, permitindo escalar workers independentemente da API.
-- **Pendência:** confirmar se a instituição já opera Kubernetes (on-premises ou nuvem) e se há restrição de nuvem pública.
+- **Docker Compose** para desenvolvimento.
+- **ARO OpenShift** para homologação e produção
+- ARO Openshit rodando na nuvem AZURE
 
 ---
 Índice: [README](README.md)

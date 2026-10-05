@@ -11,11 +11,11 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import type { NodeDescription } from '@olly/nodes';
-import type { WorkflowDetail } from '@olly/shared-types';
+import type { ExecutionDetail, WorkflowDetail } from '@olly/shared-types';
 import { useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Eye, Loader2, Play, Save } from 'lucide-react';
+import { ArrowLeft, ClipboardCopy, Eye, Loader2, Play, Save } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
-import { Link, useBlocker, useParams } from 'react-router';
+import { Link, useBlocker, useNavigate, useParams, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
 import { ApiError } from '@/api/client';
 import { useApi } from '@/api/api-provider';
@@ -38,6 +38,7 @@ import { NODE_DRAG_MIME, NodePalette } from './node-palette';
 import { NodeDetailsView } from './ndv/node-details-view';
 import { useEditorStore } from './store';
 import { NodeActionsContext, type NodeActions } from './node-actions';
+import { PublishControls } from './publish-controls';
 import { useTestRun } from './use-test-run';
 import { WorkflowEdgeView, type OllyFlowEdge } from './workflow-edge';
 import { WorkflowNodeView, type OllyFlowNode } from './workflow-node';
@@ -49,9 +50,45 @@ const NEW_NODE_GAP = 260;
 /** Editor visual de workflow (spec 002, FR-007/FR-008/FR-015). */
 export function EditorPage() {
   const { id = '' } = useParams();
+  const api = useApi();
+  const [params, setParams] = useSearchParams();
   const workflow = useWorkflow(id);
   const nodeTypesQuery = useNodeTypes();
   const loadedId = useEditorStore((s) => s.workflowId);
+  const pinFrom = params.get('pinFrom');
+
+  // Spec 005, FR-015: "Copiar para o editor" fixa a saída do gatilho da execução no rascunho.
+  useEffect(() => {
+    if (!pinFrom || loadedId !== id) return;
+    setParams({}, { replace: true });
+    api
+      .get<ExecutionDetail>(`/api/v1/executions/${pinFrom}`)
+      .then((detail) => {
+        const store = useEditorStore.getState();
+        const executed = detail.definition;
+        const start = detail.nodes.find(
+          (n) =>
+            store.nodes.some((node) => node.id === n.nodeId) &&
+            !(executed?.edges ?? []).some((e) => e.to === n.nodeId),
+        );
+        const items = start?.output
+          ? Object.values(start.output).find((i) => i.length > 0)
+          : undefined;
+        if (!start || !items) {
+          toast.error('A execução não tem dados do gatilho para copiar');
+          return;
+        }
+        store.setPinData(start.nodeId, items);
+        toast.success(`Dados fixados em "${start.nodeName}"`, {
+          description: 'Salve o workflow para manter os dados fixados.',
+        });
+      })
+      .catch((error: unknown) => {
+        toast.error('Não foi possível copiar os dados da execução', {
+          description: error instanceof Error ? error.message : undefined,
+        });
+      });
+  }, [pinFrom, loadedId, id, api, setParams]);
 
   useEffect(() => {
     if (workflow.data && loadedId !== workflow.data.id)
@@ -82,14 +119,33 @@ export function EditorPage() {
   );
 }
 
-function Editor({ workflow, types }: { workflow: WorkflowDetail; types: NodeDescription[] }) {
+const dateFormat = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'medium' });
+
+/**
+ * Canvas do workflow. Com `execution`, mostra uma execução em modo somente leitura, com os dados
+ * de cada nó (spec 005, FR-013).
+ */
+export function Editor({
+  workflow,
+  types,
+  execution,
+}: {
+  workflow: WorkflowDetail;
+  types: NodeDescription[];
+  execution?: ExecutionDetail;
+}) {
   const api = useApi();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const { theme } = useTheme();
   const flow = useReactFlow();
   const canvasRef = useRef<HTMLDivElement>(null);
-  const readOnly = !useCan('workflow:update', workflow.projectId);
-  const canExecute = useCan('workflow:execute', workflow.projectId);
+  const canUpdate = useCan('workflow:update', workflow.projectId);
+  const canExecuteWorkflow = useCan('workflow:execute', workflow.projectId);
+  const canPublish = useCan('workflow:publish', workflow.projectId);
+  const canReadData = useCan('execution:readData', workflow.projectId);
+  const readOnly = execution !== undefined || !canUpdate;
+  const canExecute = execution === undefined && canExecuteWorkflow;
   const runTest = useTestRun(workflow.id);
   const [ndvNodeId, setNdvNodeId] = useState<string | null>(null);
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
@@ -370,10 +426,25 @@ function Editor({ workflow, types }: { workflow: WorkflowDetail; types: NodeDesc
           className="size-8"
           aria-label="Voltar para a lista"
         >
-          <Link to={`/workflows?project=${workflow.projectId}`}>
+          <Link
+            to={
+              execution
+                ? `/executions?project=${workflow.projectId}`
+                : `/workflows?project=${workflow.projectId}`
+            }
+          >
             <ArrowLeft />
           </Link>
         </Button>
+        {execution && (
+          <Badge
+            data-testid="execution-badge"
+            variant={execution.status === 'success' ? 'default' : 'secondary'}
+          >
+            Execução {execution.mode === 'test' ? 'de teste' : 'de produção'} · {execution.status} ·{' '}
+            {dateFormat.format(new Date(execution.startedAt))}
+          </Badge>
+        )}
         <Input
           aria-label="Nome do workflow"
           className="h-8 max-w-sm font-medium"
@@ -389,6 +460,21 @@ function Editor({ workflow, types }: { workflow: WorkflowDetail; types: NodeDesc
           </span>
         )}
         <div className="flex-1" />
+        {execution && canUpdate && canReadData && !execution.dataRedacted && (
+          <Button
+            size="sm"
+            variant="outline"
+            title="Fixa no rascunho a saída do gatilho desta execução (pin data)"
+            onClick={() => {
+              void navigate(`/workflows/${workflow.id}?pinFrom=${execution.id}`);
+            }}
+          >
+            <ClipboardCopy /> Copiar para o editor
+          </Button>
+        )}
+        {!execution && (
+          <PublishControls workflow={workflow} dirty={dirty} canPublish={canPublish} />
+        )}
         {canExecute && (
           <Button
             size="sm"
@@ -401,7 +487,7 @@ function Editor({ workflow, types }: { workflow: WorkflowDetail; types: NodeDesc
             {running ? 'Executando…' : 'Executar workflow'}
           </Button>
         )}
-        {readOnly ? (
+        {execution ? null : readOnly ? (
           <Badge variant="secondary" data-testid="readonly-badge">
             <Eye className="size-3" /> Somente leitura
           </Badge>
@@ -495,6 +581,7 @@ function Editor({ workflow, types }: { workflow: WorkflowDetail; types: NodeDesc
           workflowId={workflow.id}
           readOnly={readOnly}
           projectId={workflow.projectId}
+          published={workflow.active}
           canExecute={canExecute}
           onRunToNode={(nodeId) => void runTest(nodeId)}
           onClose={() => {

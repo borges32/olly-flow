@@ -27,6 +27,8 @@ export const PARAMS_SCHEMA_EXTENSIONS = [
   'x-no-expression',
   'x-multiline',
   'x-load-options',
+  // Spec 005: campo editado no editor de código (valor: linguagem).
+  'x-code-editor',
 ] as const;
 
 /** Origens de opções dinâmicas (`x-load-options`). */
@@ -60,6 +62,20 @@ export interface NodeHelpers {
   registerSecret(value: string): void;
 }
 
+/** Modos do nó de código (spec 005), com os nomes do N8N. */
+export type CodeMode = 'runOnceForAllItems' | 'runOnceForEachItem';
+
+/** Resposta HTTP do webhook definida pelo nó "Responder ao webhook" (spec 005, FR-008). */
+export interface WebhookResponse {
+  statusCode: number;
+  headers: Record<string, string>;
+  /** `json`: serializado como JSON; `text`: texto; `binary`: referência no object storage. */
+  body?:
+    | { kind: 'json'; value: unknown }
+    | { kind: 'text'; value: string }
+    | { kind: 'binary'; ref: BinaryRef };
+}
+
 export interface NodeContext {
   readonly executionId: string;
   readonly workflowId: string;
@@ -73,6 +89,14 @@ export interface NodeContext {
   readonly signal: AbortSignal;
   readonly logger: NodeLogger;
   readonly helpers: NodeHelpers;
+  /**
+   * Executa código JavaScript de usuário no sandbox (spec 005, FR-009) com os dados do nó;
+   * devolve o retorno bruto (uma vez) ou a lista de retornos por item. A saída do `console` vai
+   * para o registro do nó.
+   */
+  runCode(request: { code: string; mode: CodeMode }): Promise<unknown>;
+  /** Grava a resposta do webhook; só a primeira vale (devolve `false` nas seguintes). */
+  respondToWebhook(response: WebhookResponse): boolean;
 }
 
 export interface NodeDefinition {

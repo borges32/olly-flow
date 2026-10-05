@@ -1,8 +1,8 @@
+import { randomUUID } from 'node:crypto';
 import {
   Inject,
   Injectable,
   Logger,
-  type BeforeApplicationShutdown,
   type OnModuleDestroy,
   type OnModuleInit,
 } from '@nestjs/common';
@@ -11,15 +11,14 @@ import {
   RecordedRun,
   buildExpressionData,
   collectInputs,
-  runWorkflow,
   validateWorkflow,
-  type ReusedNodeRun,
   type SourceRef,
 } from '@olly/engine';
 import { exposedEnv, type ExpressionEvaluator } from '@olly/expressions';
 import type { NodeRegistry } from '@olly/nodes';
 import type {
   ExecutionDetail,
+  ExecutionList,
   ExecutionStatus,
   ExpressionPreviewResponse,
   Item,
@@ -28,30 +27,40 @@ import type {
   TestRunResponse,
   WorkflowDefinition,
 } from '@olly/shared-types';
-import { randomUUID } from 'node:crypto';
 import { sql } from 'kysely';
+import { AuditService, type AuditContext } from '../audit/audit.service.js';
 import type { AuthenticatedUser } from '../auth/auth.types.js';
-import { BINARY_STORAGE } from '../binary/binary.module.js';
-import type { S3BinaryStorage } from '../binary/s3-binary-store.js';
 import { NotFoundError, PermissionDeniedError, UnprocessableError } from '../common/errors.js';
-import { CredentialsService } from '../credentials/credentials.service.js';
-import { hasProjectPermission } from '../rbac/ability.factory.js';
 import { APP_CONFIG, type AppConfig } from '../config/config.js';
 import { DB } from '../core/tokens.js';
 import { EXPRESSION_EVALUATOR } from '../expressions/expressions.module.js';
 import { NODE_REGISTRY } from '../node-types/node-types.module.js';
-import { ExecutionEventsService } from './execution-events.service.js';
-import { ExecutionRecorder } from './execution-recorder.js';
-import type { PreviewBody, TestRunBody } from './executions.schemas.js';
+import { hasProjectPermission } from '../rbac/ability.factory.js';
+import { ExecutionDispatcher } from './dispatcher.js';
+import type { ExecutionJob } from './execution-job.js';
+import type { ListExecutionsQuery, PreviewBody, TestRunBody } from './executions.schemas.js';
 
 const PARTITION_REFRESH_MS = 12 * 60 * 60 * 1000;
 const iso = (d: Date | null) => (d ? d.toISOString() : null);
 
-/** Execução de teste no processo da API (plan §7), log (plan §6) e preview de expressões. */
+/** Execução a iniciar: o que `launch` grava e despacha (spec 005, FR-003). */
+export interface LaunchRequest {
+  workflow: { id: string; name: string; project_id: string; version: number; active?: boolean };
+  /** Versão gravada na execução (publicada, em produção; a salva, nos testes). */
+  version: number;
+  definition: WorkflowDefinition;
+  mode: 'test' | 'production';
+  triggerType: string;
+  triggeredBy: string | null;
+  job?: Partial<
+    Pick<ExecutionJob, 'triggerItems' | 'startNodeId' | 'pinData' | 'destinationNodeId' | 'reuse'>
+  >;
+}
+
+/** Execuções: início (teste e produção), log (FR-013/FR-014) e preview de expressões. */
 @Injectable()
-export class ExecutionsService implements OnModuleInit, OnModuleDestroy, BeforeApplicationShutdown {
+export class ExecutionsService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ExecutionsService.name);
-  private readonly running = new Set<Promise<void>>();
   private partitionTimer?: NodeJS.Timeout;
 
   constructor(
@@ -59,9 +68,8 @@ export class ExecutionsService implements OnModuleInit, OnModuleDestroy, BeforeA
     @Inject(APP_CONFIG) private readonly config: AppConfig,
     @Inject(NODE_REGISTRY) private readonly registry: NodeRegistry,
     @Inject(EXPRESSION_EVALUATOR) private readonly evaluator: ExpressionEvaluator,
-    @Inject(ExecutionEventsService) private readonly events: ExecutionEventsService,
-    @Inject(CredentialsService) private readonly credentials: CredentialsService,
-    @Inject(BINARY_STORAGE) private readonly binaries: S3BinaryStorage | null,
+    @Inject(ExecutionDispatcher) private readonly dispatcher: ExecutionDispatcher,
+    @Inject(AuditService) private readonly audit: AuditService,
   ) {}
 
   onModuleInit(): void {
@@ -74,12 +82,6 @@ export class ExecutionsService implements OnModuleInit, OnModuleDestroy, BeforeA
     clearInterval(this.partitionTimer);
   }
 
-  /** Espera as execuções em andamento antes de fechar o banco. */
-  async beforeApplicationShutdown(): Promise<void> {
-    const timeout = new Promise((resolve) => setTimeout(resolve, 5000).unref());
-    await Promise.race([Promise.allSettled([...this.running]), timeout]);
-  }
-
   private async ensurePartitions(): Promise<void> {
     try {
       await sql`SELECT olly_ensure_partitions(2)`.execute(this.db);
@@ -90,7 +92,7 @@ export class ExecutionsService implements OnModuleInit, OnModuleDestroy, BeforeA
     }
   }
 
-  private validate(definition: WorkflowDefinition): void {
+  validate(definition: WorkflowDefinition): void {
     const { errors } = validateWorkflow(definition, this.registry);
     if (errors.length > 0) {
       throw new UnprocessableError('O workflow tem erros de estrutura', {
@@ -99,13 +101,48 @@ export class ExecutionsService implements OnModuleInit, OnModuleDestroy, BeforeA
     }
   }
 
-  /** FR-011: inicia a execução de teste e devolve o id; o resto acontece em segundo plano. */
+  /**
+   * Grava a execução (com a definição executada) e a despacha (FR-003). Sem vaga, ela fica
+   * `queued` até o dispatcher iniciá-la.
+   */
+  async launch(req: LaunchRequest): Promise<{ executionId: string }> {
+    const execution = await this.db
+      .insertInto('executions')
+      .values({
+        workflow_id: req.workflow.id,
+        project_id: req.workflow.project_id,
+        workflow_version: req.version,
+        mode: req.mode,
+        trigger_type: req.triggerType,
+        triggered_by: req.triggeredBy,
+        status: this.dispatcher.saturated ? 'queued' : 'running',
+        definition: JSON.stringify(req.definition),
+      })
+      .returning('id')
+      .executeTakeFirstOrThrow();
+    this.dispatcher.dispatch({
+      executionId: execution.id,
+      workflow: {
+        id: req.workflow.id,
+        name: req.workflow.name,
+        projectId: req.workflow.project_id,
+        active: req.workflow.active ?? false,
+      },
+      definition: req.definition,
+      mode: req.mode,
+      ...req.job,
+    });
+    return { executionId: execution.id };
+  }
+
+  /** FR-011 (spec 003): execução de teste a partir do editor, auditada (spec 005, FR-016). */
   async startTestRun(
+    ctx: AuditContext,
     user: AuthenticatedUser,
     workflowId: string,
     body: TestRunBody,
+    trigger: { type: string; triggerItems?: Item[]; startNodeId?: string } = { type: 'manual' },
   ): Promise<TestRunResponse> {
-    const userId = user.id;
     this.validate(body.definition);
     const destination = body.destinationNodeId;
     if (destination && !body.definition.nodes.some((n) => n.id === destination)) {
@@ -113,32 +150,33 @@ export class ExecutionsService implements OnModuleInit, OnModuleDestroy, BeforeA
     }
     const workflow = await this.db
       .selectFrom('workflows')
-      .select(['id', 'name', 'version', 'project_id'])
+      .select(['id', 'name', 'version', 'project_id', 'active'])
       .where('id', '=', workflowId)
       .executeTakeFirstOrThrow();
     await this.assertCredentialUse(user, workflow, body);
-    const execution = await this.db
-      .insertInto('executions')
-      .values({
-        workflow_id: workflow.id,
-        project_id: workflow.project_id,
-        workflow_version: workflow.version,
-        mode: 'test',
-        trigger_type: 'manual',
-        triggered_by: userId,
-        status: 'running',
-      })
-      .returning(['id', 'started_at'])
-      .executeTakeFirstOrThrow();
-
-    this.events.emit(
-      'executionStarted',
-      { executionId: execution.id, workflowId, startedAt: execution.started_at.toISOString() },
-      workflowId,
-    );
-    const run = this.run(execution.id, workflow, body).finally(() => this.running.delete(run));
-    this.running.add(run);
-    return { executionId: execution.id };
+    const pinData = body.pinData ?? body.definition.pinData;
+    const { executionId } = await this.launch({
+      workflow,
+      version: workflow.version,
+      definition: body.definition,
+      mode: 'test',
+      triggerType: trigger.type,
+      triggeredBy: user.id,
+      job: {
+        ...(pinData && { pinData }),
+        ...(destination && { destinationNodeId: destination }),
+        ...(body.reuse && { reuse: body.reuse }),
+        ...(trigger.triggerItems && { triggerItems: trigger.triggerItems }),
+        ...(trigger.startNodeId && { startNodeId: trigger.startNodeId }),
+      },
+    });
+    await this.audit.record(this.db, ctx, {
+      action: 'execution.manual',
+      entityType: 'execution',
+      entityId: executionId,
+      details: { workflowId, trigger: trigger.type },
+    });
+    return { executionId };
   }
 
   /**
@@ -191,110 +229,107 @@ export class ExecutionsService implements OnModuleInit, OnModuleDestroy, BeforeA
     }
   }
 
-  /** Logger dos nós (ex.: aviso de `maxRows`), com o id da execução. */
-  private nodeLogger(executionId: string) {
-    const format = (message: string, data?: Record<string, unknown>) =>
-      `${message} ${JSON.stringify({ executionId, ...data })}`;
+  /**
+   * FR-013: execuções com filtros, só dos projetos em que o usuário tem `execution:read`,
+   * paginadas por cursor (`started_at`, `id`), mais recentes primeiro.
+   */
+  async list(user: AuthenticatedUser, query: ListExecutionsQuery): Promise<ExecutionList> {
+    const allowed = user.isAdmin
+      ? null
+      : Object.entries(user.permissions.projects)
+          .filter(([, perms]) => perms.includes('execution:read'))
+          .map(([id]) => id);
+    if (allowed?.length === 0) return { items: [], nextCursor: null };
+    if (query.projectId && allowed && !allowed.includes(query.projectId)) {
+      return { items: [], nextCursor: null };
+    }
+    let cursor: { startedAt: Date; id: string } | undefined;
+    if (query.cursor) {
+      const [ms, id] = Buffer.from(query.cursor, 'base64url').toString('utf8').split('|');
+      if (!ms || !id) throw new UnprocessableError('Cursor inválido');
+      cursor = { startedAt: new Date(Number(ms)), id };
+    }
+    const rows = await this.db
+      .selectFrom('executions as e')
+      .innerJoin('workflows as w', 'w.id', 'e.workflow_id')
+      .select([
+        'e.id',
+        'e.workflow_id',
+        'w.name as workflow_name',
+        'e.project_id',
+        'e.workflow_version',
+        'e.mode',
+        'e.trigger_type',
+        'e.triggered_by',
+        'e.status',
+        'e.started_at',
+        'e.finished_at',
+      ])
+      .$if(allowed !== null, (qb) => qb.where('e.project_id', 'in', allowed ?? []))
+      .$if(query.projectId !== undefined, (qb) =>
+        qb.where('e.project_id', '=', query.projectId ?? ''),
+      )
+      .$if(query.workflowId !== undefined, (qb) =>
+        qb.where('e.workflow_id', '=', query.workflowId ?? ''),
+      )
+      .$if(query.status !== undefined, (qb) => qb.where('e.status', '=', query.status ?? ''))
+      .$if(query.mode !== undefined, (qb) => qb.where('e.mode', '=', query.mode ?? 'test'))
+      .$if(query.trigger !== undefined, (qb) =>
+        qb.where('e.trigger_type', '=', query.trigger ?? ''),
+      )
+      .$if(query.userId !== undefined, (qb) => qb.where('e.triggered_by', '=', query.userId ?? ''))
+      .$if(query.from !== undefined, (qb) =>
+        qb.where('e.started_at', '>=', new Date(query.from ?? 0)),
+      )
+      .$if(query.to !== undefined, (qb) => qb.where('e.started_at', '<=', new Date(query.to ?? 0)))
+      .$if(cursor !== undefined, (qb) =>
+        qb.where((eb) =>
+          eb.or([
+            eb('e.started_at', '<', cursor?.startedAt ?? new Date()),
+            eb.and([
+              eb('e.started_at', '=', cursor?.startedAt ?? new Date()),
+              eb('e.id', '<', cursor?.id ?? ''),
+            ]),
+          ]),
+        ),
+      )
+      .orderBy('e.started_at', 'desc')
+      .orderBy('e.id', 'desc')
+      .limit(query.limit + 1)
+      .execute();
+    const page = rows.slice(0, query.limit);
+    const last = page[page.length - 1];
     return {
-      debug: (m: string, d?: Record<string, unknown>) => {
-        this.logger.debug(format(m, d));
-      },
-      info: (m: string, d?: Record<string, unknown>) => {
-        this.logger.log(format(m, d));
-      },
-      warn: (m: string, d?: Record<string, unknown>) => {
-        this.logger.warn(format(m, d));
-      },
-      error: (m: string, d?: Record<string, unknown>) => {
-        this.logger.error(format(m, d));
-      },
+      items: page.map((r) => ({
+        id: r.id,
+        workflowId: r.workflow_id,
+        workflowName: r.workflow_name,
+        projectId: r.project_id,
+        workflowVersion: r.workflow_version,
+        mode: r.mode,
+        triggerType: r.trigger_type,
+        triggeredBy: r.triggered_by,
+        status: r.status as ExecutionStatus,
+        startedAt: r.started_at.toISOString(),
+        finishedAt: iso(r.finished_at),
+        durationMs: r.finished_at ? r.finished_at.getTime() - r.started_at.getTime() : null,
+      })),
+      nextCursor:
+        rows.length > query.limit && last
+          ? Buffer.from(`${last.started_at.getTime()}|${last.id}`).toString('base64url')
+          : null,
     };
   }
 
-  private async run(
-    executionId: string,
-    workflow: { id: string; name: string; project_id: string },
-    body: TestRunBody,
-  ): Promise<void> {
-    const recorder = new ExecutionRecorder(
-      this.db,
-      this.events,
-      executionId,
-      workflow.id,
-      this.config.execution.nodeDataMaxBytes,
-      this.logger,
-    );
-    try {
-      const runData = body.reuse ? await this.loadReusable(workflow.id, body.reuse) : undefined;
-      await runWorkflow(body.definition, this.registry, {
-        executionId,
-        mode: 'test',
-        workflowId: workflow.id,
-        workflowName: workflow.name,
-        evaluator: this.evaluator,
-        env: exposedEnv(process.env),
-        timezone: this.config.execution.timezone,
-        pinData: body.pinData ?? body.definition.pinData,
-        ...(body.destinationNodeId && { destinationNodeId: body.destinationNodeId }),
-        ...(runData && { runData }),
-        credentials: (node) =>
-          this.credentials.resolveForExecution(workflow.project_id, node.credentialId),
-        ...(this.binaries && { binary: this.binaries.forExecution(executionId) }),
-        logger: this.nodeLogger(executionId),
-        callbacks: recorder.callbacks(),
-      });
-    } catch (error) {
-      // Erros antes de qualquer nó (ex.: workflow sem gatilho).
-      const message = error instanceof Error ? error.message : String(error);
-      await recorder.finish('error', { message });
-    }
-  }
-
-  /**
-   * FR-020: dados gravados dos nós a reaproveitar. Só execuções deste workflow e nós com
-   * sucesso e dados completos; o que não for encontrado simplesmente executa de novo.
-   */
-  private async loadReusable(
-    workflowId: string,
-    reuse: Record<string, string>,
-  ): Promise<Record<string, ReusedNodeRun>> {
-    const pairs = Object.entries(reuse);
-    if (pairs.length === 0) return {};
-    const rows = await this.db
-      .selectFrom('node_executions as ne')
-      .innerJoin('executions as e', 'e.id', 'ne.execution_id')
-      .select(['ne.node_id', 'ne.input_data', 'ne.input_sources', 'ne.output_data'])
-      .where('e.workflow_id', '=', workflowId)
-      .where('ne.status', '=', 'success')
-      .where('ne.data_truncated', '=', false)
-      .where((eb) =>
-        eb.or(
-          pairs.map(([nodeId, executionId]) =>
-            eb.and([eb('ne.node_id', '=', nodeId), eb('ne.execution_id', '=', executionId)]),
-          ),
-        ),
-      )
-      .execute();
-    return Object.fromEntries(
-      rows.map((r) => [
-        r.node_id,
-        {
-          inputs: (r.input_data ?? {}) as Record<string, Item[]>,
-          inputSources: (r.input_sources ?? {}) as Record<string, SourceRef[]>,
-          output: (r.output_data ?? {}) as NodeOutput,
-        },
-      ]),
-    );
-  }
-
-  /** FR-014: execução e nós, com os dados gravados. */
-  async get(executionId: string): Promise<ExecutionDetail> {
+  /** FR-014 (specs 003 e 005): execução e nós; sem `execution:readData`, sem os dados. */
+  async get(user: AuthenticatedUser, executionId: string): Promise<ExecutionDetail> {
     const execution = await this.db
       .selectFrom('executions')
       .selectAll()
       .where('id', '=', executionId)
       .executeTakeFirst();
     if (!execution) throw new NotFoundError('Execução não encontrada');
+    const canReadData = hasProjectPermission(user, 'execution:readData', execution.project_id);
     const nodes = await this.db
       .selectFrom('node_executions')
       .selectAll()
@@ -313,6 +348,8 @@ export class ExecutionsService implements OnModuleInit, OnModuleDestroy, BeforeA
       startedAt: execution.started_at.toISOString(),
       finishedAt: iso(execution.finished_at),
       error: execution.error as ExecutionDetail['error'],
+      dataRedacted: !canReadData,
+      definition: (execution.definition as WorkflowDefinition | null) ?? null,
       nodes: nodes.map((n) => ({
         nodeId: n.node_id,
         nodeName: n.node_name,
@@ -324,8 +361,9 @@ export class ExecutionsService implements OnModuleInit, OnModuleDestroy, BeforeA
         pinned: n.pinned,
         reused: n.reused,
         dataTruncated: n.data_truncated,
-        input: n.input_data as Record<string, Item[]> | null,
-        output: n.output_data as NodeOutput | null,
+        input: canReadData ? (n.input_data as Record<string, Item[]> | null) : null,
+        output: canReadData ? (n.output_data as NodeOutput | null) : null,
+        console: canReadData ? (n.console as string[] | null) : null,
         error: n.error as { name: string; message: string } | null,
       })),
     };
@@ -335,12 +373,22 @@ export class ExecutionsService implements OnModuleInit, OnModuleDestroy, BeforeA
    * FR-018: avalia uma expressão sobre os dados da execução de teste indicada, para o nó e o
    * item escolhidos, no mesmo sandbox das execuções.
    */
-  async preview(workflowId: string, body: PreviewBody): Promise<ExpressionPreviewResponse> {
+  async preview(
+    user: AuthenticatedUser,
+    workflowId: string,
+    body: PreviewBody,
+  ): Promise<ExpressionPreviewResponse> {
     const node = body.definition.nodes.find((n) => n.id === body.nodeId);
     if (!node) throw new UnprocessableError('Nó inexistente no workflow');
 
     let view = new RecordedRun([]);
-    if (body.executionId) {
+    // Spec 005, FR-014: sem `execution:readData`, a execução indicada não serve de contexto.
+    const project = await this.db
+      .selectFrom('workflows')
+      .select('project_id')
+      .where('id', '=', workflowId)
+      .executeTakeFirstOrThrow();
+    if (body.executionId && hasProjectPermission(user, 'execution:readData', project.project_id)) {
       const execution = await this.db
         .selectFrom('executions')
         .select('workflow_id')

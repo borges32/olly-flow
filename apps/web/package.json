@@ -14,6 +14,7 @@
     "test:e2e": "tsx e2e/prepare.ts && playwright test"
   },
   "dependencies": {
+    "@monaco-editor/react": "^4.7.0",
     "@olly/expressions": "workspace:*",
     "@olly/nodes": "workspace:*",
     "@olly/shared-types": "workspace:*",
@@ -24,6 +25,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.51.0",
+    "monaco-editor": "^0.57.0",
     "oidc-client-ts": "^3.5.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

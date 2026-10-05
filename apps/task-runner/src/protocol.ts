@@ -25,6 +25,15 @@ export const requestSchema = z.discriminatedUnion('type', [
     ),
   }),
   z.object({ type: z.literal('disposeExecution'), id: z.string(), executionId: z.string() }),
+  // Spec 005: nó de código JavaScript.
+  z.object({
+    type: z.literal('runCode'),
+    id: z.string(),
+    executionId: z.string(),
+    code: z.string().max(1_000_000),
+    mode: z.enum(['runOnceForAllItems', 'runOnceForEachItem']),
+    data: expressionDataSchema,
+  }),
 ]);
 export type RunnerRequest = z.infer<typeof requestSchema>;
 
@@ -44,6 +53,21 @@ export const responseSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('ready') }),
   z.object({ type: z.literal('result'), id: z.string(), results: z.array(evaluateResultSchema) }),
   z.object({ type: z.literal('ack'), id: z.string() }),
+  z.object({
+    type: z.literal('codeResult'),
+    id: z.string(),
+    result: z.union([
+      z.object({ ok: z.literal(true), result: z.unknown(), console: z.array(z.string()) }),
+      z.object({
+        ok: z.literal(false),
+        error: z.object({
+          kind: z.enum(['syntax', 'runtime', 'timeout', 'memory', 'crashed']),
+          message: z.string(),
+        }),
+        console: z.array(z.string()),
+      }),
+    ]),
+  }),
   z.object({ type: z.literal('error'), id: z.string().nullable(), message: z.string() }),
 ]);
 export type RunnerResponse = z.infer<typeof responseSchema>;

@@ -3,6 +3,7 @@ import {
   ExpressionError,
   collectExpressions,
   findNodeReferences,
+  type NodeReferences,
   pathToString,
   snippetOf,
   substitute,
@@ -36,8 +37,10 @@ export function buildExpressionData(
   input: Item[],
   templates: string[],
   scope: ExpressionScope,
+  /** Referências já calculadas (ex.: do código do nó `code.javascript`, spec 005). */
+  references?: NodeReferences,
 ): ExpressionData {
-  const refs = findNodeReferences(templates);
+  const refs = references ?? findNodeReferences(templates);
   const byName = new Map(def.nodes.map((n) => [n.name, n]));
   const names = refs.dynamic
     ? def.nodes.filter((n) => view.isExecuted(n.id)).map((n) => n.name)

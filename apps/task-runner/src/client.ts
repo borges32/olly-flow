@@ -1,7 +1,14 @@
 import { fork, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import type { EvaluateBatch, EvaluateResult, ExpressionEvaluator } from '@olly/expressions';
+import type {
+  CodeRunner,
+  EvaluateBatch,
+  EvaluateResult,
+  ExpressionEvaluator,
+  RunCodeRequest,
+  RunCodeResult,
+} from '@olly/expressions';
 import { responseSchema, type RunnerRequest } from './protocol.js';
 
 export interface TaskRunnerLogger {
@@ -12,6 +19,9 @@ export interface TaskRunnerLogger {
 export interface TaskRunnerClientOptions {
   timeoutMs?: number;
   memoryMb?: number;
+  /** Nó de código (spec 005, NFR-002). */
+  codeTimeoutMs?: number;
+  codeMemoryMb?: number;
   /** Arquivo do processo; padrão: `main.js` ao lado deste módulo. */
   entry?: string;
   /** Flags extras do Node para o processo (ex.: carregador de TypeScript nos testes). */
@@ -31,7 +41,7 @@ const MAX_BACKOFF_MS = 5000;
  * Cliente do task runner (plan §2): inicia o processo filho sob demanda, reinicia com backoff
  * se ele cair e rejeita as requisições pendentes. Implementa `ExpressionEvaluator`.
  */
-export class TaskRunnerClient implements ExpressionEvaluator {
+export class TaskRunnerClient implements ExpressionEvaluator, CodeRunner {
   private child?: ChildProcess;
   private ready?: Promise<void>;
   private readonly pending = new Map<string, Pending>();
@@ -53,6 +63,8 @@ export class TaskRunnerClient implements ExpressionEvaluator {
       NODE_ENV: process.env.NODE_ENV ?? 'production',
       OLLY_EXPRESSION_TIMEOUT_MS: String(this.timeoutMs),
       OLLY_ISOLATE_MEMORY_MB: String(this.memoryMb),
+      OLLY_CODE_TIMEOUT_MS: String(this.options.codeTimeoutMs ?? 30_000),
+      OLLY_CODE_MEMORY_MB: String(this.options.codeMemoryMb ?? 128),
     };
   }
 
@@ -73,6 +85,29 @@ export class TaskRunnerClient implements ExpressionEvaluator {
       { type: 'evaluateBatch', id: randomUUID(), ...batch },
       deadline,
     )) as EvaluateResult[];
+  }
+
+  /**
+   * Spec 005, FR-009/FR-010: código de usuário num isolate novo. Se o processo do runner cair
+   * (ex.: falta de memória do processo), o nó falha com mensagem clara e o runner reinicia.
+   */
+  async runCode(request: RunCodeRequest): Promise<RunCodeResult> {
+    const deadline = (this.options.codeTimeoutMs ?? 30_000) + 10_000;
+    try {
+      return (await this.request(
+        { type: 'runCode', id: randomUUID(), ...request },
+        deadline,
+      )) as RunCodeResult;
+    } catch (error) {
+      return {
+        ok: false,
+        error: {
+          kind: 'crashed',
+          message: `O sandbox de código foi interrompido e reiniciado: ${error instanceof Error ? error.message : String(error)}`,
+        },
+        console: [],
+      };
+    }
   }
 
   async disposeExecution(executionId: string): Promise<void> {
@@ -145,6 +180,7 @@ export class TaskRunnerClient implements ExpressionEvaluator {
         this.pending.delete(message.id);
         if (message.type === 'result') pending.resolve(message.results);
         else if (message.type === 'ack') pending.resolve(undefined);
+        else if (message.type === 'codeResult') pending.resolve(message.result);
         else pending.reject(new Error(message.message));
       });
 

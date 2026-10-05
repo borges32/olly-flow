@@ -12,6 +12,9 @@ Credenciais guardam os dados de acesso a APIs e bancos usados pelos nós. Introd
 | `httpQueryAuth` | name, **value** | GET na URL informada |
 | `oauth2ClientCredentials` | tokenUrl, clientId, **clientSecret**, scope, authentication (`header` ou `body`) | Obtém um token |
 | `postgres` | host, port (5432), database, user, **password**, ssl (`disable`, `require`, `verify-full`), caCert, readOnly | `SELECT 1` |
+| `webhookHeaderAuth` | name, **value** | — (autentica chamadas recebidas pelo Webhook, spec 005) |
+| `webhookBasicAuth` | user, **password** | — |
+| `webhookHmac` | **secret**, headerName (`X-Signature`), algorithm (`sha256`, `sha1`, `sha512`), encoding (`hex`, `base64`) | — |
 
 O teste dos tipos HTTP passa pelo filtro anti-SSRF, como as requisições dos nós.
 

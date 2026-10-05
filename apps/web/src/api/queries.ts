@@ -1,6 +1,8 @@
 import type { CredentialTypeDescription, NodeDescription } from '@olly/nodes';
 import type {
   CredentialSummary,
+  ExecutionDetail,
+  ExecutionList,
   Paginated,
   ProjectMember,
   ProjectSummary,
@@ -8,7 +10,7 @@ import type {
   WorkflowDetail,
   WorkflowSummary,
 } from '@olly/shared-types';
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useApi } from './api-provider';
 
 export const queryKeys = {
@@ -20,6 +22,8 @@ export const queryKeys = {
   users: (search: string) => ['users', search] as const,
   credentials: (projectId: string) => ['projects', projectId, 'credentials'] as const,
   credentialTypes: ['credential-types'] as const,
+  executions: (filters: Record<string, string>) => ['executions', filters] as const,
+  execution: (id: string) => ['executions', id] as const,
   postgresOptions: (credentialId: string, source: string, schema = '', table = '') =>
     ['credentials', credentialId, 'postgres', source, schema, table] as const,
 };
@@ -54,11 +58,12 @@ export function useWorkflows(projectId: string | undefined, page: number, pageSi
   });
 }
 
-export function useWorkflow(id: string) {
+export function useWorkflow(id: string, enabled = true) {
   const api = useApi();
   return useQuery({
     queryKey: queryKeys.workflow(id),
     queryFn: () => api.get<WorkflowDetail>(`/api/v1/workflows/${id}`),
+    enabled: enabled && id !== '',
     // O editor controla quando recarregar; refetch em foco descartaria a edição.
     refetchOnWindowFocus: false,
     staleTime: Infinity,
@@ -99,5 +104,29 @@ export function useCredentialTypes() {
     queryKey: queryKeys.credentialTypes,
     queryFn: () => api.get<CredentialTypeDescription[]>('/api/v1/credential-types'),
     staleTime: Infinity,
+  });
+}
+
+/** Execuções com filtros, paginadas por cursor (spec 005, FR-013). */
+export function useExecutions(filters: Record<string, string>) {
+  const api = useApi();
+  return useInfiniteQuery({
+    queryKey: queryKeys.executions(filters),
+    queryFn: ({ pageParam }) => {
+      const params = new URLSearchParams({ ...filters, ...(pageParam && { cursor: pageParam }) });
+      return api.get<ExecutionList>(`/api/v1/executions?${params.toString()}`);
+    },
+    initialPageParam: '',
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+  });
+}
+
+export function useExecution(id: string | undefined) {
+  const api = useApi();
+  return useQuery({
+    queryKey: queryKeys.execution(id ?? ''),
+    queryFn: () => api.get<ExecutionDetail>(`/api/v1/executions/${id ?? ''}`),
+    enabled: id !== undefined,
+    refetchOnWindowFocus: false,
   });
 }

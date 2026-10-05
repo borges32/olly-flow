@@ -1,5 +1,5 @@
-import type { EvaluateBatch } from '@olly/expressions';
-import { IsolateEvaluator } from '@olly/expressions/isolate';
+import type { EvaluateBatch, RunCodeRequest } from '@olly/expressions';
+import { CodeSandbox, IsolateEvaluator } from '@olly/expressions/isolate';
 import { requestSchema, type RunnerResponse } from './protocol.js';
 
 // Processo filho do TaskRunnerClient. Só fala por IPC; não abre portas nem lê segredos.
@@ -16,6 +16,11 @@ const number = (value: string | undefined, fallback: number) => {
 const evaluator = new IsolateEvaluator({
   timeoutMs: number(process.env.OLLY_EXPRESSION_TIMEOUT_MS, 100),
   memoryMb: number(process.env.OLLY_ISOLATE_MEMORY_MB, 128),
+});
+
+const code = new CodeSandbox({
+  timeoutMs: number(process.env.OLLY_CODE_TIMEOUT_MS, 30_000),
+  memoryMb: number(process.env.OLLY_CODE_MEMORY_MB, 128),
 });
 
 function reply(message: RunnerResponse): void {
@@ -38,6 +43,12 @@ process.on('message', (raw: unknown) => {
     return;
   }
   const message = parsed.data;
+  if (message.type === 'runCode') {
+    void code.runCode(message as RunCodeRequest).then((result) => {
+      reply({ type: 'codeResult', id: message.id, result });
+    });
+    return;
+  }
   if (message.type === 'disposeExecution') {
     void evaluator.disposeExecution(message.executionId).then(() => {
       reply({ type: 'ack', id: message.id });

@@ -248,14 +248,18 @@ describe('spec 002 — FR-006: catálogo de tipos de nó', () => {
     const outsider = await loginAs(ctx, { sub: 'x', email: 'x@t.local' });
     const types = (await outsider.call('GET', '/node-types')).json<NodeDescription[]>();
     expect(types.map((t) => t.type)).toEqual([
+      // Spec 005: code.javascript, http.respondToWebhook, trigger.webhook.
+      'code.javascript',
       'data.set',
       'data.setVariable',
       // Spec 004.
       'http.request',
+      'http.respondToWebhook',
       'logic.if',
       'postgres.query',
       'postgres.write',
       'trigger.manual',
+      'trigger.webhook',
     ]);
     expect(types.find((t) => t.type === 'http.request')?.credentialTypes).toContain('httpBearer');
     const set = types.find((t) => t.type === 'data.set');

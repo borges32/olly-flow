@@ -48,6 +48,7 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
       'Up 0003_executions',
       'Up 0004_node_reused',
       'Up 0005_credentials',
+      'Up 0006_publish_console',
     ]);
     expect(await publicTables()).toEqual(TABLES);
   });
@@ -59,6 +60,7 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
   it('FR-009/SC-003: down reverte tudo e up reaplica sem erro', async () => {
     const reverted = await migrateDown(t.db, { all: true });
     expect(reverted).toEqual([
+      'Down 0006_publish_console',
       'Down 0005_credentials',
       'Down 0004_node_reused',
       'Down 0003_executions',
@@ -74,13 +76,36 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
     expect(await publicTables()).toEqual(TABLES);
   });
 
+  it('FR-001/FR-012 (spec 005): down de 0006 remove só as colunas de publicação e console', async () => {
+    const columns = async () => {
+      const { rows } = await sql<{ name: string }>`
+        SELECT table_name || '.' || column_name AS name FROM information_schema.columns
+        WHERE (table_name, column_name) IN (('workflows', 'published_version'), ('workflows', 'active'),
+          ('executions', 'definition'), ('node_executions', 'console'))
+        ORDER BY 1`.execute(t.db);
+      return rows.map((r) => r.name);
+    };
+    expect(await columns()).toEqual([
+      'executions.definition',
+      'node_executions.console',
+      'workflows.active',
+      'workflows.published_version',
+    ]);
+    expect(await migrateDown(t.db)).toEqual(['Down 0006_publish_console']);
+    expect(await columns()).toEqual([]);
+    expect(await publicTables()).toEqual(TABLES);
+    await migrateToLatest(t.db);
+  });
+
   it('FR-001 (spec 004): down de 0005 remove só a tabela credentials', async () => {
+    await migrateDown(t.db);
     expect(await migrateDown(t.db)).toEqual(['Down 0005_credentials']);
     expect(await publicTables()).toEqual(TABLES.filter((n) => n !== 'credentials'));
     await migrateToLatest(t.db);
   });
 
   it('FR-020 (spec 003): down de 0004 remove só a coluna reused', async () => {
+    await migrateDown(t.db);
     await migrateDown(t.db);
     const reusedColumns = async () => {
       const { rows } = await sql<{ n: number }>`
@@ -97,6 +122,7 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
 
   it('FR-001/FR-002 (spec 002): down de 0003 e 0002 remove só as tabelas delas', async () => {
     const base = TABLES.filter((n) => n !== 'credentials');
+    await migrateDown(t.db);
     await migrateDown(t.db);
     await migrateDown(t.db);
     await migrateDown(t.db);

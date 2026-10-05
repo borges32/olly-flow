@@ -5,8 +5,34 @@ import type { Namespace } from 'socket.io';
 export const executionRoom = (executionId: string) => `execution:${executionId}`;
 /** Sala do workflow: o editor entra ao abrir, antes de existir o id da execução. */
 export const workflowRoom = (workflowId: string) => `workflow:${workflowId}`;
+/** Sala com os dados de execução: só para quem tem `execution:readData` (spec 005, FR-014). */
+export const dataRoom = (room: string) => `${room}:data`;
 
-/** Publica eventos de execução na sala WebSocket da execução (FR-012). */
+/** Versão do evento sem dados de execução, para quem não tem `execution:readData`. */
+function withoutData<K extends keyof ExecutionEvents>(
+  event: K,
+  payload: ExecutionEvents[K],
+): ExecutionEvents[K] {
+  if (event === 'nodeFinished') {
+    const copy: ExecutionEvents['nodeFinished'] = {
+      ...(payload as ExecutionEvents['nodeFinished']),
+      data: { input: {}, output: {} },
+      dataRedacted: true,
+    };
+    delete copy.console;
+    return copy as ExecutionEvents[K];
+  }
+  if (event === 'testWebhookReceived') {
+    const copy: ExecutionEvents['testWebhookReceived'] = {
+      ...(payload as ExecutionEvents['testWebhookReceived']),
+    };
+    delete copy.payload;
+    return copy as ExecutionEvents[K];
+  }
+  return payload;
+}
+
+/** Publica eventos de execução nas salas WebSocket (FR-012 da spec 003). */
 @Injectable()
 export class ExecutionEventsService {
   private namespace?: Namespace;
@@ -15,14 +41,17 @@ export class ExecutionEventsService {
     this.namespace = namespace;
   }
 
-  /** Publica na sala da execução e na do workflow (cada conexão recebe uma vez). */
+  /**
+   * Publica nas salas da execução e do workflow (cada conexão recebe uma vez): o evento completo
+   * nas salas de dados e a versão sem dados nas demais.
+   */
   emit<K extends keyof ExecutionEvents>(
     event: K,
     payload: ExecutionEvents[K],
     workflowId: string,
   ): void {
-    this.namespace
-      ?.to([executionRoom(payload.executionId), workflowRoom(workflowId)])
-      .emit(event, payload);
+    const rooms = [executionRoom(payload.executionId), workflowRoom(workflowId)];
+    this.namespace?.to(rooms.map(dataRoom)).emit(event, payload);
+    this.namespace?.to(rooms).emit(event, withoutData(event, payload));
   }
 }

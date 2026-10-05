@@ -20,6 +20,7 @@ import {
 } from '../common/errors.js';
 import { CredentialsService } from '../credentials/credentials.service.js';
 import { hasProjectPermission } from '../rbac/ability.factory.js';
+import { WebhookRegistry } from '../webhooks/webhook-registry.js';
 import { DB } from '../core/tokens.js';
 import { NODE_REGISTRY } from '../node-types/node-types.module.js';
 import type {
@@ -40,6 +41,7 @@ export class WorkflowsService {
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(NODE_REGISTRY) private readonly registry: NodeRegistry,
     @Inject(CredentialsService) private readonly credentials: CredentialsService,
+    @Inject(WebhookRegistry) private readonly webhooks: WebhookRegistry,
   ) {}
 
   /**
@@ -181,6 +183,8 @@ export class WorkflowsService {
         'workflows.project_id',
         'workflows.name',
         'workflows.version',
+        'workflows.published_version',
+        'workflows.active',
         'workflows.created_by',
         'workflows.created_at',
         'workflows.updated_at',
@@ -201,6 +205,8 @@ export class WorkflowsService {
       createdBy: row.created_by,
       definition,
       warnings: validateWorkflow(definition, this.registry).warnings,
+      publishedVersion: row.published_version,
+      active: row.active,
     };
   }
 
@@ -268,12 +274,14 @@ export class WorkflowsService {
     await this.db.transaction().execute(async (trx) => {
       const row = await trx
         .updateTable('workflows')
-        .set({ deleted_at: sql<Date>`now()` })
+        .set({ deleted_at: sql<Date>`now()`, active: false })
         .where('id', '=', id)
         .where('deleted_at', 'is', null)
         .returning('name')
         .executeTakeFirst();
       if (!row) throw new NotFoundError('Workflow não encontrado');
+      // Spec 005: workflow excluído deixa de responder nos webhooks.
+      await trx.deleteFrom('webhooks').where('workflow_id', '=', id).execute();
       await this.audit.record(trx, ctx, {
         action: 'workflow.delete',
         entityType: 'workflow',
@@ -281,6 +289,7 @@ export class WorkflowsService {
         details: { name: row.name },
       });
     });
+    this.webhooks.reload();
   }
 
   async versions(id: string): Promise<WorkflowVersionSummary[]> {

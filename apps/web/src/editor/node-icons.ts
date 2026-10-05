@@ -1,4 +1,15 @@
-import { Database, GitBranch, Globe, PenLine, Play, Variable, type LucideIcon } from 'lucide-react';
+import {
+  Code,
+  Database,
+  GitBranch,
+  Globe,
+  PenLine,
+  Play,
+  Reply,
+  Variable,
+  Webhook,
+  type LucideIcon,
+} from 'lucide-react';
 
 // O catálogo de nós usa nomes de ícones lucide; nós novos acrescentam o seu aqui.
 export const NODE_ICONS: Record<string, LucideIcon> = {
@@ -8,6 +19,9 @@ export const NODE_ICONS: Record<string, LucideIcon> = {
   'git-branch': GitBranch,
   globe: Globe,
   database: Database,
+  code: Code,
+  webhook: Webhook,
+  reply: Reply,
 };
 
 /** Ícones conhecidos (o teste garante que todo nó da plataforma tenha o seu). */

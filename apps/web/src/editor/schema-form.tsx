@@ -1,7 +1,7 @@
 import type { JSONSchema7Definition } from '@olly/nodes';
 import { isExpression, literalValue, parseTemplate } from '@olly/expressions';
 import { Plus, Trash2 } from 'lucide-react';
-import { useId, type DragEvent, type ReactNode } from 'react';
+import { Suspense, lazy, useId, type DragEvent, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,6 +11,10 @@ import { insertExpression, scalarText } from './expression-utils';
 import { FIELD_MIME, useExpressionHelpers } from './ndv/expression-context';
 import { ExpressionInput } from './ndv/expression-input';
 import { useLoadOptions } from './param-options';
+import { useEditorStore } from './store';
+
+// Monaco só é baixado quando um nó de código é aberto (spec 005, plan §10).
+const CodeEditor = lazy(() => import('./code-editor'));
 import {
   asSchema,
   fieldKind,
@@ -279,6 +283,21 @@ function Field({ name, path, schema, value, readOnly, onChange }: FieldProps) {
         </ScalarField>
       );
     case 'string':
+      if (schema['x-code-editor']) {
+        return (
+          <div className="grid gap-1.5">
+            <Label htmlFor={id}>{label}</Label>
+            <CodeField
+              id={id}
+              testId={testId}
+              value={toText(value ?? schema.default)}
+              readOnly={readOnly}
+              onChange={onChange}
+            />
+            {description}
+          </div>
+        );
+      }
       if (schema['x-load-options']) {
         return (
           <ScalarField
@@ -471,5 +490,44 @@ function LoadedOptions({
         </option>
       ))}
     </Select>
+  );
+}
+
+/** Campo de código: Monaco com as variáveis do N8N e os nomes dos nós (FR-012). */
+function CodeField({
+  id,
+  testId,
+  value,
+  readOnly,
+  onChange,
+}: {
+  id: string;
+  testId: string;
+  value: string;
+  readOnly: boolean;
+  onChange: (value: unknown) => void;
+}) {
+  const nodeNames = useEditorStore((s) => s.nodes.map((n) => n.name).join('\u0000'));
+  const fallback = (
+    <textarea
+      id={id}
+      data-testid={`${testId}-fallback`}
+      className="min-h-80 w-full rounded-md border bg-background p-2 font-mono text-xs"
+      value={value}
+      readOnly
+    />
+  );
+  return (
+    <Suspense fallback={fallback}>
+      <CodeEditor
+        value={value}
+        readOnly={readOnly}
+        testId={testId}
+        nodeNames={nodeNames ? nodeNames.split('\u0000') : []}
+        onChange={(v) => {
+          onChange(v);
+        }}
+      />
+    </Suspense>
   );
 }
