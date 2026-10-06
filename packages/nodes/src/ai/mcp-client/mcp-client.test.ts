@@ -22,6 +22,9 @@ function gateway(result: McpToolCallResult = { content: [{ type: 'text', text: '
     prepareTool: vi.fn(() => Promise.resolve(soma)),
     callTool: vi.fn(() => Promise.resolve(result)),
     listTools: vi.fn(() => Promise.resolve([soma])),
+    agentTools: vi.fn(() =>
+      Promise.resolve([{ definition: soma, destructive: false, readOnly: true }]),
+    ),
     listResources: vi.fn(() => Promise.resolve([{ uri: 'test://info', name: 'info' }])),
     readResource: vi.fn(() =>
       Promise.resolve({ contents: [{ uri: 'test://info', mimeType: 'text/plain', text: 'oi' }] }),

@@ -45,3 +45,21 @@ export { loopOverItemsNode } from './logic/loop-over-items/definition.js';
 export { switchNode } from './logic/switch/definition.js';
 export { errorTrigger, SAMPLE_ERROR_PAYLOAD } from './trigger/error/definition.js';
 export { mcpClientNode, mcpClientParamsSchema } from './ai/mcp-client/definition.js';
+export { waitNode, waitDuration, INLINE_WAIT_MS } from './flow/wait/definition.js';
+export { executeWorkflowNode } from './flow/execute-workflow/definition.js';
+export { executeWorkflowTrigger, parseInputSchema } from './trigger/execute-workflow/definition.js';
+export * from './ai/runtime/types.js';
+export * from './ai/runtime/tool-name.js';
+export { agentNode, DEFAULT_AGENT_ITERATIONS } from './ai/agent/definition.js';
+export { chatModelNode } from './ai/chat-model/definition.js';
+export { postgresMemoryNode, bufferMemoryNode } from './ai/memory/definitions.js';
+export { createAgentToolNodes } from './ai/tools/definitions.js';
+export * from './ai/runtime/agent.js';
+export * from './ai/runtime/from-ai.js';
+export * from './ai/runtime/untrusted.js';
+export { FakeScriptedChatModel, type FakeModelStep } from './ai/runtime/fake-model.js';
+export {
+  createChatModel,
+  PROVIDER_BY_CREDENTIAL,
+  GEMINI_OPENAI_BASE_URL,
+} from './ai/runtime/models.js';

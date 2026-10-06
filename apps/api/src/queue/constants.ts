@@ -4,6 +4,9 @@ export const EXECUTIONS_QUEUE = 'executions';
 /** Canal dos pedidos de cancelamento para os workers (FR-010). */
 export const CANCEL_CHANNEL = 'olly:execution-cancel';
 
+/** Job de retomada de uma execução em espera (spec 008, FR-012), na mesma fila. */
+export const RESUME_JOB = 'resume';
+
 export interface ExecutionJobData {
   executionId: string;
 }

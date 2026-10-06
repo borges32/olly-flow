@@ -225,6 +225,40 @@ describe('spec 005 — HU-1: publicar e acionar por webhook', () => {
     expect(item.headers['content-type']).toBe('application/json');
   });
 
+  it('FR-004: corpo JSON sem Content-Type de JSON (fetch sem cabeçalho, curl -d) vira objeto', async () => {
+    await createPublished(
+      def([hook({ path: 'corpos', responseMode: 'onReceived' }), setNode('x')]),
+    );
+    const bodyOf = async (payload: string, contentType: string) => {
+      const res = await call('corpos', { payload, headers: { 'content-type': contentType } });
+      expect(res.statusCode).toBe(202);
+      const detail = await waitFinished(editor, res.json<{ executionId: string }>().executionId);
+      return (
+        detail.nodes.find((n) => n.nodeId === 'w')?.output?.main?.[0]?.json as {
+          body: unknown;
+        }
+      ).body;
+    };
+    const json = JSON.stringify({ pergunta: 'Que dia é hoje?', itens: [1, 2] });
+    // `fetch(url, { body: JSON.stringify(x) })` envia text/plain.
+    expect(await bodyOf(json, 'text/plain;charset=UTF-8')).toEqual({
+      pergunta: 'Que dia é hoje?',
+      itens: [1, 2],
+    });
+    // `curl -d '{...}'` envia application/x-www-form-urlencoded.
+    expect(await bodyOf(json, 'application/x-www-form-urlencoded')).toEqual({
+      pergunta: 'Que dia é hoje?',
+      itens: [1, 2],
+    });
+    // O que não é JSON continua como antes.
+    expect(await bodyOf('olá, mundo', 'text/plain')).toBe('olá, mundo');
+    expect(await bodyOf('{ não é json', 'text/plain')).toBe('{ não é json');
+    expect(await bodyOf('a=1&b=2', 'application/x-www-form-urlencoded')).toEqual({
+      a: '1',
+      b: '2',
+    });
+  });
+
   it('SC-003/FR-008: nó de resposta define status, cabeçalhos e corpo; só a primeira vale', async () => {
     const respond = (id: string, params: Record<string, unknown>): WorkflowNode => ({
       id,

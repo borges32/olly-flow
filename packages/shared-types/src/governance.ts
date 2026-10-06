@@ -80,6 +80,8 @@ export interface RetentionPolicy {
   dataDays: number;
   /** Dias até remover as execuções (metadados). */
   metadataDays: number;
+  /** Spec 011, FR-009: dias até remover as mensagens da memória persistente do agente. */
+  memoryDays: number;
 }
 
 /** `GET /projects/:id/settings`. */
@@ -89,7 +91,7 @@ export interface ProjectSettings {
   /** Padrão dos workflows do projeto; `settings.saveExecutionData` do workflow prevalece. */
   saveExecutionData: SaveExecutionDataPolicy;
   /** Valores do projeto (`null` = padrão da plataforma). */
-  retention: { dataDays: number | null; metadataDays: number | null };
+  retention: { dataDays: number | null; metadataDays: number | null; memoryDays: number | null };
   /** Retenção efetiva (com os padrões aplicados). */
   effectiveRetention: RetentionPolicy;
 }
@@ -99,7 +101,11 @@ export interface ProjectSettingsUpdate {
   requirePublishApproval?: boolean;
   executorCanReadData?: boolean;
   saveExecutionData?: SaveExecutionDataPolicy;
-  retention?: { dataDays?: number | null; metadataDays?: number | null };
+  retention?: {
+    dataDays?: number | null;
+    metadataDays?: number | null;
+    memoryDays?: number | null;
+  };
 }
 
 // ---------------------------------------------------------------------------------------------

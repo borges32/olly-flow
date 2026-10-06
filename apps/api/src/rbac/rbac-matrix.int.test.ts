@@ -256,6 +256,88 @@ const ACTIONS: Action[] = [
     permission: 'execution:read',
     run: async (u) => ok((await u.call('GET', `/executions/${executionId}/mcp-calls`)).statusCode),
   },
+  // Spec 011: IA.
+  {
+    name: 'Ver os passos do agente e o uso de IA de uma execução',
+    permission: 'execution:read',
+    run: async (u) =>
+      ok((await u.call('GET', `/executions/${executionId}/agent-steps`)).statusCode) &&
+      ok((await u.call('GET', `/executions/${executionId}/ai-usage`)).statusCode),
+  },
+  {
+    name: 'Ver o uso e o custo de IA do projeto',
+    permission: 'project:manage',
+    run: async (u) => ok((await u.call('GET', `/projects/${project.id}/ai-usage`)).statusCode),
+  },
+  {
+    name: 'Ver o uso de IA da plataforma e editar a tabela de preços',
+    permission: 'project:manage',
+    global: true,
+    run: async (u) =>
+      ok((await u.call('GET', '/ai-usage')).statusCode) &&
+      ok((await u.call('GET', '/ai-pricing')).statusCode),
+  },
+  {
+    name: 'Cadastrar os modelos de IA permitidos na instalação',
+    permission: 'project:manage',
+    global: true,
+    run: async (u) =>
+      ok((await u.call('GET', '/ai-models')).statusCode) &&
+      ok((await u.call('PUT', '/ai-models/modelo-matriz', { note: 'matriz' })).statusCode),
+  },
+  {
+    name: 'Ver a configuração de IA do projeto',
+    permission: 'workflow:read',
+    run: async (u) => ok((await u.call('GET', `/projects/${project.id}/ai-settings`)).statusCode),
+  },
+  {
+    name: 'Alterar os modelos permitidos e o limite de tokens do projeto',
+    permission: 'project:manage',
+    global: true,
+    run: async (u) =>
+      ok(
+        (
+          await u.call('PUT', `/projects/${project.id}/ai-settings`, {
+            allowedModels: null,
+            monthlyTokenLimit: null,
+          })
+        ).statusCode,
+      ),
+  },
+  {
+    name: 'Listar os modelos de IA permitidos (nó Modelo de chat)',
+    permission: 'credential:use',
+    run: async (u) => ok((await u.call('GET', `/projects/${project.id}/ai-models`)).statusCode),
+  },
+  {
+    name: 'Aprovar ou rejeitar uma ação do agente',
+    permission: 'workflow:execute',
+    run: async (u) => {
+      const execution = await ctx.database.db
+        .selectFrom('executions')
+        .select(['workflow_id', 'project_id'])
+        .where('id', '=', executionId)
+        .executeTakeFirstOrThrow();
+      const approval = await ctx.database.db
+        .insertInto('approval_requests')
+        .values({
+          execution_id: executionId,
+          project_id: execution.project_id,
+          workflow_id: execution.workflow_id,
+          node_id: 'agent',
+          run_index: 0,
+          item_index: 0,
+          approval_key: `0:${String(Math.random())}`,
+          tool: 'apagar_registro',
+          arguments: JSON.stringify({}),
+          reason: 'teste',
+          expires_at: new Date(Date.now() + 3_600_000),
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      return ok((await u.call('POST', `/approvals/${approval.id}/reject`, {})).statusCode);
+    },
+  },
 ];
 
 const expected = (subject: Subject, action: Action) => {

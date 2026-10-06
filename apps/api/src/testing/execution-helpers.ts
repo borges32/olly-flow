@@ -33,10 +33,11 @@ export async function createWorkflow(
   user: TestUser,
   projectId: string,
   definition: WorkflowDefinition,
+  name = `wf ${Math.random().toString(36).slice(2)}`,
 ): Promise<WorkflowDetail> {
   return (
     await user.call('POST', `/projects/${projectId}/workflows`, {
-      name: `wf ${Math.random().toString(36).slice(2)}`,
+      name,
       definition,
     })
   ).json<WorkflowDetail>();

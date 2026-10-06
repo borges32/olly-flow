@@ -124,6 +124,14 @@ export const PRELUDE_SOURCE = String.raw`
       $parameter: d.params,
       $now: L.DateTime.now().setZone(zone),
       $today: L.DateTime.now().setZone(zone).startOf('day'),
+      // Spec 011: argumento escolhido pelo modelo; fora de uma ferramenta, o padrão (ou vazio).
+      $fromAI: (key, _description, _type, defaultValue) => {
+        const values = d.fromAI || {};
+        const k = String(key);
+        return Object.prototype.hasOwnProperty.call(values, k) && values[k] !== undefined
+          ? values[k]
+          : defaultValue;
+      },
     };
     cached = { data: d, index: i, value: value };
     return value;
@@ -142,7 +150,7 @@ export const PRELUDE_SOURCE = String.raw`
 /** Envolve o corpo compilado do template numa função de um argumento (índice do item). */
 export function wrapTemplateFunction(body: string): string {
   return `(function (__olly_i) {
-  const { $json, $binary, $itemIndex, $input, $, $node, $vars, $env, $execution, $loop, $workflow, $parameter, $now, $today } = __olly_ctx(__olly_i);
+  const { $json, $binary, $itemIndex, $input, $, $node, $vars, $env, $execution, $loop, $workflow, $parameter, $now, $today, $fromAI } = __olly_ctx(__olly_i);
   ${body}
 })`;
 }

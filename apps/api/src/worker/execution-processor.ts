@@ -14,13 +14,34 @@ import type { CancelMessage, ExecutionJob } from '../executions/execution-job.js
 import { ErrorWorkflowTrigger } from '../executions/error-workflow.js';
 import { ExecutionRunner } from '../executions/execution-runner.js';
 import { ResultPublisher } from '../executions/result-bus.js';
-import { CANCEL_CHANNEL, EXECUTIONS_QUEUE, type ExecutionJobData } from '../queue/constants.js';
+import {
+  CANCEL_CHANNEL,
+  EXECUTIONS_QUEUE,
+  RESUME_JOB,
+  type ExecutionJobData,
+} from '../queue/constants.js';
+import { ExecutionWaits } from '../executions/waits.service.js';
+import { ApprovalsService } from '../ai/approvals.service.js';
 import { loadPayload } from '../queue/payloads.js';
 import { ProjectQuota } from '../queue/quota.js';
 import { markWorkerLost, type WorkerLostDeps } from '../queue/worker-lost.js';
 
 /** Pedidos de cancelamento que chegaram antes de a execução começar aqui. */
 const EARLY_CANCEL_TTL_MS = 60_000;
+/** Varredura das retomadas vencidas (garantia caso um job atrasado se perca, spec 008). */
+const RESUME_SWEEP_MS = 30_000;
+/** Tolerância para retomar um Wait cujo horário está para vencer. */
+const RESUME_TOLERANCE_MS = 1000;
+
+type ClaimedExecution = {
+  mode: 'test' | 'production';
+  trigger_type: string;
+  definition: unknown;
+  project_id: string;
+  workflow_id: string;
+  workflow_name: string;
+  active: boolean;
+};
 
 export interface WorkerStats {
   concurrency: number;
@@ -44,6 +65,7 @@ export class ExecutionProcessor {
   private connection?: Redis;
   private subscriber?: Redis;
   private heartbeat?: NodeJS.Timeout;
+  private resumeSweep?: NodeJS.Timeout;
   private readonly active = new Map<string, { controller: AbortController; projectId: string }>();
   private readonly earlyCancels = new Map<string, { message: CancelMessage; at: number }>();
   private readonly results: ResultPublisher;
@@ -60,6 +82,8 @@ export class ExecutionProcessor {
     @Inject(ExecutionEventSink) events: ExecutionEventSink,
     @Inject(BINARY_STORAGE) private readonly binaries: S3BinaryStorage | null,
     @Inject(ErrorWorkflowTrigger) private readonly errorWorkflows: ErrorWorkflowTrigger,
+    @Inject(ExecutionWaits) private readonly waits: ExecutionWaits,
+    @Inject(ApprovalsService) private readonly approvals: ApprovalsService,
   ) {
     this.results = new ResultPublisher(redis);
     this.quota = new ProjectQuota(redis, config.queue.staleAfterMs);
@@ -109,6 +133,16 @@ export class ExecutionProcessor {
     });
     this.heartbeat = setInterval(() => void this.refreshLeases(), this.config.queue.heartbeatMs);
     this.heartbeat.unref();
+    this.resumeSweep = setInterval(() => {
+      this.waits.sweepDue().catch((e: unknown) => {
+        this.logger.warn(`Varredura de retomadas falhou: ${String(e)}`);
+      });
+      // Spec 011, NFR-002: aprovações vencidas são rejeitadas automaticamente.
+      this.approvals.expireDue().catch((e: unknown) => {
+        this.logger.warn(`Expiração de aprovações falhou: ${String(e)}`);
+      });
+    }, RESUME_SWEEP_MS);
+    this.resumeSweep.unref();
     await this.worker.waitUntilReady();
     this.logger.log(
       `Worker consumindo a fila "${EXECUTIONS_QUEUE}" (concorrência ${this.config.queue.workerConcurrency})`,
@@ -116,6 +150,7 @@ export class ExecutionProcessor {
   }
 
   private async process(job: Job<ExecutionJobData>, token?: string): Promise<void> {
+    if (job.name === RESUME_JOB) return this.processResume(job, token);
     const { executionId } = job.data;
     const execution = await this.db
       .selectFrom('executions as e')
@@ -153,7 +188,7 @@ export class ExecutionProcessor {
         .executeTakeFirst();
       if (claimed.numUpdatedRows === 0n) return;
       const payload = await loadPayload(this.db, this.binaries, executionId);
-      const executionJob: ExecutionJob = {
+      await this.run(executionId, execution, {
         executionId,
         workflow: {
           id: execution.workflow_id,
@@ -164,37 +199,125 @@ export class ExecutionProcessor {
         definition: execution.definition as WorkflowDefinition,
         mode: execution.mode,
         ...payload,
-      };
-      const controller = new AbortController();
-      this.active.set(executionId, { controller, projectId });
-      const early = this.earlyCancels.get(executionId);
-      if (early)
-        controller.abort(new ExecutionCancelledError(early.message.reason, early.message.message));
-      const outcome = await this.runner.execute(executionJob, {
-        signal: controller.signal,
-        onWebhookResponse: (response) => {
-          this.results.response(executionId, response).catch((e: unknown) => {
-            this.logger.warn(`Resposta do webhook de ${executionId} não publicada: ${String(e)}`);
-          });
-        },
       });
-      await this.results.finished(executionId, outcome).catch((e: unknown) => {
-        this.logger.warn(`Desfecho de ${executionId} não publicado: ${String(e)}`);
-      });
-      if (outcome.status === 'success') this.counters.processed++;
-      else this.counters.failed++;
-      if (outcome.status === 'error') {
-        await this.errorWorkflows.trigger({
-          executionId,
-          workflowId: execution.workflow_id,
-          workflowName: execution.workflow_name,
-          projectId,
-          mode: execution.mode,
-          triggerType: execution.trigger_type,
-          definition: executionJob.definition,
-          error: outcome.error ?? { message: 'Erro desconhecido' },
+    } finally {
+      this.active.delete(executionId);
+      this.earlyCancels.delete(executionId);
+      await this.quota.release(projectId, executionId).catch(() => undefined);
+    }
+  }
+
+  /** Executa uma execução já marcada `running` e publica o desfecho. */
+  private async run(
+    executionId: string,
+    execution: ClaimedExecution,
+    executionJob: ExecutionJob,
+  ): Promise<void> {
+    const projectId = execution.project_id;
+    const controller = new AbortController();
+    this.active.set(executionId, { controller, projectId });
+    const early = this.earlyCancels.get(executionId);
+    if (early)
+      controller.abort(new ExecutionCancelledError(early.message.reason, early.message.message));
+    const outcome = await this.runner.execute(executionJob, {
+      signal: controller.signal,
+      onWebhookResponse: (response) => {
+        this.results.response(executionId, response).catch((e: unknown) => {
+          this.logger.warn(`Resposta do webhook de ${executionId} não publicada: ${String(e)}`);
         });
+      },
+    });
+    // Spec 008: a execução em espera ainda não tem desfecho.
+    if (outcome.status === 'waiting') return;
+    await this.results.finished(executionId, outcome).catch((e: unknown) => {
+      this.logger.warn(`Desfecho de ${executionId} não publicado: ${String(e)}`);
+    });
+    if (outcome.status === 'success') this.counters.processed++;
+    else this.counters.failed++;
+    if (outcome.status === 'error') {
+      await this.errorWorkflows.trigger({
+        executionId,
+        workflowId: execution.workflow_id,
+        workflowName: execution.workflow_name,
+        projectId,
+        mode: execution.mode,
+        triggerType: execution.trigger_type,
+        definition: executionJob.definition,
+        error: outcome.error ?? { message: 'Erro desconhecido' },
+      });
+    }
+  }
+
+  /**
+   * Retomada de uma execução em espera (spec 008, FR-012): qualquer worker restaura o estado
+   * salvo e executa de novo os nós cujo tempo venceu ou que receberam um valor (ex.: decisão
+   * de aprovação, spec 011).
+   */
+  private async processResume(job: Job<ExecutionJobData>, token?: string): Promise<void> {
+    const { executionId } = job.data;
+    const execution = await this.db
+      .selectFrom('executions as e')
+      .innerJoin('workflows as w', 'w.id', 'e.workflow_id')
+      .innerJoin('projects as p', 'p.id', 'e.project_id')
+      .select([
+        'e.status',
+        'e.mode',
+        'e.trigger_type',
+        'e.definition',
+        'e.project_id',
+        'w.id as workflow_id',
+        'w.name as workflow_name',
+        'w.active',
+        'p.max_concurrent_executions',
+      ])
+      .where('e.id', '=', executionId)
+      .executeTakeFirst();
+    if (execution?.status !== 'waiting') return;
+    const stored = await this.waits.load(executionId);
+    if (!stored) return;
+    const now = Date.now();
+    const values: Record<string, unknown> = {};
+    for (const w of stored.engine.waiting) {
+      if (Object.hasOwn(stored.deliveries, w.nodeId))
+        values[w.nodeId] = stored.deliveries[w.nodeId];
+      else if (w.request.resumeAt && Date.parse(w.request.resumeAt) <= now + RESUME_TOLERANCE_MS) {
+        values[w.nodeId] = { kind: 'time' };
       }
+    }
+    if (Object.keys(values).length === 0) {
+      // Cedo demais (ex.: job duplicado): reagenda para o próximo horário, se houver.
+      const next = ExecutionWaits.nextResumeAt(stored.engine);
+      if (next && next.getTime() > now) await this.waits.schedule(executionId, next);
+      return;
+    }
+    const projectId = execution.project_id;
+    const limit = execution.max_concurrent_executions ?? this.config.queue.projectMaxConcurrent;
+    if (!(await this.quota.acquire(projectId, executionId, limit))) {
+      this.counters.delayedByQuota++;
+      await job.moveToDelayed(Date.now() + this.config.queue.quotaRetryMs, token);
+      throw new DelayedError();
+    }
+    try {
+      const claimed = await this.db
+        .updateTable('executions')
+        .set({ status: 'running', heartbeat_at: new Date() })
+        .where('id', '=', executionId)
+        .where('status', '=', 'waiting')
+        .executeTakeFirst();
+      if (claimed.numUpdatedRows === 0n) return;
+      await this.run(executionId, execution, {
+        executionId,
+        workflow: {
+          id: execution.workflow_id,
+          name: execution.workflow_name,
+          projectId,
+          active: execution.active,
+        },
+        definition: execution.definition as WorkflowDefinition,
+        mode: execution.mode,
+        ...stored.job,
+        resume: { snapshot: stored.engine, values },
+      });
     } finally {
       this.active.delete(executionId);
       this.earlyCancels.delete(executionId);
@@ -241,6 +364,7 @@ export class ExecutionProcessor {
     if (this.shuttingDown) return;
     this.shuttingDown = true;
     clearInterval(this.heartbeat);
+    clearInterval(this.resumeSweep);
     if (this.worker) {
       const closing = this.worker.close();
       const timedOut = await Promise.race([

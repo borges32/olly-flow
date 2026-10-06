@@ -248,12 +248,18 @@ describe('spec 002 — FR-006: catálogo de tipos de nó', () => {
     const outsider = await loginAs(ctx, { sub: 'x', email: 'x@t.local' });
     const types = (await outsider.call('GET', '/node-types')).json<NodeDescription[]>();
     expect(types.map((t) => t.type)).toEqual([
+      // Spec 011: agente e modelo.
+      'ai.agent',
+      'ai.chatModel',
       // Spec 010.
       'ai.mcpClient',
       // Spec 005: code.javascript, http.respondToWebhook, trigger.webhook.
       'code.javascript',
       'data.set',
       'data.setVariable',
+      // Spec 008 (parte antecipada): sub-workflow e espera.
+      'flow.executeWorkflow',
+      'flow.wait',
       // Spec 004.
       'http.request',
       'http.respondToWebhook',
@@ -263,9 +269,18 @@ describe('spec 002 — FR-006: catálogo de tipos de nó', () => {
       'logic.merge',
       'logic.switch',
       'logic.while',
+      // Spec 011: memórias e ferramentas (sub-nós).
+      'memory.buffer',
+      'memory.postgres',
       'postgres.query',
       'postgres.write',
+      'tool.code',
+      'tool.httpRequest',
+      'tool.mcp',
+      'tool.postgresQuery',
+      'tool.workflow',
       'trigger.error',
+      'trigger.executeWorkflow',
       'trigger.manual',
       'trigger.webhook',
     ]);

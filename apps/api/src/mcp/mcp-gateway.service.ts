@@ -236,6 +236,25 @@ export class McpGatewayFactory {
               !blocked.has(t.name),
           );
         }),
+      agentTools: (ref) =>
+        run(ref, { operation: 'listTools' }, async (connection, server) => {
+          // Spec 011: as mesmas tools liberadas, com a política (destrutiva) e a anotação.
+          const policies = await effectivePolicies(this.db, server.id, ctx.projectId);
+          const snapshot = (server.tools_snapshot ?? {}) as McpToolsSnapshot;
+          const blocked = blockedTools(server.snapshot_pending_diff as McpSnapshotDiff | null);
+          return (await connection.tools(signalOf(ref)))
+            .filter(
+              (t) =>
+                policies.get(t.name)?.allowed === true &&
+                snapshot[t.name]?.hash === toolHash(t) &&
+                !blocked.has(t.name),
+            )
+            .map((t) => ({
+              definition: t,
+              destructive: policies.get(t.name)?.destructive === true,
+              readOnly: t.annotations?.readOnlyHint === true,
+            }));
+        }),
       listResources: (ref) =>
         run(
           ref,

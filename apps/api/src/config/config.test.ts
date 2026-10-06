@@ -201,4 +201,21 @@ describe('configuração da API (validação zod na inicialização)', () => {
       /OLLY_MCP_CALL_TIMEOUT_MS/,
     );
   });
+  it('spec 011 — NFR-001/NFR-002/FR-002: limites do agente; modelos não vêm do ambiente', () => {
+    const config = loadConfig(valid);
+    expect(config.ai).toEqual({
+      maxIterations: 25,
+      toolResultMaxChars: 20_000,
+      approvalTimeoutMs: 24 * 3_600_000,
+      memoryRetentionDays: 30,
+    });
+    const custom = loadConfig({
+      ...valid,
+      // FR-002: a lista é um cadastro na administração; a variável antiga é ignorada.
+      OLLY_ALLOWED_MODELS: 'gpt-4o-mini, claude-sonnet-5-5',
+      OLLY_APPROVAL_TIMEOUT_HOURS: '1',
+    });
+    expect(custom.ai).not.toHaveProperty('allowedModels');
+    expect(custom.ai.approvalTimeoutMs).toBe(3_600_000);
+  });
 });

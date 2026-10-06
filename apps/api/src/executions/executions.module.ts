@@ -12,6 +12,9 @@ import { ExecutionRunner } from './execution-runner.js';
 import { ExecutionsController } from './executions.controller.js';
 import { ExecutionsGateway } from './executions.gateway.js';
 import { ExecutionsService } from './executions.service.js';
+import { SUBWORKFLOW_QUEUE, SubWorkflowService } from './sub-workflows.js';
+import { ExecutionWaits } from './waits.service.js';
+import { AI_RUNTIME_PROVIDERS } from '../ai/ai-runtime.js';
 
 @Module({
   imports: [AuthModule, McpRuntimeModule],
@@ -23,6 +26,12 @@ import { ExecutionsService } from './executions.service.js';
     ExecutionEventRelay,
     ExecutionsGateway,
     ExecutionRunner,
+    // Spec 008: esperas (estado e retomada) e sub-workflows.
+    ExecutionWaits,
+    SubWorkflowService,
+    { provide: SUBWORKFLOW_QUEUE, useExisting: QueueDispatcher },
+    // Spec 011: gateway de IA e pedidos de aprovação.
+    ...AI_RUNTIME_PROVIDERS,
     InProcessDispatcher,
     // Spec 006: produção pela fila (workers); teste pela fila ou em processo.
     QueueDispatcher,
@@ -30,6 +39,13 @@ import { ExecutionsService } from './executions.service.js';
     WorkerLostSweeper,
     ErrorWorkflowTrigger,
   ],
-  exports: [ExecutionsService, ExecutionDispatcher, ExecutionEventsService, ExecutionEventSink],
+  exports: [
+    ExecutionsService,
+    ExecutionDispatcher,
+    ExecutionEventsService,
+    ExecutionEventSink,
+    ExecutionWaits,
+    ...AI_RUNTIME_PROVIDERS,
+  ],
 })
 export class ExecutionsModule {}

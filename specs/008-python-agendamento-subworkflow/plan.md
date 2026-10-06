@@ -146,3 +146,10 @@
 | Serialização incompleta do estado | Teste de retomada em outro worker com laço + Merge |
 
 Ao concluir, produzir `docs/seguranca-sandbox.md` (modelo de ameaça e controles).
+
+## Histórico de alterações
+
+| Data | Alteração | Motivo |
+|---|---|---|
+| 06/10/2026 | §4/§5 antecipados para a spec 011 (decisão humana). §5: o nó pausa com `NodeWaitSignal`; os ramos independentes do nó em espera continuam; a retomada executa de novo o nó (mesmo `runIndex`, `ctx.resume`); retomada pelo job `resume` na fila `executions` e varredura de 30 s; `execution_state` guarda também os valores entregues aos nós (base da aprovação da 011); cancelar uma execução em espera a encerra direto | Estado único e genérico para o Wait e a aprovação humana |
+| 06/10/2026 | §4: aguardando o término, a filha roda no mesmo worker do pai (sem fila); sem aguardar, vai para a fila. Permissão: mesmo projeto vale a de quem disparou; outro projeto exige `workflow:execute` do dono como membro (o grupo global do IdP só existe no token). Filha que entra em espera falha quando aguardada | Evita o pai ocupar a vaga da cota que a filha esperaria; o dono não tem token durante a execução |

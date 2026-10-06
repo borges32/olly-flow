@@ -11,6 +11,9 @@ import { CredentialsModule } from '../credentials/credentials.module.js';
 import { ExecutionEventSink } from '../executions/execution-events.service.js';
 import { ErrorWorkflowTrigger } from '../executions/error-workflow.js';
 import { ExecutionRunner } from '../executions/execution-runner.js';
+import { SUBWORKFLOW_QUEUE, SubWorkflowService } from '../executions/sub-workflows.js';
+import { ExecutionWaits } from '../executions/waits.service.js';
+import { AI_RUNTIME_PROVIDERS } from '../ai/ai-runtime.js';
 import { QueueDispatcher } from '../queue/queue-dispatcher.js';
 import { ExpressionsModule } from '../expressions/expressions.module.js';
 import { NodeTypesModule } from '../node-types/node-types.module.js';
@@ -47,6 +50,12 @@ export class WorkerModule {
         { provide: ExecutionEventSink, useExisting: RedisEventPublisher },
         ExecutionRunner,
         ExecutionProcessor,
+        // Spec 008: esperas (estado e retomada) e sub-workflows.
+        ExecutionWaits,
+        SubWorkflowService,
+        { provide: SUBWORKFLOW_QUEUE, useExisting: QueueDispatcher },
+        // Spec 011: gateway de IA e pedidos de aprovação (expiração na varredura).
+        ...AI_RUNTIME_PROVIDERS,
         // Spec 007: o worker enfileira o workflow de erro das execuções que falham.
         QueueDispatcher,
         ErrorWorkflowTrigger,

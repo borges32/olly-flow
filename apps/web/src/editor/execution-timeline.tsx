@@ -8,6 +8,7 @@ const BAR_COLOR: Partial<Record<NodeRunView['status'], string>> = {
   success: 'fill-emerald-500',
   error: 'fill-destructive',
   cancelled: 'fill-amber-500',
+  waiting: 'fill-sky-500',
 };
 
 const formatMs = (ms: number) =>

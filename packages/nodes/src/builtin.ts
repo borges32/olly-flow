@@ -1,4 +1,11 @@
+import { agentNode } from './ai/agent/definition.js';
+import { chatModelNode } from './ai/chat-model/definition.js';
 import { mcpClientNode } from './ai/mcp-client/definition.js';
+import { bufferMemoryNode, postgresMemoryNode } from './ai/memory/definitions.js';
+import { createAgentToolNodes } from './ai/tools/definitions.js';
+import { executeWorkflowNode } from './flow/execute-workflow/definition.js';
+import { waitNode } from './flow/wait/definition.js';
+import { executeWorkflowTrigger } from './trigger/execute-workflow/definition.js';
 import { codeJavascriptNode } from './code/javascript/definition.js';
 import { setNode } from './data/set/definition.js';
 import { setVariableNode } from './data/set-variable/definition.js';
@@ -39,17 +46,19 @@ export interface BuiltinNodeOptions {
  */
 export function createBuiltinNodes(options: BuiltinNodeOptions = {}): NodeDefinition[] {
   const pools = options.pools ?? new PoolManager();
+  const httpRequest = createHttpRequestNode({
+    guard: options.httpGuard ?? createHttpGuard(),
+    oauth: options.oauth ?? new OAuth2TokenCache(),
+    maxResponseBytes: options.httpMaxResponseBytes ?? DEFAULT_HTTP_MAX_RESPONSE_BYTES,
+  });
+  const postgresQuery = createPostgresQueryNode({ pools });
   return [
     manualTrigger,
     setNode,
     setVariableNode,
     ifNode,
-    createHttpRequestNode({
-      guard: options.httpGuard ?? createHttpGuard(),
-      oauth: options.oauth ?? new OAuth2TokenCache(),
-      maxResponseBytes: options.httpMaxResponseBytes ?? DEFAULT_HTTP_MAX_RESPONSE_BYTES,
-    }),
-    createPostgresQueryNode({ pools }),
+    httpRequest,
+    postgresQuery,
     createPostgresWriteNode({ pools, columns: options.columns ?? new ColumnCache() }),
     webhookTrigger,
     respondToWebhookNode,
@@ -62,6 +71,16 @@ export function createBuiltinNodes(options: BuiltinNodeOptions = {}): NodeDefini
     errorTrigger,
     // Spec 010: cliente MCP (o acesso aos servidores vem do motor, `ctx.mcp()`).
     mcpClientNode,
+    // Spec 008 (parte antecipada): espera e sub-workflows.
+    waitNode,
+    executeWorkflowTrigger,
+    executeWorkflowNode,
+    // Spec 011: Agent e sub-nós (modelo, memórias, ferramentas).
+    agentNode,
+    chatModelNode,
+    postgresMemoryNode,
+    bufferMemoryNode,
+    ...createAgentToolNodes({ httpRequest, postgresQuery }),
   ];
 }
 

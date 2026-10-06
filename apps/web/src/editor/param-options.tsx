@@ -1,9 +1,15 @@
 import type { LoadOptionsSource } from '@olly/nodes';
-import type { McpToolDefinition, PostgresColumn } from '@olly/shared-types';
+import type {
+  McpToolDefinition,
+  Paginated,
+  PostgresColumn,
+  WorkflowSummary,
+} from '@olly/shared-types';
 import { useQuery } from '@tanstack/react-query';
 import { createContext, useContext } from 'react';
 import { useApi } from '@/api/api-provider';
 import { queryKeys, useMcpAvailable } from '@/api/queries';
+import { mcpLoadOptions } from './mcp-options';
 
 /** O que um campo `x-load-options` precisa saber do nó: credencial, projeto e parâmetros. */
 export interface ParamOptionsSourceContext {
@@ -55,29 +61,44 @@ export function useLoadOptions(source: LoadOptionsSource | undefined) {
     staleTime: 60_000,
   });
   const mcp = useMcpAvailable(isMcp ? ctx?.projectId : undefined);
+  // Spec 008: workflows do projeto para o sub-workflow (a execução exige o alvo publicado).
+  const workflows = useQuery({
+    queryKey: ['projects', ctx?.projectId ?? '', 'workflows', 'options'],
+    queryFn: () =>
+      api.get<Paginated<WorkflowSummary>>(
+        `/api/v1/projects/${ctx?.projectId ?? ''}/workflows?page=1&pageSize=100`,
+      ),
+    enabled: source === 'workflows' && ctx?.projectId !== undefined,
+    staleTime: 30_000,
+  });
+  // Spec 011, FR-002: modelos permitidos no projeto (instalação ∩ projeto).
+  const models = useQuery({
+    queryKey: ['projects', ctx?.projectId ?? '', 'ai-models'],
+    queryFn: () => api.get<string[]>(`/api/v1/projects/${ctx?.projectId ?? ''}/ai-models`),
+    enabled: source === 'aiModels' && ctx?.projectId !== undefined,
+    retry: false,
+    staleTime: 60_000,
+  });
+  if (source === 'aiModels') {
+    return {
+      options: models.data?.map((value) => ({ value, label: value })),
+      loading: models.isLoading,
+      error: models.error,
+      hint: 'Nenhum modelo liberado: a administração cadastra os modelos em Administração › IA.',
+    };
+  }
+  if (source === 'workflows') {
+    return {
+      options: workflows.data?.items.map((w) => ({ value: w.id, label: w.name })),
+      loading: workflows.isLoading,
+      error: workflows.error,
+      hint: 'Publique o workflow chamado; ele precisa do gatilho "Quando chamado por outro workflow".',
+    };
+  }
 
   if (isMcp) {
-    const serverId = text(ctx?.params.serverId);
-    const servers = mcp.data;
-    const options: LoadedOption[] | undefined =
-      source === 'mcpServers'
-        ? servers?.map((s) => ({ value: s.id, label: s.name }))
-        : serverId
-          ? servers
-              ?.find((s) => s.id === serverId)
-              ?.tools.map((t) => ({ value: t.name, label: t.name }))
-          : undefined;
-    return {
-      options,
-      loading: mcp.isLoading,
-      error: mcp.error,
-      hint:
-        source === 'mcpTools' && !serverId
-          ? 'Selecione o servidor MCP para listar as tools.'
-          : servers && servers.length === 0
-            ? 'Nenhum servidor MCP aprovado neste projeto.'
-            : undefined,
-    };
+    const { options, hint } = mcpLoadOptions(source, mcp.data, text(ctx?.params.serverId));
+    return { options, loading: mcp.isLoading, error: mcp.error, hint };
   }
   return {
     options: ready ? query.data?.map((value) => ({ value, label: value })) : undefined,

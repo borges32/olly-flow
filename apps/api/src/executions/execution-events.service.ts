@@ -40,6 +40,14 @@ function withoutData<K extends keyof ExecutionEvents>(
     delete copy.console;
     return copy as ExecutionEvents[K];
   }
+  if (event === 'agentStep') {
+    const copy: ExecutionEvents['agentStep'] = {
+      ...(payload as ExecutionEvents['agentStep']),
+      contentRedacted: true,
+    };
+    delete copy.content;
+    return copy as ExecutionEvents[K];
+  }
   if (event === 'testWebhookReceived') {
     const copy: ExecutionEvents['testWebhookReceived'] = {
       ...(payload as ExecutionEvents['testWebhookReceived']),

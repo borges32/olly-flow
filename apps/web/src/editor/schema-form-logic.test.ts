@@ -6,6 +6,7 @@ import {
   isFieldVisible,
   mcpArgumentsSchema,
   newArrayItem,
+  rangeMessage,
   type ParamSchema,
 } from './schema-form-logic';
 
@@ -83,5 +84,19 @@ describe('spec 010 — FR-009: formulário a partir do inputSchema da tool MCP',
     ).toEqual({ a: 'a *', b: 'Segunda *', nota: 'nota' });
     expect(fieldKind(asSchema(schema.properties?.a))).toBe('number');
     expect(asSchema(schema.properties?.a).description).toBe('Primeira parcela');
+  });
+});
+
+describe('spec 007 — FR-001: faixa dos campos numéricos', () => {
+  const entradas = { type: 'integer', minimum: 2, maximum: 10 } as ParamSchema;
+  it('FR-001: avisa fora da faixa (ex.: 15 entradas no Merge)', () => {
+    expect(rangeMessage(entradas, 15)).toBe('Use um valor entre 2 e 10.');
+    expect(rangeMessage(entradas, 1)).toBe('Use um valor entre 2 e 10.');
+    expect(rangeMessage({ type: 'number', minimum: 0 }, -1)).toBe('Use no mínimo 0.');
+  });
+  it('FR-001: dentro da faixa, vazio ou expressão, sem aviso', () => {
+    expect(rangeMessage(entradas, 10)).toBeUndefined();
+    expect(rangeMessage(entradas, undefined)).toBeUndefined();
+    expect(rangeMessage(entradas, '={{ 20 }}')).toBeUndefined();
   });
 });

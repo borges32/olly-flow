@@ -15,6 +15,8 @@ export function AdminNav() {
     masking && { to: '/admin/masking', label: 'Mascaramento' },
     audit && { to: '/admin/audit', label: 'Auditoria' },
     mcp && { to: '/admin/mcp', label: 'MCP' },
+    // Spec 011: uso, preços, modelos e limites de IA (administração da plataforma).
+    masking && { to: '/admin/ai', label: 'IA' },
   ].filter((t): t is { to: string; label: string; end?: boolean } => Boolean(t));
   return (
     <nav aria-label="Administração" className="flex gap-1 border-b">

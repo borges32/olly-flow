@@ -51,7 +51,7 @@
   2. `@fastify/rate-limit` por rota;
   3. CORS e allowlist de IP;
   4. autenticação por credencial (HMAC com `crypto.timingSafeEqual` sobre o *raw body*);
-  5. montagem do item `{ headers (sem authorization/cookie/x-signature), params, query, body }`;
+  5. montagem do item `{ headers (sem authorization/cookie/x-signature), params, query, body }`; o corpo vira objeto quando o `Content-Type` é JSON ou quando, sendo texto, formulário ou ausente, o conteúdo é um JSON válido (objeto ou lista);
   6. `dispatch`.
 - **Modos:**
   - `onReceived`: 202 `{ executionId }`;
@@ -169,3 +169,4 @@ O teste da matriz papel × ação (FR-017) gera `docs/rbac-matriz.md` a partir d
 | 03/10/2026 | Seção "Permissões RBAC" e tarefa T089 | Decisão humana: cada spec acrescenta e garante as permissões que cria |
 | 04/10/2026 | Decisões de implementação (§10) | Lacunas do plano encontradas ao implementar |
 | 05/10/2026 | Escuta de teste pelo nó executa só o Webhook (`destinationNodeId` na escuta) | Teste de UX (FR-007, HU-2.1) |
+| 06/10/2026 | §5 do gateway: corpo JSON enviado como `text/plain`, `application/x-www-form-urlencoded` ou sem `Content-Type` vira objeto (antes: texto, ou um objeto com o JSON como chave) | Teste do usuário: clientes comuns (`fetch` sem cabeçalho, `curl -d`) não declaram JSON, e o `body` chegava como string |

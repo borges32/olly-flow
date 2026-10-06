@@ -193,6 +193,10 @@ describe('spec 004 — FR-002/FR-007: API de credenciais e permissões', () => {
         { name: string; properties: { properties: Record<string, Record<string, unknown>> } }[]
       >();
     expect(types.map((t) => t.name).sort()).toEqual([
+      // Spec 011: provedores de modelo (`fakeLlm` só com NODE_ENV=test, como nos testes).
+      'anthropic',
+      'fakeLlm',
+      'googleGemini',
       'httpBasic',
       'httpBearer',
       'httpHeaderAuth',
@@ -202,6 +206,7 @@ describe('spec 004 — FR-002/FR-007: API de credenciais e permissões', () => {
       'mcpHeaders',
       'mcpOAuth',
       'oauth2ClientCredentials',
+      'openAiCompatible',
       'postgres',
       // Spec 005: autenticação de webhooks recebidos.
       'webhookBasicAuth',

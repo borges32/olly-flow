@@ -9,6 +9,7 @@ import type {
 } from '@olly/shared-types';
 import type { McpToolDefinition } from '@olly/shared-types';
 import type { ResolvedCredential } from './credentials/definitions.js';
+import type { AiGateway } from './ai/runtime/types.js';
 
 export type { JSONSchema7, JSONSchema7Definition };
 
@@ -50,6 +51,10 @@ export const LOAD_OPTIONS_SOURCES = [
   // Spec 010: servidores MCP ativos no projeto e as tools liberadas do servidor escolhido.
   'mcpServers',
   'mcpTools',
+  // Spec 008: workflows publicados do projeto (sub-workflow).
+  'workflows',
+  // Spec 011: modelos permitidos (instalação e projeto).
+  'aiModels',
 ] as const;
 export type LoadOptionsSource = (typeof LOAD_OPTIONS_SOURCES)[number];
 
@@ -137,12 +142,45 @@ export interface McpGateway {
   ): Promise<McpToolCallResult>;
   /** Somente as tools liberadas no projeto. */
   listTools(ref: McpCallRef): Promise<McpToolDefinition[]>;
+  /**
+   * Spec 011: tools liberadas para um agente, com a marcação de destrutiva (política) e se são
+   * somente leitura (anotação `readOnlyHint` do servidor).
+   */
+  agentTools(
+    ref: McpCallRef,
+  ): Promise<{ definition: McpToolDefinition; destructive: boolean; readOnly: boolean }[]>;
   listResources(ref: McpCallRef): Promise<Record<string, unknown>[]>;
   readResource(ref: McpCallRef & { uri: string }): Promise<{ contents: Record<string, unknown>[] }>;
   listPrompts(ref: McpCallRef): Promise<Record<string, unknown>[]>;
   getPrompt(
     ref: McpCallRef & { name: string; arguments: Record<string, string> },
   ): Promise<{ description?: string; messages: Record<string, unknown>[] }>;
+}
+
+/**
+ * Sub-workflows (spec 008, FR-009 a FR-011), fornecido pela API: verifica a permissão do dono
+ * da execução, a publicação do alvo, a profundidade e a recursão, e vincula a execução filha.
+ */
+export interface SubWorkflowGateway {
+  run: (request: {
+    workflowId: string;
+    items: Item[];
+    /** Aguarda o fim e devolve os itens do último nó do filho. */
+    wait: boolean;
+    signal?: AbortSignal;
+  }) => Promise<{ executionId: string; status: string; items: Item[] }>;
+  /** Spec 011: nome e schema de entrada (do gatilho) do workflow publicado. */
+  describe: (
+    workflowId: string,
+  ) => Promise<{ name: string; inputSchema: Record<string, unknown> | null }>;
+}
+
+/** Retomada de um nó que entrou em espera (spec 008, FR-012). */
+export interface NodeResume {
+  /** `data` do `NodeWaitSignal` que pausou o nó. */
+  data: unknown;
+  /** O que retomou: `{ kind: 'time' }` ou as decisões de aprovação (spec 011). */
+  value: unknown;
 }
 
 export interface NodeContext {
@@ -163,7 +201,7 @@ export interface NodeContext {
    * devolve o retorno bruto (uma vez) ou a lista de retornos por item. A saída do `console` vai
    * para o registro do nó.
    */
-  runCode(request: { code: string; mode: CodeMode }): Promise<unknown>;
+  runCode(request: { code: string; mode: CodeMode; items?: Item[] }): Promise<unknown>;
   /** Grava a resposta do webhook; só a primeira vale (devolve `false` nas seguintes). */
   respondToWebhook(response: WebhookResponse): boolean;
   /**
@@ -181,6 +219,34 @@ export interface NodeContext {
   readonly runIndex: number;
   /** Servidores MCP do catálogo (spec 010). Lança se o motor não recebeu o gateway. */
   mcp(): McpGateway;
+  /** Sub-workflows (spec 008). Lança se o motor não recebeu o gateway. */
+  subWorkflows(): SubWorkflowGateway;
+  /** Presente quando o nó é retomado depois de uma espera (spec 008, FR-012). */
+  readonly resume?: NodeResume;
+  /**
+   * Spec 011, FR-001: o que os sub-nós ligados à porta do tipo `kind` fornecem para o item
+   * (modelo, memória, ferramentas), na ordem das conexões.
+   */
+  subNodes(kind: SubNodeKind, itemIndex: number): Promise<SubNodeSupply[]>;
+  /**
+   * Spec 011, FR-007: parâmetros deste nó resolvidos com os valores de `$fromAI()` (sub-nó de
+   * ferramenta, na chamada feita pelo modelo).
+   */
+  withFromAI(
+    values: Record<string, unknown>,
+    itemIndex: number,
+  ): Promise<(name: string) => unknown>;
+  /** Serviços de IA (spec 011). Lança se o motor não recebeu o gateway. */
+  ai(): AiGateway;
+}
+
+export type SubNodeKind = 'ai_languageModel' | 'ai_memory' | 'ai_tool';
+
+/** O que um sub-nó fornece, com o nó de origem. */
+export interface SubNodeSupply {
+  node: WorkflowNode;
+  type: string;
+  data: unknown;
 }
 
 export interface NodeDefinition {
@@ -205,6 +271,11 @@ export interface NodeDefinition {
    */
   rerunOnPartialExecution?: boolean;
   execute(input: NodeExecuteInput, ctx: NodeContext): Promise<NodeOutput>;
+  /**
+   * Sub-nó (spec 011, FR-001): não executa no fluxo; o nó ao qual está ligado pede o que ele
+   * fornece (modelo, memória, ferramentas) para cada item.
+   */
+  supplyData?(ctx: NodeContext, itemIndex: number): Promise<unknown>;
 }
 
 /** Visão pública de um nó, sem a função de execução (ex.: `GET /node-types`). */

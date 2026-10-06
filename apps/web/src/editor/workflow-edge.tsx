@@ -21,6 +21,8 @@ export type OllyEdgeData = {
   onHover: (edgeId: string | null) => void;
   /** Comparação de versões (spec 009, FR-010). */
   diffStatus?: 'added' | 'removed';
+  /** Spec 011: sub-nó (modelo, memória, ferramenta) ligado à base do Agent, tracejado. */
+  subNode?: boolean;
 };
 export type OllyFlowEdge = Edge<OllyEdgeData, 'olly'>;
 
@@ -70,6 +72,7 @@ export const WorkflowEdgeView = memo(function WorkflowEdgeView({
           data?.back && 'olly-back-edge',
           data?.invalidReason && 'olly-invalid-edge',
           data?.diffStatus && `olly-diff-edge-${data.diffStatus}`,
+          data?.subNode && 'olly-subnode-edge',
         )}
         style={{
           stroke: selected
@@ -85,6 +88,7 @@ export const WorkflowEdgeView = memo(function WorkflowEdgeView({
           ...((data?.back || data?.invalidReason || data?.diffStatus === 'removed') && {
             strokeDasharray: '6 4',
           }),
+          ...(data?.subNode && !data.invalidReason && { strokeDasharray: '4 3' }),
         }}
       />
       {data?.invalidReason && (

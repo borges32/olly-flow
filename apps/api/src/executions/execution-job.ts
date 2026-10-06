@@ -1,4 +1,4 @@
-import type { CancelReason } from '@olly/engine';
+import type { CancelReason, EngineSnapshot, WaitingNode } from '@olly/engine';
 import type { WebhookResponse } from '@olly/nodes';
 import type { Item, WorkflowDefinition } from '@olly/shared-types';
 
@@ -19,6 +19,8 @@ export interface ExecutionJob {
   destinationNodeId?: string;
   /** Execução de um nó (spec 003, FR-020): nó → execução de onde vêm os dados. */
   reuse?: Record<string, string>;
+  /** Retomada de uma execução em espera (spec 008, FR-012). */
+  resume?: { snapshot: EngineSnapshot; values: Record<string, unknown> };
 }
 
 /** Dados do disparo guardados fora da fila (`execution_payloads`, spec 006 FR-001). */
@@ -35,10 +37,13 @@ export interface ExecutionError {
 }
 
 export interface ExecutionOutcome {
-  status: 'success' | 'error' | 'cancelled';
+  /** `waiting`: a execução pausou (spec 008) e será retomada; não é um desfecho final. */
+  status: 'success' | 'error' | 'cancelled' | 'waiting';
   error?: ExecutionError;
   /** Itens do último nó que terminou com dados (modo de resposta `lastNode`). */
   lastOutput?: Item[];
+  /** Com `waiting`: os nós que aguardam (aprovações da spec 011). */
+  waiting?: WaitingNode[];
 }
 
 export type WaitResult =

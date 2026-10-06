@@ -40,6 +40,14 @@ export interface ProjectsTable {
   >;
   /** JSONB `{ dataDays?, metadataDays? }`: insira com `JSON.stringify`. */
   retention: ColumnType<unknown, string | undefined, string>;
+  /** Spec 011, FR-002: modelos permitidos no projeto (NULL = os da instalação). */
+  allowed_models: ColumnType<string[] | null, string[] | null | undefined, string[] | null>;
+  /** Spec 011, FR-015: limite mensal de tokens (NULL = sem limite). BIGINT: string no driver. */
+  monthly_token_limit: ColumnType<
+    string | null,
+    number | string | null | undefined,
+    number | string | null
+  >;
 }
 
 export type SaveExecutionData = 'all' | 'errorsOnly' | 'none';
@@ -153,6 +161,100 @@ export interface McpCallsTable {
   created_at: GeneratedTimestamp;
 }
 
+/** Passo do agente (spec 011, FR-006), com conteúdo mascarado. */
+export interface AgentStepsTable {
+  id: Generated<string>;
+  execution_id: string;
+  project_id: string;
+  node_id: string;
+  run_index: Generated<number>;
+  item_index: Generated<number>;
+  step_index: number;
+  kind: 'model' | 'tool' | 'approval' | 'final' | 'error';
+  tool_name: string | null;
+  /** JSONB: insira com `JSON.stringify`. */
+  content: ColumnType<unknown, string | null | undefined, string | null>;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  created_at: GeneratedTimestamp;
+}
+
+/** Memória persistente de conversa (spec 011, FR-009). */
+export interface AgentMemoryTable {
+  /** BIGSERIAL: o driver `pg` devolve como string. */
+  id: Generated<string>;
+  project_id: string;
+  session_key: string;
+  /** JSONB (`StoredMessage` do LangChain): insira com `JSON.stringify`. */
+  message: ColumnType<unknown, string, string>;
+  created_at: GeneratedTimestamp;
+}
+
+export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'expired' | 'cancelled';
+
+/** Pedido de aprovação humana (spec 011, FR-010, FR-011). */
+export interface ApprovalRequestsTable {
+  id: Generated<string>;
+  execution_id: string;
+  project_id: string;
+  workflow_id: string;
+  node_id: string;
+  run_index: Generated<number>;
+  item_index: Generated<number>;
+  approval_key: string;
+  tool: string;
+  /** JSONB mascarado (exibição): insira com `JSON.stringify`. */
+  arguments: ColumnType<unknown, string | null | undefined, string | null>;
+  reason: string;
+  status: ColumnType<ApprovalStatus, ApprovalStatus | undefined, ApprovalStatus>;
+  expires_at: Timestamp;
+  decided_by: string | null;
+  decided_at: Timestamp | null;
+  comment: string | null;
+  created_at: GeneratedTimestamp;
+}
+
+/** Uso de LLM por chamada ao modelo (spec 011, FR-014). */
+export interface LlmUsageTable {
+  id: Generated<string>;
+  execution_id: string;
+  project_id: string;
+  workflow_id: string;
+  node_id: string;
+  provider: string;
+  model: string;
+  input_tokens: Generated<number>;
+  output_tokens: Generated<number>;
+  /** NUMERIC: string no driver. NULL sem preço cadastrado. */
+  cost_estimate: ColumnType<
+    string | null,
+    number | string | null | undefined,
+    number | string | null
+  >;
+  currency: string | null;
+  created_at: GeneratedTimestamp;
+}
+
+/** Modelo de IA permitido na instalação (spec 011, FR-002), cadastrado na administração. */
+export interface AiModelsTable {
+  model: string;
+  note: string | null;
+  created_by: string | null;
+  created_at: GeneratedTimestamp;
+}
+
+/** Preço por milhão de tokens (spec 011, FR-014). NUMERIC: string no driver. */
+export interface LlmPricingTable {
+  model: string;
+  provider: string;
+  input_per_1m: ColumnType<string, number | string, number | string>;
+  output_per_1m: ColumnType<string, number | string, number | string>;
+  currency: Generated<string>;
+  note: string | null;
+  updated_by: string | null;
+  updated_at: GeneratedTimestamp;
+}
+
 export interface AuditLogTable {
   /** BIGSERIAL: o driver `pg` devolve como string. */
   id: Generated<string>;
@@ -219,6 +321,21 @@ export interface ExecutionsTable {
   definition: ColumnType<unknown, string | null | undefined, string | null>;
   /** Último batimento do worker (spec 006, FR-005). */
   heartbeat_at: ColumnType<Date | null, Date | null | undefined, Date | null>;
+  /** Spec 008, FR-010: execução pai (sub-workflow) e profundidade de aninhamento. */
+  parent_execution_id: ColumnType<string | null, string | null | undefined, string | null>;
+  depth: Generated<number>;
+  /** Spec 008, FR-014: execução reexecutada (reexecução ainda não implementada). */
+  retry_of: ColumnType<string | null, string | null | undefined, string | null>;
+}
+
+/** Estado serializado do motor de uma execução em `waiting` (spec 008, FR-012). */
+export interface ExecutionStateTable {
+  execution_id: string;
+  /** JSONB: insira com `JSON.stringify`. */
+  state: ColumnType<unknown, string, string>;
+  resume_at: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
+  created_at: GeneratedTimestamp;
+  updated_at: GeneratedTimestamp;
 }
 
 /** Dados do disparo de uma execução enfileirada (spec 006, FR-001). */
@@ -285,6 +402,7 @@ export interface Database {
   executions: ExecutionsTable;
   node_executions: NodeExecutionsTable;
   execution_payloads: ExecutionPayloadsTable;
+  execution_state: ExecutionStateTable;
   credentials: CredentialsTable;
   group_role_mappings: GroupRoleMappingsTable;
   publish_requests: PublishRequestsTable;
@@ -292,6 +410,12 @@ export interface Database {
   mcp_servers: McpServersTable;
   mcp_tool_policies: McpToolPoliciesTable;
   mcp_calls: McpCallsTable;
+  agent_steps: AgentStepsTable;
+  agent_memory: AgentMemoryTable;
+  approval_requests: ApprovalRequestsTable;
+  llm_usage: LlmUsageTable;
+  llm_pricing: LlmPricingTable;
+  ai_models: AiModelsTable;
 }
 
 export type User = Selectable<UsersTable>;
@@ -314,3 +438,7 @@ export type MaskingRuleRow = Selectable<MaskingRulesTable>;
 export type McpServerRow = Selectable<McpServersTable>;
 export type McpToolPolicyRow = Selectable<McpToolPoliciesTable>;
 export type McpCallRow = Selectable<McpCallsTable>;
+export type ApprovalRequestRow = Selectable<ApprovalRequestsTable>;
+export type AgentStepRow = Selectable<AgentStepsTable>;
+export type LlmPricingRow = Selectable<LlmPricingTable>;
+export type AiModelRow = Selectable<AiModelsTable>;

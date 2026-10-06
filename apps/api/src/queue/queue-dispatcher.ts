@@ -14,7 +14,7 @@ import type { S3BinaryStorage } from '../binary/s3-binary-store.js';
 import { APP_CONFIG, type AppConfig } from '../config/config.js';
 import { createRedisConnection } from '../core/redis.js';
 import { DB, REDIS } from '../core/tokens.js';
-import { ExecutionDispatcher, cancelQueued } from '../executions/dispatcher.js';
+import { ExecutionDispatcher, cancelQueued, cancelWaiting } from '../executions/dispatcher.js';
 import { ExecutionEventSink } from '../executions/execution-events.service.js';
 import type { CancelMessage, ExecutionJob, WaitResult } from '../executions/execution-job.js';
 import { ResultPublisher, ResultSubscriber } from '../executions/result-bus.js';
@@ -106,7 +106,9 @@ export class QueueDispatcher
   }
 
   async cancel(executionId: string, reason: ExecutionCancelledError): Promise<boolean> {
-    const queued = await cancelQueued(this.db, executionId, reason);
+    const queued =
+      (await cancelQueued(this.db, executionId, reason)) ??
+      (await cancelWaiting(this.db, executionId, reason));
     if (queued) {
       this.events.emit(
         'executionFinished',

@@ -1,10 +1,16 @@
 import {
+  Bot,
+  Brain,
   Code,
   Database,
+  DatabaseZap,
   GitBranch,
   Globe,
+  Hourglass,
   Layers,
+  LogIn,
   Merge,
+  MessageSquare,
   PenLine,
   Play,
   PlugZap,
@@ -14,6 +20,7 @@ import {
   Split,
   Variable,
   Webhook,
+  Workflow,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -36,6 +43,15 @@ export const NODE_ICONS: Record<string, LucideIcon> = {
   siren: Siren,
   // Spec 010.
   'plug-zap': PlugZap,
+  // Spec 008.
+  hourglass: Hourglass,
+  'log-in': LogIn,
+  workflow: Workflow,
+  // Spec 011.
+  bot: Bot,
+  brain: Brain,
+  'database-zap': DatabaseZap,
+  'message-square': MessageSquare,
 };
 
 /** Ícones conhecidos (o teste garante que todo nó da plataforma tenha o seu). */

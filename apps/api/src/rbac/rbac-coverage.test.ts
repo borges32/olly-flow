@@ -43,6 +43,7 @@ beforeAll(async () => {
       workflowTimeoutMs: 300_000,
       defaultMaxParallel: 8,
       maxLoopIterations: 10_000,
+      maxSubworkflowDepth: 5,
     },
     publicUrl: 'http://localhost:5173',
     credentials: { keyProvider: 'env', masterKey: randomBytes(32).toString('base64') },
@@ -55,6 +56,12 @@ beforeAll(async () => {
     },
     http: { allowlist: [], maxResponseBytes: 50 * 1024 * 1024 },
     mcp: { callTimeoutMs: 60_000, maxResultBytes: 10 * 1024 * 1024 },
+    ai: {
+      maxIterations: 25,
+      toolResultMaxChars: 20_000,
+      approvalTimeoutMs: 24 * 3_600_000,
+      memoryRetentionDays: 30,
+    },
     postgres: { poolMax: 5 },
     dispatcher: { maxConcurrent: 10 },
     queue: {

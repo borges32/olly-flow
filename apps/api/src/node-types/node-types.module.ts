@@ -11,6 +11,8 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
   CredentialTypeRegistry,
   PoolManager,
+  builtinCredentialTypes,
+  fakeLlmCredential,
   createBuiltinNodes,
   createHttpGuard,
   createNodeRegistry,
@@ -77,7 +79,17 @@ export class NodeTypesController {
         });
       },
     },
-    { provide: CREDENTIAL_TYPES, useFactory: () => new CredentialTypeRegistry() },
+    {
+      provide: CREDENTIAL_TYPES,
+      inject: [APP_CONFIG],
+      // Spec 011, FR-016: o modelo simulado (`fakeLlm`) só existe nos testes.
+      useFactory: (config: AppConfig) =>
+        new CredentialTypeRegistry(
+          config.env === 'test'
+            ? [...builtinCredentialTypes, fakeLlmCredential]
+            : builtinCredentialTypes,
+        ),
+    },
     {
       provide: NODE_REGISTRY,
       inject: [APP_CONFIG, HTTP_GUARD, POOL_MANAGER],

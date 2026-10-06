@@ -11,6 +11,10 @@ const env = {
   ...(process.env as Record<string, string>),
 };
 const isCI = Boolean(process.env.CI);
+// Spec 011: o modelo simulado (credencial `fakeLlm`) só existe com NODE_ENV=test; nada mais
+// muda entre `development` e `test` além da documentação Swagger. Os modelos permitidos são
+// cadastrados pelos testes (Administração › IA).
+const aiEnv = { NODE_ENV: 'test' };
 
 export default defineConfig({
   testDir: './e2e',
@@ -30,7 +34,7 @@ export default defineConfig({
       url: 'http://localhost:3000/health',
       // Spec 004: o servidor HTTP local dos testes de integração precisa passar no anti-SSRF.
       // Spec 010: o OAuth do servidor MCP de teste usa o Keycloak do compose (localhost:8080).
-      env: { ...env, LOG_LEVEL: 'warn', OLLY_HTTP_ALLOWLIST: '127.0.0.1,localhost' },
+      env: { ...env, ...aiEnv, LOG_LEVEL: 'warn', OLLY_HTTP_ALLOWLIST: '127.0.0.1,localhost' },
       reuseExistingServer: !isCI,
       timeout: 60_000,
     },
@@ -38,7 +42,7 @@ export default defineConfig({
       // Spec 006: as execuções passam pela fila; o worker executa (mesmo ambiente da API).
       command: 'node ../worker/dist/main.js',
       url: 'http://localhost:3101/health',
-      env: { ...env, LOG_LEVEL: 'warn', OLLY_HTTP_ALLOWLIST: '127.0.0.1,localhost' },
+      env: { ...env, ...aiEnv, LOG_LEVEL: 'warn', OLLY_HTTP_ALLOWLIST: '127.0.0.1,localhost' },
       reuseExistingServer: !isCI,
       timeout: 60_000,
     },

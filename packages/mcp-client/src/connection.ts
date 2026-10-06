@@ -153,6 +153,16 @@ export class McpConnection {
       name: t.name,
       ...(t.description !== undefined && { description: t.description }),
       inputSchema: t.inputSchema,
+      ...(t.annotations && {
+        annotations: {
+          ...(t.annotations.readOnlyHint !== undefined && {
+            readOnlyHint: t.annotations.readOnlyHint,
+          }),
+          ...(t.annotations.destructiveHint !== undefined && {
+            destructiveHint: t.annotations.destructiveHint,
+          }),
+        },
+      }),
     }));
   }
 

@@ -58,6 +58,7 @@ export async function startTestContext(
       // Regressão do plan §3: OLLY_DEFAULT_MAX_PARALLEL=1 roda a suíte em modo sequencial.
       defaultMaxParallel: Number(process.env.OLLY_DEFAULT_MAX_PARALLEL) || 8,
       maxLoopIterations: 10_000,
+      maxSubworkflowDepth: 5,
     },
     publicUrl: 'http://localhost:5173',
     credentials: { keyProvider: 'env', masterKey: randomBytes(32).toString('base64') },
@@ -70,6 +71,12 @@ export async function startTestContext(
     },
     http: { allowlist: [], maxResponseBytes: 50 * 1024 * 1024 },
     mcp: { callTimeoutMs: 60_000, maxResultBytes: 10 * 1024 * 1024 },
+    ai: {
+      maxIterations: 25,
+      toolResultMaxChars: 20_000,
+      approvalTimeoutMs: 24 * 3_600_000,
+      memoryRetentionDays: 30,
+    },
     postgres: { poolMax: 5 },
     dispatcher: { maxConcurrent: 10 },
     queue: {

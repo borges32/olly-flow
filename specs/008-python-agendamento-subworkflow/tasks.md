@@ -6,7 +6,7 @@
 
 ## Fase 1 — Preparação
 
-- [ ] T001 Migrations: `execution_state`; colunas `parent_execution_id`, `depth` e `retry_of`; status `waiting`
+- [x] T001 Migrations: `execution_state`; colunas `parent_execution_id`, `depth` e `retry_of`; status `waiting` (antecipada para a 011, 06/10/2026)
 - [ ] T002 [P] Estrutura de `security/sandbox/` e job de CI dedicado (FR-017)
 
 ## Fase 2 — HU-1: Python (P1)
@@ -31,8 +31,8 @@
 
 ## Fase 5 — HU-3 e HU-4: Sub-workflow, Wait e Stop (P2)
 
-- [ ] T040 `trigger.executeWorkflow` e `flow.executeWorkflow` com permissões, profundidade e recursão (FR-009, FR-010, FR-011) → plan §4
-- [ ] T041 Serialização e retomada de estado + `flow.wait` (FR-012) → plan §5
+- [x] T040 `trigger.executeWorkflow` e `flow.executeWorkflow` com permissões, profundidade e recursão (FR-009, FR-010, FR-011) → plan §4
+- [x] T041 Serialização e retomada de estado + `flow.wait` (FR-012) → plan §5 (antecipada para a 011, 06/10/2026)
 - [ ] T042 [P] `flow.stopAndError` (FR-013) → plan §6
 
 ## Fase 6 — HU-6: Paginação (P2)

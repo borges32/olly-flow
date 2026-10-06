@@ -59,6 +59,42 @@ export async function cancelQueued(
 }
 
 /**
+ * Cancela uma execução em espera (spec 008, FR-012): sem worker envolvido, encerra direto no
+ * banco, fecha os nós que esperavam e descarta o estado salvo.
+ */
+export async function cancelWaiting(
+  db: Db,
+  executionId: string,
+  reason: ExecutionCancelledError,
+): Promise<{ workflowId: string; outcome: ExecutionOutcome; finishedAt: Date } | null> {
+  const error = { message: reason.message, reason: reason.reason };
+  const finishedAt = new Date();
+  const row = await db
+    .updateTable('executions')
+    .set({ status: 'cancelled', finished_at: finishedAt, error: JSON.stringify(error) })
+    .where('id', '=', executionId)
+    .where('status', '=', 'waiting')
+    .returning('workflow_id')
+    .executeTakeFirst();
+  if (!row) return null;
+  await db
+    .updateTable('node_executions')
+    .set({ status: 'cancelled', finished_at: finishedAt, error: JSON.stringify(error) })
+    .where('execution_id', '=', executionId)
+    .where('status', '=', 'waiting')
+    .execute();
+  await db.deleteFrom('execution_state').where('execution_id', '=', executionId).execute();
+  // Spec 011: pedidos de aprovação pendentes da execução deixam de valer.
+  await db
+    .updateTable('approval_requests')
+    .set({ status: 'cancelled', decided_at: finishedAt })
+    .where('execution_id', '=', executionId)
+    .where('status', '=', 'pending')
+    .execute();
+  return { workflowId: row.workflow_id, outcome: { status: 'cancelled', error }, finishedAt };
+}
+
+/**
  * Despacho no processo da API com limite de concorrência (`OLLY_MAX_CONCURRENT_EXECUTIONS`).
  * O excedente espera numa fila em memória com status `queued`; os resultados saem por um
  * `EventEmitter`. Resultados recentes ficam guardados para quem pergunta depois do fim. Na

@@ -16,6 +16,12 @@ export const projectSettingsSchema = z
     requirePublishApproval: z.boolean().optional(),
     executorCanReadData: z.boolean().optional(),
     saveExecutionData: z.enum(SAVE_EXECUTION_DATA).optional(),
-    retention: z.object({ dataDays: days.optional(), metadataDays: days.optional() }).optional(),
+    retention: z
+      .object({
+        dataDays: days.optional(),
+        metadataDays: days.optional(),
+        memoryDays: days.optional(),
+      })
+      .optional(),
   })
   .strict();

@@ -254,6 +254,92 @@ export const mcpOAuthCredential: CredentialTypeDefinition = {
   },
 };
 
+/** Spec 011, FR-002 (ADR-0008): API compatível com a OpenAI (OpenAI ou endpoint compatível). */
+export const openAiCompatibleCredential: CredentialTypeDefinition = {
+  name: 'openAiCompatible',
+  displayName: 'IA: OpenAI (ou compatível)',
+  description: 'Chave da API OpenAI ou de um provedor compatível (informe a URL base).',
+  properties: {
+    type: 'object',
+    required: ['apiKey'],
+    properties: {
+      apiKey: secret('Chave da API'),
+      baseURL: {
+        type: 'string',
+        title: 'URL base',
+        description: 'Vazio: api.openai.com. Endpoints compatíveis passam pelo filtro anti-SSRF.',
+        default: '',
+      },
+      organization: { type: 'string', title: 'Organização (opcional)', default: '' },
+    },
+  },
+};
+
+/** Spec 011, FR-002 (ADR-0008): Anthropic (Claude). */
+export const anthropicCredential: CredentialTypeDefinition = {
+  name: 'anthropic',
+  displayName: 'IA: Anthropic (Claude)',
+  description: 'Chave da API da Anthropic.',
+  properties: {
+    type: 'object',
+    required: ['apiKey'],
+    properties: {
+      apiKey: secret('Chave da API'),
+      baseURL: { type: 'string', title: 'URL base (opcional)', default: '' },
+    },
+  },
+};
+
+/** Spec 011, FR-002 (ADR-0008): Google (Gemini), pelo endpoint compatível com a OpenAI. */
+export const googleGeminiCredential: CredentialTypeDefinition = {
+  name: 'googleGemini',
+  displayName: 'IA: Google (Gemini)',
+  description: 'Chave da API do Gemini (Google AI Studio).',
+  properties: {
+    type: 'object',
+    required: ['apiKey'],
+    properties: {
+      apiKey: secret('Chave da API'),
+      baseURL: {
+        type: 'string',
+        title: 'URL base (opcional)',
+        description: 'Vazio: endpoint compatível com a OpenAI do Gemini.',
+        default: '',
+      },
+    },
+  },
+};
+
+/**
+ * Spec 011, FR-016: modelo simulado determinístico, com o roteiro de respostas e chamadas de
+ * ferramenta (JSON). Registrado só com `NODE_ENV=test`.
+ */
+export const fakeLlmCredential: CredentialTypeDefinition = {
+  name: 'fakeLlm',
+  displayName: 'IA: modelo simulado (testes)',
+  description: 'Roteiro determinístico para testes; não disponível em produção.',
+  properties: {
+    type: 'object',
+    required: ['script'],
+    properties: {
+      script: {
+        type: 'string',
+        title: 'Roteiro (JSON)',
+        minLength: 2,
+        'x-multiline': true,
+      } as JSONSchema7,
+    },
+  },
+};
+
+/** Tipos de credencial dos modelos de chat (spec 011, FR-002). */
+export const CHAT_MODEL_CREDENTIAL_TYPES = [
+  'openAiCompatible',
+  'anthropic',
+  'googleGemini',
+  'fakeLlm',
+] as const;
+
 /** Spec 010: valores de cada linha `Nome: valor` (mascaramento dos cabeçalhos MCP). */
 export function mcpHeaderLines(text: unknown): [string, string][] {
   if (typeof text !== 'string') return [];
@@ -281,6 +367,10 @@ export const builtinCredentialTypes: readonly CredentialTypeDefinition[] = [
   mcpBearerCredential,
   mcpHeadersCredential,
   mcpOAuthCredential,
+  // Spec 011 (o `fakeLlm` entra só nos testes; ver CredentialTypeRegistry).
+  openAiCompatibleCredential,
+  anthropicCredential,
+  googleGeminiCredential,
 ];
 
 /** Tipos usados pelo `http.request` (autenticação por credencial). */

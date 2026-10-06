@@ -93,6 +93,8 @@ const envSchema = z.object({
   OLLY_DEFAULT_MAX_PARALLEL: z.coerce.number().int().min(1).max(1000).default(8),
   // Spec 007: teto global de iterações por laço e endereço público (link no workflow de erro).
   OLLY_MAX_LOOP_ITERATIONS: z.coerce.number().int().min(1).max(1_000_000).default(10_000),
+  // Spec 008, FR-010: níveis de sub-workflow.
+  OLLY_MAX_SUBWORKFLOW_DEPTH: z.coerce.number().int().min(1).max(50).default(5),
   OLLY_PUBLIC_URL: z.url({ protocol: /^https?$/ }).default('http://localhost:5173'),
   // Spec 009: governança e LGPD. Dias e bytes.
   OLLY_USER_INACTIVE_DAYS: z.coerce.number().int().min(1).max(3650).default(90),
@@ -106,6 +108,15 @@ const envSchema = z.object({
   // Spec 010: cliente MCP (timeout por chamada em ms, NFR-001; tamanho máximo do resultado).
   OLLY_MCP_CALL_TIMEOUT_MS: z.coerce.number().int().min(1000).max(3_600_000).default(60_000),
   OLLY_MCP_MAX_RESULT_MB: z.coerce.number().positive().max(1024).default(10),
+  // Spec 011: AI Agent. Os modelos permitidos são um cadastro na administração (FR-002).
+  OLLY_AGENT_MAX_ITERATIONS: z.coerce.number().int().min(1).max(200).default(25),
+  OLLY_AGENT_TOOL_RESULT_MAX_CHARS: z.coerce.number().int().min(100).max(1_000_000).default(20_000),
+  OLLY_APPROVAL_TIMEOUT_HOURS: z.coerce
+    .number()
+    .positive()
+    .max(24 * 30)
+    .default(24),
+  OLLY_RETENTION_MEMORY_DAYS: z.coerce.number().int().min(1).max(36_500).default(30),
 });
 
 export interface AppConfig {
@@ -135,6 +146,8 @@ export interface AppConfig {
     defaultMaxParallel: number;
     /** Teto global de iterações por laço (spec 007, NFR-001). */
     maxLoopIterations: number;
+    /** Profundidade máxima de sub-workflows (spec 008, FR-010). */
+    maxSubworkflowDepth: number;
   };
   /** Endereço público do Olly Flow (links como `execution.url` do workflow de erro). */
   publicUrl: string;
@@ -157,6 +170,16 @@ export interface AppConfig {
   http: { allowlist: string[]; maxResponseBytes: number };
   /** Spec 010: cliente MCP. */
   mcp: { callTimeoutMs: number; maxResultBytes: number };
+  /** Spec 011: AI Agent. */
+  ai: {
+    /** Teto global de iterações (NFR-001). */
+    maxIterations: number;
+    toolResultMaxChars: number;
+    /** Prazo das aprovações (NFR-002). */
+    approvalTimeoutMs: number;
+    /** Retenção padrão da memória persistente (dias). */
+    memoryRetentionDays: number;
+  };
   postgres: { poolMax: number };
   dispatcher: { maxConcurrent: number };
   /** Spec 006: fila de execuções e workers. Tempos em ms. */
@@ -262,6 +285,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
       workflowTimeoutMs: Math.floor(e.OLLY_DEFAULT_WORKFLOW_TIMEOUT * 1000),
       defaultMaxParallel: e.OLLY_DEFAULT_MAX_PARALLEL,
       maxLoopIterations: e.OLLY_MAX_LOOP_ITERATIONS,
+      maxSubworkflowDepth: e.OLLY_MAX_SUBWORKFLOW_DEPTH,
     },
     publicUrl: e.OLLY_PUBLIC_URL.replace(/\/+$/, ''),
     credentials: {
@@ -302,6 +326,12 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     mcp: {
       callTimeoutMs: e.OLLY_MCP_CALL_TIMEOUT_MS,
       maxResultBytes: Math.floor(e.OLLY_MCP_MAX_RESULT_MB * 1024 * 1024),
+    },
+    ai: {
+      maxIterations: e.OLLY_AGENT_MAX_ITERATIONS,
+      toolResultMaxChars: e.OLLY_AGENT_TOOL_RESULT_MAX_CHARS,
+      approvalTimeoutMs: Math.round(e.OLLY_APPROVAL_TIMEOUT_HOURS * 3_600_000),
+      memoryRetentionDays: e.OLLY_RETENTION_MEMORY_DAYS,
     },
     postgres: { poolMax: e.OLLY_PG_POOL_MAX },
     dispatcher: { maxConcurrent: e.OLLY_MAX_CONCURRENT_EXECUTIONS },

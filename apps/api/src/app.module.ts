@@ -17,6 +17,7 @@ import { HealthModule } from './health/health.module.js';
 import { maskingLogOptions } from './masking/log-masking.js';
 import { MaskingModule } from './masking/masking.module.js';
 import { McpModule } from './mcp/mcp.module.js';
+import { AiModule } from './ai/ai.module.js';
 import { NodeTypesModule } from './node-types/node-types.module.js';
 import { ProjectsModule } from './projects/projects.module.js';
 import { UsersModule } from './users/users.module.js';
@@ -80,6 +81,8 @@ export class AppModule {
         GovernanceModule,
         // Spec 010: catálogo MCP, políticas, chamadas e OAuth.
         McpModule,
+        // Spec 011: aprovações, uso e custo de IA.
+        AiModule,
       ],
       providers: [{ provide: APP_FILTER, useClass: DomainExceptionFilter }],
     };

@@ -32,6 +32,7 @@ export interface Edge { id: string; from: string; fromPort: string; to: string; 
 export interface PortDef {
   name: string; displayName?: string; required?: boolean;
   kind: 'main' | 'ai_languageModel' | 'ai_memory' | 'ai_tool';
+  maxConnections?: number;                        // spec 011: 1 modelo, 1 memória
 }
 export type ExecutionStatus = 'queued' | 'running' | 'waiting' | 'success' | 'error' | 'cancelled';
 export type NodeExecutionStatus = 'running' | 'success' | 'error' | 'skipped' | 'waiting' | 'cancelled';
@@ -79,10 +80,23 @@ export interface NodeDefinition {
 - `NodeDefinition.dynamicPorts` (`mergeInputs` | `switchOutputs`) descreve portas calculadas pelos parâmetros, e `resolveNodePorts(tipo, nó)` (`@olly/shared-types`) devolve as portas efetivas, inclusive a saída `error` quando `settings.onError = 'errorOutput'`;
 - os laços são analisados por `analyzeLoops` (`@olly/shared-types`): ciclos só pela porta `continue` de um nó de laço dominador. `NodeExecuteInput` traz `inputs` (itens por porta) e `items` (atalho para `inputs.main`).
 
+Spec 008 (parte antecipada para a 011):
+- `NodeWaitSignal` (`@olly/nodes`): o nó o lança para pausar, com `{ reason, resumeAt?, approvals?, data? }`. A execução fica `waiting`, os ramos independentes terminam, e o motor devolve `RunResult.status = 'waiting'` com `waiting` (nós em espera) e `snapshot` (`EngineSnapshot`: estado dos nós, índices, laços, `$vars`, resposta do webhook). `RunOptions.resume = { snapshot, values }` continua a execução: os nós com valor executam de novo, com o mesmo `runIndex` e `ctx.resume = { data, value }`; os demais seguem esperando;
+- `NodeContext.subWorkflows()` devolve o `SubWorkflowGateway` (`run({ workflowId, items, wait, signal })`), entregue pelo motor a partir de `RunOptions.subWorkflows`;
+- `NodeRunRecord.status` e `ExecutionFinishedEvent.status` aceitam `waiting` (neste último, `finishedAt` é `null`).
+
 Spec 010:
 - `NodeContext.runIndex` (execução do nó na execução: 0, 1... nos laços);
 - `NodeContext.mcp()` devolve o `McpGateway` (`@olly/nodes`), que o motor recebe em `RunOptions.mcp` (a API o monta por execução); sem gateway, lança erro. O gateway expõe `prepareTool`, `callTool`, `listTools`, `listResources`, `readResource`, `listPrompts` e `getPrompt`, todos com `McpCallRef { serverId, nodeId, runIndex, itemIndex, credential?, signal? }`, e aplica catálogo, políticas, snapshot, registro e auditoria;
 - extensão `x-mcp-arguments` (formulário gerado do `inputSchema` da tool) e fontes `mcpServers`/`mcpTools` em `x-load-options`.
+
+Spec 011:
+- **Sub-nós:** tipos cujas saídas são todas `ai_*` (`isSubNodeType`, `@olly/shared-types`). Ficam fora do agendador e não recebem itens; fornecem um objeto ao nó pai por `NodeDefinition.supplyData(ctx, itemIndex)`, que o pai lê com `ctx.subNodes(kind, itemIndex)` (`SubNodeSupply { node, type, data }[]`). O contexto do sub-nó resolve as expressões com os itens do pai. `ChatModelSupply` (modelo LangChain, provedor e nome), `MemorySupply` (`load`, `save`) e `AgentTool[]` (`name`, `description`, `schema`, `requireApproval`, `sideEffects`, `external`, `source`, `invoke`) em `packages/nodes/src/ai/runtime/types.ts`;
+- `ctx.withFromAI(valores, itemIndex)` devolve um leitor de parâmetros com `$fromAI()` resolvido para os argumentos do modelo;
+- `ctx.ai()` devolve o `AiGateway` (`RunOptions.ai`): `checkModel`, `beforeModelCall` (limite mensal), `recordUsage`, `recordStep` (mascara, grava e emite `agentStep`), `persistentMemory`, `executionMemory`, `fetch` (anti-SSRF), `limits` e `allowFakeModel`;
+- `NodeWaitSignal.approvals` (`NodeApprovalRequest { key, itemIndex, tool, arguments, reason }`): a API cria um pedido por chave; a decisão chega em `ctx.resume.value = { approvals: { [key]: { approved, comment } } }`;
+- validações `SUBNODE_ON_MAIN`, `AGENT_MODEL_REQUIRED`, `AGENT_MEMORY_MAX`, `TOOL_NAME_INVALID`, `TOOL_NAME_DUPLICATE`, `TOOL_DESCRIPTION_REQUIRED`;
+- `ctx.runCode` aceita `items` (entrada do código da ferramenta `tool.code`); fonte `aiModels` em `x-load-options`.
 
 `NodeRegistry` (`register`, `get(type, version?)`, `list()` sem `execute`) recusa nós cujo `paramsSchema` não seja um JSON Schema draft-07 válido com `type: "object"` na raiz. Palavras-chave desconhecidas são erro; as extensões aceitas são `x-display-options`, `x-secret` e `x-hidden` (ver [docs/nos/README.md](../nos/README.md)).
 
@@ -131,6 +145,8 @@ Matriz por papel: [`docs/rbac-matriz.md`](../rbac-matriz.md), gerada pelo teste 
 - Grupos do IdP mapeados para um papel **global** (`group_role_mappings` sem projeto) entram em `EffectivePermissions.global` enquanto o token trouxer o grupo, e valem em todos os projetos.
 - Com `projects.executor_can_read_data`, o papel Executor ganha `execution:readData` no projeto. A concessão é calculada no `ProjectPermissionResolver`, de modo que `/me`, as rotas e o WebSocket a enxergam igual.
 - O escopo de recurso aceita `{ publishRequest: 'id' }` (projeto do pedido de publicação).
+
+**Spec 011:** o escopo de recurso aceita `{ approval: 'approvalId' }` (projeto do pedido de aprovação do agente). Decidir exige `workflow:execute` nesse projeto.
 
 ## Convenção de expressões (spec 003)
 
@@ -206,3 +222,27 @@ Tipos em `packages/shared-types/src/mcp.ts`; cliente em `packages/mcp-client` (S
 - **Auditoria:** `mcp.server_create|update|delete|test|approve|disable`, `mcp.policy_update`, `mcp.snapshot_accept`, `mcp.tool_denied`, `mcp.tool_blocked` e `credential.oauth_connect`.
 - **Redis:** `olly:mcp-oauth:<state>` (autorização OAuth pendente: credencial e verificador PKCE, TTL de 10 min).
 - **Configuração:** `OLLY_MCP_CALL_TIMEOUT_MS` (60 000) e `OLLY_MCP_MAX_RESULT_MB` (10).
+- **Spec 011:** `McpGateway.agentTools(ref)` devolve as tools liberadas e sem mudança pendente, com `destructive` (política) e `readOnly` (anotação `readOnlyHint`), para o sub-nó `tool.mcp`.
+
+## Espera e sub-workflows (spec 008, parte antecipada)
+
+- **Estado:** `execution_state (execution_id, state, resume_at)` guarda o `EngineSnapshot`, o que a retomada ainda usa do disparo e os valores entregues aos nós (`deliveries`). O registro é removido no fim da execução.
+- **Retomada:** job `resume` (atrasado) na fila `executions`, com `jobId` `resume-<execução>-<horário>`. Qualquer worker retoma: ocupa a cota, restaura o estado e executa os nós cujo horário venceu ou que receberam valor. Uma varredura de 30 s reagenda as retomadas vencidas. Cancelar uma execução `waiting` a encerra direto e descarta o estado.
+- **Sub-workflows:** `executions.parent_execution_id` e `executions.depth`, com `trigger_type = 'subworkflow'`. Limite `OLLY_MAX_SUBWORKFLOW_DEPTH` (5) e recursão detectada pela cadeia de execuções pai.
+
+## AI Agent (spec 011)
+
+Tipos em `packages/shared-types/src/ai.ts`; runtime em `packages/nodes/src/ai/runtime` (laço ReAct sobre `@langchain/core`, provedores `@langchain/openai` e `@langchain/anthropic`). Segurança: [docs/seguranca-agentes.md](../seguranca-agentes.md).
+
+- **Rotas:**
+  - `GET /executions/:id/agent-steps` (`execution:read`; `content` só com `execution:readData`) e `GET /executions/:id/ai-usage` (`execution:read`);
+  - `GET /projects/:id/ai-usage?from&to` (`project:manage` no projeto): totais, por workflow, consumo do mês e limite;
+  - `GET /ai-usage?from&to` e `GET /ai-pricing`, `PUT|DELETE /ai-pricing/:model` (`project:manage` global);
+  - `GET /projects/:id/ai-settings` (`workflow:read`) e `PUT /projects/:id/ai-settings { allowedModels, monthlyTokenLimit }` (`project:manage` global; modelos dentro do cadastro da instalação);
+  - `GET /ai-models`, `PUT /ai-models/:model { note? }` e `DELETE /ai-models/:model` (`project:manage` global): modelos permitidos na instalação (`AiModel`), lidos a cada uso (sem reinício);
+  - `GET /projects/:id/ai-models` (`credential:use`): modelos permitidos no projeto;
+  - `GET /approvals?status&executionId` (autenticado: pedidos dos projetos com `workflow:execute`) e `POST /approvals/:approvalId/approve|reject { comment? }` (`workflow:execute`, escopo `{ approval }`; 409 se já decidido).
+- **Evento `agentStep`** (`AgentStepEvent`): `{ executionId, nodeId, runIndex, itemIndex, stepIndex, kind: model|tool|approval|final|error, toolName, content?, inputTokens, outputTokens, createdAt }`; sem `content` (`contentRedacted: true`) para quem não tem `execution:readData`.
+- **Auditoria:** `agent.approval_requested|approved|rejected|expired`, `ai.model_allow|remove`, `ai.pricing_update|delete` e `project.ai_settings`.
+- **Aprovação:** pedido criado quando a execução entra em `waiting` com `approvals`; a decisão é entregue ao nó (`ExecutionWaits.deliver`) e, com todos os pedidos do nó decididos, a execução retoma. Expiração (`OLLY_APPROVAL_TIMEOUT_HOURS`, 24) na varredura de 30 s do worker, como rejeição. Cancelar a execução cancela os pedidos pendentes.
+- **Configuração:** `OLLY_AGENT_MAX_ITERATIONS` (25), `OLLY_AGENT_TOOL_RESULT_MAX_CHARS` (20 000), `OLLY_APPROVAL_TIMEOUT_HOURS` (24) e `OLLY_RETENTION_MEMORY_DAYS` (30). Credencial `fakeLlm` só com `NODE_ENV=test`.

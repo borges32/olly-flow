@@ -53,6 +53,7 @@ beforeAll(async () => {
       workflowTimeoutMs: 4000,
       defaultMaxParallel: 8,
       maxLoopIterations: 10_000,
+      maxSubworkflowDepth: 5,
     },
   });
   admin = await loginAs(ctx, { sub: 'admin', email: 'admin@t.local', groups: ['admin'] });

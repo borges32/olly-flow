@@ -44,8 +44,8 @@
 
 ### §2 Modelos
 - Credencial `openAiCompatible` (`baseURL`, **apiKey**, `organization?`), mais os tipos definidos pela ADR-0008.
-- **`ai.chatModel`:** `model`, `temperature`, `maxTokens`, `timeout` e `maxRetries`. Instancia o `ChatModel` do LangChain.
-- **Allowlist:** `OLLY_ALLOWED_MODELS` (instalação) ∩ `projects.allowed_models` (opcional).
+- **`ai.chatModel`:** `model`, `temperature` e `topP` (opcionais, sem padrão: só vão ao provedor quando preenchidos), `maxTokens`, `timeout` e `maxRetries`. Instancia o `ChatModel` do LangChain.
+- **Allowlist:** cadastro `ai_models` (instalação, mantido em Administração › IA, lido a cada uso: sem cache nem reinício) ∩ `projects.allowed_models` (opcional). Lista vazia = Agent indisponível (negado por padrão).
 - **`FakeChatModel`** (somente testes, registrado com a flag `NODE_ENV=test`): roteiro de mensagens e `tool_calls`.
 
 ### §3 Agent
@@ -111,7 +111,6 @@
 
 | Variável | Padrão | Descrição |
 |---|---|---|
-| `OLLY_ALLOWED_MODELS` | — | Allowlist de modelos (lista) |
 | `OLLY_AGENT_MAX_ITERATIONS` | 25 | Teto global |
 | `OLLY_AGENT_TOOL_RESULT_MAX_CHARS` | 20000 | Truncamento |
 | `OLLY_APPROVAL_TIMEOUT_HOURS` | 24 | Prazo de aprovação |
@@ -147,3 +146,19 @@
 | Prompt injection residual | Defesa em camadas; aprovação humana; documentação do modelo de ameaça |
 
 Ao concluir, produzir `docs/seguranca-agentes.md`.
+
+## Histórico de alterações
+
+| Data | Alteração | Motivo |
+|---|---|---|
+| 06/10/2026 | §3/§6: laço ReAct próprio sobre o `ChatModel` do LangChain (`packages/nodes/src/ai/runtime/agent.ts`) em vez de `createReactAgent`/`interrupt` do LangGraph; sem tabelas do *checkpointer*. Na aprovação, o Agent pausa com `NodeWaitSignal` (spec 008) e o estado do laço (mensagens serializadas, passos, uso) vai em `execution_state`; a retomada executa de novo o nó com as decisões (`ctx.resume`), sem chamar o modelo de novo para as chamadas já feitas | Um único mecanismo de estado (o da 008) para Wait e aprovação; evita a dependência do LangGraph e do seu esquema de banco, com o mesmo comportamento |
+| 06/10/2026 | §2: provedores pelas credenciais `openAiCompatible`, `anthropic` e `googleGemini`; o Gemini usa o endpoint compatível com OpenAI (`GEMINI_OPENAI_BASE_URL`), sem `@langchain/google-genai`. Modelo simulado pela credencial `fakeLlm`, registrada só com `NODE_ENV=test`; o roteiro avança pelo número de respostas do assistente na conversa (sem estado, como um modelo real) | Menos dependências; o modelo simulado precisa continuar o roteiro depois da retomada |
+| 06/10/2026 | §4: parâmetros comuns das ferramentas `toolName`, `toolDescription` e `requireApproval`; as expressões dos sub-nós enxergam os itens do nó pai (como no N8N). Efeitos colaterais: `tool.postgresQuery` fora de `SELECT/WITH/SHOW/EXPLAIN`, além dos do §6. As chamadas de `tool.mcp` são registradas em `mcp_calls` com o id do sub-nó | Compatível com o N8N; rastreabilidade das chamadas MCP |
+| 06/10/2026 | §5: `agent_memory (project_id, session_key, message JSONB)` com a mensagem serializada do LangChain; a memória é isolada por projeto. A memória temporária vale só no processo e se perde numa retomada | A mesma chave de sessão em projetos diferentes não pode vazar conversa |
+| 06/10/2026 | §6: `approval_requests` com `project_id`, `workflow_id`, `run_index`, `item_index` e `approval_key` (`<item>:<toolCallId>`, único por execução/nó/execução do nó); argumentos mascarados em `arguments`. A expiração roda na varredura de 30 s do worker (spec 008), não num job atrasado por pedido. Cancelar a execução cancela os pedidos pendentes. Escopo RBAC `{ approval }` (projeto do pedido); `GET /approvals` lista os pedidos dos projetos em que o usuário tem `workflow:execute` | Uma varredura cobre também pedidos cujo job se perderia; a decisão é autorizada no projeto do pedido |
+| 06/10/2026 | §7: preços por 1 milhão de tokens (`input_per_1m`, `output_per_1m`), semeados com os preços públicos (migration `0012`). Cache do uso mensal e dos preços em memória do processo (60 s), não no Redis. Rotas: `GET /executions/:id/agent-steps` e `/ai-usage` (`execution:read`), `GET /projects/:id/ai-usage` (`project:manage`), `GET /ai-usage`, `GET/PUT/DELETE /ai-pricing` e `PUT /projects/:id/ai-settings` (`project:manage` global), `GET /projects/:id/ai-settings` (`workflow:read`), `GET /projects/:id/ai-models` (`credential:use`). Tela em `/admin/ai` | Unidade usada pelos provedores; o cache local basta para um limite aproximado |
+| 06/10/2026 | Retenção (spec 009): o conteúdo de `agent_steps` é apagado com os dados da execução (`dataDays`); as linhas de `agent_steps` e `approval_requests` saem com os metadados (`metadataDays`), como `mcp_calls` | Minimização (constituição VIII): o texto do modelo e os resultados das ferramentas são dados da execução |
+| 06/10/2026 | §8: o menu Aprovações aparece também para quem executa (aprova ações do agente) e a contagem inclui as ações pendentes. Retenção da memória (`retention.memoryDays`, padrão `OLLY_RETENTION_MEMORY_DAYS` 30) na governança do projeto | Aprovadores são os que têm `workflow:execute` (decisão humana) |
+| 06/10/2026 | Estratégia de testes: os casos ficam em `packages/engine/src/agent.test.ts`, `packages/nodes/src/ai/runtime/agent.test.ts`, `packages/nodes/src/ai/chat-model/chat-model.test.ts`, `apps/web/src/editor/subnodes.test.ts` e nos testes de integração `apps/api/src/ai/{agent,approval,memory,llm-usage}.int.test.ts` (o limite de iterações SC-005 está em `agent.int.test.ts`) | Agrupados por camada |
+| 06/10/2026 | §2: `topP` acrescentado; `temperature` e `topP` sem valor padrão, enviados só quando preenchidos (o padrão 0,7 fazia o `gpt-5-mini` recusar a chamada) | Nem todo modelo aceita esses parâmetros (spec, Histórico) |
+| 06/10/2026 | §2: a allowlist da instalação vira o cadastro `ai_models (model, note, created_by, created_at)` (migration `0013_ai_models`), com `GET /ai-models` e `PUT|DELETE /ai-models/:model` (`project:manage` global, auditado: `ai.model_allow`, `ai.model_remove`) e a seção "Modelos permitidos" em `/admin/ai`; `OLLY_ALLOWED_MODELS` removida (sem semente: começa vazia). Remover um modelo da instalação não altera as listas dos projetos, mas ele deixa de valer nelas (interseção) | Decisão humana: mudar a lista não pode exigir reciclar os pods |

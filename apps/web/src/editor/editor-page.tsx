@@ -55,6 +55,7 @@ import { useCancelExecution, useTestRun } from './use-test-run';
 import { WorkflowEdgeView, type OllyFlowEdge } from './workflow-edge';
 import { WorkflowNodeView, type OllyFlowNode } from './workflow-node';
 import { edgeLoopInfo, invalidConnectionReason } from './loops';
+import { connectionRejection, isSubNodeEdge } from './subnodes';
 import { WorkflowSettingsButton } from './workflow-settings';
 import { VersionHistoryPanel, type DiffView } from './version-history';
 import { diffCanvas } from './version-diff';
@@ -259,9 +260,21 @@ export function Editor({
               onHover: setHoveredEdgeId,
               back: loopEdges.back.has(e.id),
               ...(loopEdges.invalid.has(e.id) && { invalidReason: loopEdges.invalid.get(e.id) }),
+              // Spec 011: sub-nó ligado à base do Agent.
+              subNode: isSubNodeEdge(typesByName, nodes, e),
             },
           })),
-    [edges, selection.edgeIds, hoveredEdgeId, readOnly, run.nodes, loopEdges, canvasDiff],
+    [
+      edges,
+      selection.edgeIds,
+      hoveredEdgeId,
+      readOnly,
+      run.nodes,
+      loopEdges,
+      canvasDiff,
+      typesByName,
+      nodes,
+    ],
   );
   const timeline = useMemo(
     () => timelineRows(run.nodes, Object.fromEntries(nodes.map((n) => [n.id, n.name]))),
@@ -304,16 +317,30 @@ export function Editor({
     if (changed) store.setSelection({ nodeIds: store.selection.nodeIds, edgeIds: [...selected] });
   }, []);
 
-  const onConnect = useCallback((c: Connection) => {
-    if (!c.sourceHandle || !c.targetHandle) return;
-    const store = useEditorStore.getState();
-    const edge = { from: c.source, fromPort: c.sourceHandle, to: c.target, toPort: c.targetHandle };
-    // Spec 007, FR-016: ciclo só pela entrada "continue" de um nó de laço. A conexão é feita
-    // (o salvamento recusa e destaca os nós), mas o editor explica a regra na hora.
-    const reason = invalidConnectionReason(store.nodes, store.edges, edge);
-    if (reason) toast.warning('Ciclo inválido', { description: reason });
-    store.connect(edge);
-  }, []);
+  const onConnect = useCallback(
+    (c: Connection) => {
+      if (!c.sourceHandle || !c.targetHandle) return;
+      const store = useEditorStore.getState();
+      const edge = {
+        from: c.source,
+        fromPort: c.sourceHandle,
+        to: c.target,
+        toPort: c.targetHandle,
+      };
+      // Spec 011, FR-001: tipos de porta e máximo de conexões (o canvas já impede o arraste).
+      const rejection = connectionRejection(typesByName, store.nodes, store.edges, edge);
+      if (rejection) {
+        toast.warning('Conexão não permitida', { description: rejection });
+        return;
+      }
+      // Spec 007, FR-016: ciclo só pela entrada "continue" de um nó de laço. A conexão é feita
+      // (o salvamento recusa e destaca os nós), mas o editor explica a regra na hora.
+      const reason = invalidConnectionReason(store.nodes, store.edges, edge);
+      if (reason) toast.warning('Ciclo inválido', { description: reason });
+      store.connect(edge);
+    },
+    [typesByName],
+  );
 
   /** Garante que o nó na posição esteja visível; senão, centraliza a vista nele. */
   const ensureVisible = useCallback(
@@ -673,7 +700,17 @@ export function Editor({
               onNodeDoubleClick={(_e, n) => {
                 if (!diffView) setNdvNodeId(n.id);
               }}
-              isValidConnection={(c) => c.source !== c.target}
+              isValidConnection={(c) =>
+                c.source !== c.target &&
+                (!c.sourceHandle ||
+                  !c.targetHandle ||
+                  connectionRejection(typesByName, nodes, edges, {
+                    from: c.source,
+                    fromPort: c.sourceHandle,
+                    to: c.target,
+                    toPort: c.targetHandle,
+                  }) === null)
+              }
               nodesDraggable={!locked}
               nodesConnectable={!locked}
               deleteKeyCode={null}

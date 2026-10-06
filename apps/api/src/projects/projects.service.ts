@@ -18,6 +18,7 @@ import { DB } from '../core/tokens.js';
 interface StoredRetention {
   dataDays?: number | null;
   metadataDays?: number | null;
+  memoryDays?: number | null;
 }
 
 const iso = (d: Date) => d.toISOString();
@@ -53,10 +54,12 @@ export class ProjectsService {
       retention: {
         dataDays: retention.dataDays ?? null,
         metadataDays: retention.metadataDays ?? null,
+        memoryDays: retention.memoryDays ?? null,
       },
       effectiveRetention: {
         dataDays: retention.dataDays ?? defaults.dataDays,
         metadataDays: retention.metadataDays ?? defaults.metadataDays,
+        memoryDays: retention.memoryDays ?? this.config.ai.memoryRetentionDays,
       },
     };
   }
@@ -77,6 +80,10 @@ export class ProjectsService {
         update.retention?.metadataDays === undefined
           ? before.retention.metadataDays
           : update.retention.metadataDays,
+      memoryDays:
+        update.retention?.memoryDays === undefined
+          ? before.retention.memoryDays
+          : update.retention.memoryDays,
     };
     const defaults = this.config.governance.retention;
     if (

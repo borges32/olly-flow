@@ -13,7 +13,7 @@ Combina os itens de vários ramos. Equivale ao `n8n-nodes-base.merge` v3, com **
 | Parâmetro | Descrição |
 |---|---|
 | `mode` | Modo de junção (padrão `append`, ver abaixo) |
-| `numberInputs` | Número de entradas, de 2 a 10 (padrão 2). Reduzir pede confirmação no editor e remove as conexões das entradas que deixam de existir |
+| `numberInputs` | Número de entradas, de 2 a 10 (padrão 2). Fora da faixa, o editor avisa e o salvamento recusa (`PARAM_OUT_OF_RANGE`). Reduzir pede confirmação no editor e remove as conexões das entradas que deixam de existir |
 | `includeUnpaired` | No modo `combineByPosition`: inclui os itens sem par (padrão `false`) |
 | `fields[]` | No modo `combineByFields`: `{ input1Field, input2Field }`. Aceita notação de ponto (`cliente.cpf`); vários pares formam uma chave composta |
 | `joinMode` | No modo `combineByFields`: `inner`, `left`, `outer` ou `keepNonMatches` |

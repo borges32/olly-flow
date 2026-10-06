@@ -88,6 +88,21 @@ async function oldExecution(
       created_at: startedAt,
     })
     .execute();
+  // Spec 011: passo do agente; o conteúdo é dado da execução, a linha é metadado.
+  await ctx.database.db
+    .insertInto('agent_steps')
+    .values({
+      execution_id: id,
+      project_id: wf.projectId,
+      node_id: 'agent',
+      run_index: 0,
+      item_index: 0,
+      step_index: 0,
+      kind: 'final',
+      content: JSON.stringify({ resposta: 'dado pessoal' }),
+      created_at: startedAt,
+    })
+    .execute();
   await minio.s3.send(
     new PutObjectCommand({ Bucket: 'olly', Key: `executions/${id}/binario`, Body: 'conteúdo' }),
   );
@@ -214,6 +229,16 @@ describe('spec 009 — FR-017/SC-007: retenção por projeto, partições e audi
       .execute();
     expect(mcpCalls.map((r) => r.execution_id).sort()).toEqual([c.recente, c.semDados].sort());
     expect(report.metadataDeleted.mcpCalls).toBe(2);
+    // Spec 011: o conteúdo dos passos do agente segue a retenção dos dados; a linha, a dos metadados.
+    const steps = await ctx.database.db
+      .selectFrom('agent_steps')
+      .select(['execution_id', 'content'])
+      .where('execution_id', 'in', [c.recente, c.semDados, c.apagada])
+      .execute();
+    const stepOf = (id: string) => steps.find((r) => r.execution_id === id);
+    expect(stepOf(c.recente)?.content).toEqual({ resposta: 'dado pessoal' });
+    expect(stepOf(c.semDados)).toEqual({ execution_id: c.semDados, content: null });
+    expect(stepOf(c.apagada)).toBeUndefined();
 
     const audit = await ctx.database.db
       .selectFrom('audit_log')

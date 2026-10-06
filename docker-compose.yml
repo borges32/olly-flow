@@ -176,6 +176,9 @@ services:
       OLLY_PROJECT_MAX_CONCURRENT: ${OLLY_PROJECT_MAX_CONCURRENT:-20}
       OLLY_WEBHOOK_RATE_LIMIT_PER_MIN: ${OLLY_WEBHOOK_RATE_LIMIT_PER_MIN:-120}
       OLLY_DEFAULT_WORKFLOW_TIMEOUT: ${OLLY_DEFAULT_WORKFLOW_TIMEOUT:-300}
+      # Spec 011: prazo da aprovação humana. Os modelos permitidos são cadastrados em
+      # Administração › IA (sem reiniciar).
+      OLLY_APPROVAL_TIMEOUT_HOURS: ${OLLY_APPROVAL_TIMEOUT_HOURS:-24}
     ports:
       - '3000:3000'
     depends_on:

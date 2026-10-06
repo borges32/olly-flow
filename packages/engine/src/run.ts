@@ -1,5 +1,6 @@
 import {
   NodeExecutionError,
+  NodeWaitSignal,
   errorJson,
   mapWithConcurrency,
   type CodeMode,
@@ -9,7 +10,13 @@ import {
   type LoopState,
   type McpGateway,
   type NodeRegistry,
+  type NodeResume,
+  type NodeWaitRequest,
+  type AiGateway,
+  type SubNodeKind,
+  type SubNodeSupply,
   type ResolvedCredential,
+  type SubWorkflowGateway,
   type WebhookResponse,
 } from '@olly/nodes';
 import { findCodeReferences, type CodeRunner, type ExpressionEvaluator } from '@olly/expressions';
@@ -18,6 +25,7 @@ import {
   LOOP_CONTINUE_PORT,
   LOOP_NODE_TYPES,
   analyzeLoops,
+  isSubNodeType,
   resolveNodePorts,
   type BinaryRef,
   type Item,
@@ -34,7 +42,7 @@ import {
 } from './expressions.js';
 import { fillPairedItems } from './paired.js';
 import { redactSecrets } from './redact.js';
-import { ExecutionState, type NodeRunStatus, type SourceRef } from './state.js';
+import { ExecutionState, type NodeRunStatus, type SourceRef, type StateSnapshot } from './state.js';
 
 /** Registro do que aconteceu com um nó (para o log de execução e eventos em tempo real). */
 export interface NodeRunRecord {
@@ -42,7 +50,8 @@ export interface NodeRunRecord {
   nodeName: string;
   /** Execução do nó: 0, ou a iteração dentro de laços (spec 007, FR-009). */
   runIndex: number;
-  status: 'success' | 'error' | 'skipped' | 'cancelled';
+  /** `waiting`: o nó pediu espera (spec 008, FR-012); termina na retomada. */
+  status: 'success' | 'error' | 'skipped' | 'cancelled' | 'waiting';
   startedAt: Date;
   finishedAt: Date;
   inputs: Record<string, Item[]>;
@@ -153,6 +162,29 @@ export class NodeTimeoutError extends Error {
   }
 }
 
+/** Nó que aguarda retomada (spec 008, FR-012). */
+export interface WaitingNode {
+  nodeId: string;
+  runIndex: number;
+  request: NodeWaitRequest;
+}
+
+/**
+ * Estado do motor de uma execução em espera (spec 008, plan §5), serializável em JSON e
+ * restaurado por `RunOptions.resume` com a mesma definição.
+ */
+export interface EngineSnapshot {
+  version: 1;
+  startNodeId: string;
+  destinationNodeId?: string;
+  state: StateSnapshot;
+  loopStates: Record<string, LoopState>;
+  vars: Record<string, unknown>;
+  /** A resposta do webhook já foi dada (só a primeira vale). */
+  responded: boolean;
+  waiting: WaitingNode[];
+}
+
 export interface RunOptions {
   /** Itens entregues ao gatilho. Sem itens, `trigger.manual` emite um item vazio. */
   triggerItems?: Item[];
@@ -190,6 +222,15 @@ export interface RunOptions {
   maxLoopIterations?: number;
   /** Servidores MCP do catálogo para o nó `ai.mcpClient` (spec 010). */
   mcp?: McpGateway;
+  /** Sub-workflows (spec 008, FR-009). */
+  subWorkflows?: SubWorkflowGateway;
+  /** Serviços de IA para o Agent e os sub-nós (spec 011). */
+  ai?: AiGateway;
+  /**
+   * Retomada (spec 008, FR-012): continua do estado salvo; os nós em espera que têm um valor
+   * em `values` executam de novo (com `ctx.resume`), os demais seguem esperando.
+   */
+  resume?: { snapshot: EngineSnapshot; values: Record<string, unknown> };
 }
 
 export interface NodeRunResult {
@@ -201,8 +242,11 @@ export interface NodeRunResult {
 }
 
 export interface RunResult {
-  /** `cancelled`: o sinal da execução abortou (cancelamento, timeout global ou worker perdido). */
-  status: 'success' | 'error' | 'cancelled';
+  /**
+   * `cancelled`: o sinal da execução abortou (cancelamento, timeout global ou worker perdido).
+   * `waiting`: algum nó pediu espera e nada mais pôde executar (spec 008): veja `snapshot`.
+   */
+  status: 'success' | 'error' | 'cancelled' | 'waiting';
   nodes: Record<string, NodeRunResult>;
   /**
    * Nós em ordem topológica estável (spec 006): base determinística para "o último nó" (modo de
@@ -212,6 +256,9 @@ export interface RunResult {
   /** Variáveis gravadas por `data.setVariable` ao longo da execução. */
   vars: Record<string, unknown>;
   error?: { nodeId?: string; message: string; reason?: CancelReason };
+  /** Com `waiting`: os nós que aguardam e o estado para a retomada. */
+  waiting?: WaitingNode[];
+  snapshot?: EngineSnapshot;
 }
 
 const noopLogger: NodeLogger = { debug() {}, info() {}, warn() {}, error() {} };
@@ -237,6 +284,10 @@ interface ContextDeps {
   respondToWebhook: NodeContext['respondToWebhook'];
   loop: LoopState | undefined;
   runIndex: number;
+  resume: NodeResume | undefined;
+  /** Spec 011: sub-nós ligados ao nó e resolução com `$fromAI`. */
+  subNodes: NodeContext['subNodes'];
+  withFromAI: NodeContext['withFromAI'];
 }
 
 /** Concorrência por item do nó (spec 006, FR-009): 1 se o tipo não suporta ou está desligado. */
@@ -258,6 +309,9 @@ function createContext({
   respondToWebhook,
   loop,
   runIndex,
+  resume,
+  subNodes,
+  withFromAI,
 }: ContextDeps): NodeContext {
   const binary = () => options.binary ?? unavailable('Armazenamento de binários');
   return {
@@ -290,6 +344,11 @@ function createContext({
     maxLoopIterations: options.maxLoopIterations ?? DEFAULT_MAX_LOOP_ITERATIONS,
     runIndex,
     mcp: () => options.mcp ?? unavailable('Cliente MCP'),
+    subWorkflows: () => options.subWorkflows ?? unavailable('Sub-workflow'),
+    ...(resume && { resume }),
+    subNodes,
+    withFromAI,
+    ai: () => options.ai ?? unavailable('Serviços de IA'),
     helpers: {
       pairedItem: (item, itemIndex, input) => ({
         ...item,
@@ -477,27 +536,60 @@ export async function runWorkflow(
 ): Promise<RunResult> {
   const [invalidCycle] = loopAnalysis(def).invalid;
   if (invalidCycle) throw new WorkflowRunError(invalidCycle.reason);
-  const start = pickStartNode(def, registry, options.startNodeId);
+  const resume = options.resume;
+  const start = pickStartNode(def, registry, resume?.snapshot.startNodeId ?? options.startNodeId);
+  const destinationNodeId = resume ? resume.snapshot.destinationNodeId : options.destinationNodeId;
   let scope = walk(start.id, def, 'down');
-  if (options.destinationNodeId) {
-    if (!scope.has(options.destinationNodeId)) {
+  if (destinationNodeId) {
+    if (!scope.has(destinationNodeId)) {
       throw new WorkflowRunError('O nó de destino não é alcançável a partir do gatilho');
     }
-    const ancestors = walk(options.destinationNodeId, def, 'up');
+    const ancestors = walk(destinationNodeId, def, 'up');
     scope = new Set([...scope].filter((id) => ancestors.has(id)));
   }
+  // Spec 011, FR-001: sub-nós (modelo, memória, ferramentas) e suas conexões não entram no
+  // agendamento; o nó ao qual estão ligados os instancia (`ctx.subNodes`).
+  const isSubNode = (n: WorkflowNode) => {
+    const t = registry.get(n.type);
+    return t !== undefined && isSubNodeType(t);
+  };
+  const subNodeIds = new Set(def.nodes.filter(isSubNode).map((n) => n.id));
   const scoped: WorkflowDefinition = {
     ...def,
-    nodes: def.nodes.filter((n) => scope.has(n.id)),
-    edges: def.edges.filter((e) => scope.has(e.from) && scope.has(e.to)),
+    nodes: def.nodes.filter((n) => scope.has(n.id) && !subNodeIds.has(n.id)),
+    edges: def.edges.filter(
+      (e) =>
+        scope.has(e.from) && scope.has(e.to) && !subNodeIds.has(e.from) && !subNodeIds.has(e.to),
+    ),
   };
+  const allNodesById = new Map(def.nodes.map((n) => [n.id, n]));
   const loops = loopAnalysis(scoped);
   const state = new ExecutionState(scoped, loops);
   const maxLoopIterations = options.maxLoopIterations ?? DEFAULT_MAX_LOOP_ITERATIONS;
   /** Estado de cada laço em andamento, por nó de laço (`$loop`, plan §3). */
   const loopStates = new Map<string, LoopState>();
   const nodesById = new Map(scoped.nodes.map((n) => [n.id, n]));
-  state.get(start.id).inputs = { main: structuredClone(options.triggerItems ?? []) };
+  /** Nós em espera (spec 008, FR-012) e os que a retomada vai executar de novo. */
+  const waiting = new Map<string, WaitingNode>();
+  const toResume = new Map<string, { runIndex: number; resume: NodeResume }>();
+  if (resume) {
+    state.restore(resume.snapshot.state);
+    for (const [id, loop] of Object.entries(resume.snapshot.loopStates)) {
+      loopStates.set(id, structuredClone(loop));
+    }
+    for (const w of resume.snapshot.waiting) {
+      if (Object.hasOwn(resume.values, w.nodeId)) {
+        toResume.set(w.nodeId, {
+          runIndex: w.runIndex,
+          resume: { data: w.request.data, value: resume.values[w.nodeId] },
+        });
+      } else {
+        waiting.set(w.nodeId, w);
+      }
+    }
+  } else {
+    state.get(start.id).inputs = { main: structuredClone(options.triggerItems ?? []) };
+  }
   for (const node of scoped.nodes) {
     if (!registry.get(node.type)) {
       throw new WorkflowRunError(`Nó "${node.name}": tipo desconhecido "${node.type}"`);
@@ -505,7 +597,7 @@ export async function runWorkflow(
   }
 
   const executionId = options.executionId ?? 'local';
-  const vars: Record<string, unknown> = {};
+  const vars: Record<string, unknown> = resume ? structuredClone(resume.snapshot.vars) : {};
   const expressionScope = (nodeId: string): ExpressionScope => {
     const loop = state.innermostLoop(nodeId);
     const current = loop ? loopStates.get(loop.header) : undefined;
@@ -542,7 +634,7 @@ export async function runWorkflow(
       redactSecrets(lines ? { ...record, console: lines } : record, secrets),
     );
   };
-  let responded = false;
+  let responded = resume?.snapshot.responded ?? false;
   const respondToWebhook = (response: WebhookResponse): boolean => {
     if (responded) return false;
     responded = true;
@@ -551,9 +643,18 @@ export async function runWorkflow(
   };
   /** Nó de código (spec 005): contexto como o das expressões, com os nós citados no código. */
   const runCodeFor =
-    (node: WorkflowNode, items: Item[]) =>
-    async ({ code, mode }: { code: string; mode: CodeMode }): Promise<unknown> => {
+    (node: WorkflowNode, nodeItems: Item[]) =>
+    async ({
+      code,
+      mode,
+      items: override,
+    }: {
+      code: string;
+      mode: CodeMode;
+      items?: Item[];
+    }): Promise<unknown> => {
       if (!options.codeRunner) return unavailable('Nó de código');
+      const items = override ?? nodeItems;
       const data = buildExpressionData(
         scoped,
         registry,
@@ -574,6 +675,85 @@ export async function runWorkflow(
       return result.result;
     };
 
+  /** Spec 011, FR-007: parâmetros do nó resolvidos com os valores de `$fromAI()`. */
+  const withFromAIFor =
+    (node: WorkflowNode, items: Item[]): NodeContext['withFromAI'] =>
+    async (values, itemIndex) => {
+      const resolve = await resolveNodeParams(
+        scoped,
+        registry,
+        state,
+        node,
+        items,
+        { ...expressionScope(node.id), fromAI: values },
+        options.evaluator,
+      );
+      return (name) => resolve(name, itemIndex);
+    };
+
+  /**
+   * Spec 011, FR-001: o que os sub-nós ligados à porta `kind` do nó fornecem para o item. As
+   * expressões do sub-nó enxergam os itens do nó ao qual ele está ligado (como no N8N).
+   */
+  const subNodesFor =
+    (
+      parent: WorkflowNode,
+      parentType: NodeDefinition,
+      items: Item[],
+      signal: AbortSignal,
+      runIndex: number,
+    ): NodeContext['subNodes'] =>
+    async (kind: SubNodeKind, itemIndex: number): Promise<SubNodeSupply[]> => {
+      const ports = new Set(
+        portsOf(parentType, parent)
+          .inputs.filter((p) => p.kind === kind)
+          .map((p) => p.name),
+      );
+      const sources = def.edges
+        .filter((e) => e.to === parent.id && ports.has(e.toPort))
+        .map((e) => allNodesById.get(e.from))
+        .filter((n): n is WorkflowNode => n !== undefined && !n.disabled);
+      const supplies: SubNodeSupply[] = [];
+      for (const sub of sources) {
+        const subType = registry.get(sub.type);
+        if (!subType?.supplyData) {
+          throw new WorkflowRunError(`Nó "${sub.name}" não pode ser ligado como sub-nó`);
+        }
+        const getParam = await resolveNodeParams(
+          scoped,
+          registry,
+          state,
+          sub,
+          items,
+          expressionScope(parent.id),
+          options.evaluator,
+        );
+        const subCtx = createContext({
+          node: sub,
+          type: subType,
+          options,
+          getParam,
+          vars,
+          secrets,
+          signal,
+          logger,
+          runCode: runCodeFor(sub, items),
+          respondToWebhook,
+          loop: undefined,
+          runIndex,
+          resume: undefined,
+          subNodes: () => Promise.resolve([]),
+          withFromAI: withFromAIFor(sub, items),
+        });
+        supplies.push({
+          node: sub,
+          type: sub.type,
+          data: await subType.supplyData(subCtx, itemIndex),
+        });
+      }
+      return supplies;
+    };
+
   /**
    * Resolve as expressões e executa o nó com retry, timeout e `onError` (spec 004, FR-017,
    * FR-018, plan §8). Com `onError: continue`, a falha vira um item `{ json: { error } }`.
@@ -584,6 +764,7 @@ export async function runWorkflow(
     inputs: Record<string, Item[]>,
     onAttempt: (attempt: number) => void,
     runIndex: number,
+    nodeResume: NodeResume | undefined,
   ): Promise<NodeOutput> => {
     const { retry, timeoutMs, onError } = node.settings ?? {};
     const maxTries = Math.max(1, retry?.maxTries ?? 1);
@@ -616,6 +797,9 @@ export async function runWorkflow(
               respondToWebhook,
               loop: loopStates.get(node.id),
               runIndex,
+              resume: nodeResume,
+              subNodes: subNodesFor(node, type, items, signal, runIndex),
+              withFromAI: withFromAIFor(node, items),
             });
             return type.execute({ inputs, items }, ctx);
           },
@@ -624,6 +808,8 @@ export async function runWorkflow(
         );
       } catch (error) {
         if (options.signal?.aborted) throw error;
+        // Spec 008: a espera não é falha (sem retry nem `onError`).
+        if (error instanceof NodeWaitSignal) throw error;
         if (attempt < maxTries) {
           const wait = retry?.waitMs ?? 0;
           await sleep(
@@ -702,19 +888,21 @@ export async function runWorkflow(
     node: WorkflowNode,
     type: NodeDefinition,
     phase: 'normal' | 'continue' = 'normal',
+    resumed?: { runIndex: number; resume: NodeResume },
   ): Promise<void> => {
     const nodeId = node.id;
     const run = state.get(nodeId);
     const startedAt = new Date();
     let attempts = 1;
-    const runIndex = state.nextRunIndex(nodeId);
+    // Retomada (spec 008): a mesma execução do nó continua, com o mesmo índice.
+    const runIndex = resumed ? resumed.runIndex : state.nextRunIndex(nodeId);
     const record = recorder(nodeId, node, startedAt, () => attempts, runIndex);
     const ports = portsOf(type, node);
     const loop = state.loopOf(nodeId);
     await cb.onNodeStart?.(nodeId, startedAt, runIndex);
     try {
       options.signal?.throwIfAborted();
-      if (LOOP_NODE_TYPES.includes(type.type)) {
+      if (LOOP_NODE_TYPES.includes(type.type) && !resumed) {
         if (phase === 'normal') {
           loopStates.set(nodeId, {
             index: 0,
@@ -749,6 +937,7 @@ export async function runWorkflow(
             attempts = n;
           },
           runIndex,
+          resumed?.resume,
         );
       }
       output = fillPairedItems(output, countItems(run.inputs));
@@ -779,6 +968,14 @@ export async function runWorkflow(
         await finish(record('cancelled', detail));
         return;
       }
+      if (err instanceof NodeWaitSignal) {
+        // Spec 008, FR-012: o nó espera; os ramos independentes continuam.
+        run.error = undefined;
+        run.status = 'waiting';
+        waiting.set(nodeId, { nodeId, runIndex, request: structuredClone(err.request) });
+        await finish(record('waiting'));
+        return;
+      }
       run.status = 'error';
       failures.push({ nodeId, message: error.message });
       await cb.onNodeError?.(nodeId, error);
@@ -796,6 +993,21 @@ export async function runWorkflow(
       for (const nodeId of order) {
         if (stopped()) return;
         const run = state.get(nodeId);
+        const resumed = toResume.get(nodeId);
+        if (resumed) {
+          if (running.size >= maxParallel) continue;
+          toResume.delete(nodeId);
+          const node = nodesById.get(nodeId) as WorkflowNode;
+          run.status = 'running';
+          running.set(
+            nodeId,
+            runNode(node, registry.get(node.type) as NodeDefinition, 'normal', resumed).finally(
+              () => running.delete(nodeId),
+            ),
+          );
+          changed = true;
+          continue;
+        }
         // Spec 007: o corpo do laço terminou a volta → o nó de laço recebe a `continue`.
         if (state.continueReady(nodeId)) {
           if (running.size >= maxParallel) continue;
@@ -878,8 +1090,9 @@ export async function runWorkflow(
   // Vários ramos com erro: vale o primeiro na ordem topológica, não o primeiro a terminar.
   const [failure] = failures.sort((x, y) => (rank.get(x.nodeId) ?? 0) - (rank.get(y.nodeId) ?? 0));
 
+  const paused = !cancelled && !failure && waiting.size > 0;
   const result: RunResult = {
-    status: cancelled ? 'cancelled' : failure ? 'error' : 'success',
+    status: cancelled ? 'cancelled' : failure ? 'error' : paused ? 'waiting' : 'success',
     nodes: Object.fromEntries(
       [...state.nodes].map(([id, s]) => [
         id,
@@ -897,6 +1110,19 @@ export async function runWorkflow(
     ...(cancelled
       ? { error: { message: cancelled.message, reason: cancelled.reason } }
       : failure && { error: failure }),
+    ...(paused && {
+      waiting: [...waiting.values()],
+      snapshot: {
+        version: 1 as const,
+        startNodeId: start.id,
+        ...(destinationNodeId && { destinationNodeId }),
+        state: state.snapshot(),
+        loopStates: structuredClone(Object.fromEntries(loopStates)),
+        vars: structuredClone(vars),
+        responded,
+        waiting: [...waiting.values()],
+      },
+    }),
   };
   await cb.onExecutionFinish?.(result);
   return result;

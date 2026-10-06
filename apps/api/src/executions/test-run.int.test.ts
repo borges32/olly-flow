@@ -350,6 +350,7 @@ describe('spec 003 — FR-015: truncamento no log', () => {
         workflowTimeoutMs: 300_000,
         defaultMaxParallel: 8,
         maxLoopIterations: 10_000,
+        maxSubworkflowDepth: 5,
       },
     });
     const admin = await loginAs(small, { sub: 'a', email: 'a@t.local', groups: ['admin'] });

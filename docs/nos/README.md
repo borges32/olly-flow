@@ -20,6 +20,15 @@ Cada nó vive em `packages/nodes/src/<categoria>/<nome>/` (`definition.ts`, `exe
 | `logic.switch` | Roteador (Switch) | 007 | [logic.switch.md](logic.switch.md) |
 | `trigger.error` | Gatilho de erro | 007 | [trigger.error.md](trigger.error.md) |
 | `ai.mcpClient` | Cliente MCP | 010 | [ai.mcpClient.md](ai.mcpClient.md) |
+| `flow.wait` | Esperar | 008 | [flow.wait.md](flow.wait.md) |
+| `flow.executeWorkflow` | Executar sub-workflow | 008 | [flow.executeWorkflow.md](flow.executeWorkflow.md) |
+| `trigger.executeWorkflow` | Quando chamado por outro workflow | 008 | [trigger.executeWorkflow.md](trigger.executeWorkflow.md) |
+| `ai.agent` | Agente de IA | 011 | [ai.agent.md](ai.agent.md) |
+| `ai.chatModel` | Modelo de chat (sub-nó) | 011 | [ai.chatModel.md](ai.chatModel.md) |
+| `memory.postgres`, `memory.buffer` | Memória persistente e temporária (sub-nós) | 011 | [memory.md](memory.md) |
+| `tool.mcp`, `tool.httpRequest`, `tool.postgresQuery`, `tool.workflow`, `tool.code` | Ferramentas do agente (sub-nós) | 011 | [tools.md](tools.md) |
+
+**Sub-nós (spec 011):** nós cujas saídas são todas de um tipo `ai_*` (`ai_languageModel`, `ai_memory`, `ai_tool`). Conectam-se às entradas de mesmo tipo na base do Agent (desenhadas embaixo do nó, com arestas tracejadas), não executam no fluxo principal e fornecem ao nó pai um objeto (`NodeDefinition.supplyData`), lido por `ctx.subNodes(tipo, item)`. `PortDef.maxConnections` limita as conexões de uma entrada (1 modelo, 1 memória).
 
 **Portas dinâmicas (spec 007):** `dynamicPorts` descreve portas calculadas a partir dos parâmetros: `mergeInputs` (Merge) ou `switchOutputs` (Switch). A regra fica em `resolveNodePorts` (`@olly/shared-types`), usada pelo motor, pela validação e pelo editor. Com `settings.onError = 'errorOutput'`, qualquer nó ganha a saída `error`: os itens que falharam seguem por ela, com o campo `error`. Nós por item (`data.set`, `http.request`, `postgres.query`, `postgres.write`) desviam só os itens que falharam; nos demais, uma falha desvia todos os itens de entrada.
 
@@ -40,7 +49,7 @@ O `paramsSchema` é um **JSON Schema draft-07** com `type: "object"` na raiz. El
 | `type: "object"` com `properties` | Grupo de campos |
 | `type: "array"` com `items` do tipo objeto | Lista de linhas, com Adicionar e Remover |
 
-Use `title` (rótulo), `description` (ajuda abaixo do campo) e `default` (valor inicial ao adicionar o nó ou a linha). Outros formatos aparecem como "não suportado"; amplie o painel na spec que precisar deles.
+Use `title` (rótulo), `description` (ajuda abaixo do campo) e `default` (valor inicial ao adicionar o nó ou a linha). Em números, `minimum`/`maximum` valem no editor (aviso no campo) e no salvamento: valor fixo fora da faixa é erro `PARAM_OUT_OF_RANGE` (expressões são verificadas pelo próprio nó na execução). Outros formatos aparecem como "não suportado"; amplie o painel na spec que precisar deles.
 
 ### Extensões
 
@@ -52,7 +61,7 @@ Use `title` (rótulo), `description` (ajuda abaixo do campo) e `default` (valor 
 | `x-no-expression` | Campo sem modo expressão: o editor não oferece o alternador e o salvamento recusa valor iniciado por `=` (erro `EXPRESSION_NOT_ALLOWED`). Ex.: SQL do `postgres.query` (spec 004). |
 | `x-multiline` | Área de texto em vez de linha única (spec 004). |
 | `x-code-editor` | Campo editado no editor de código (Monaco), com autocomplete das variáveis e dos nós. Valor: a linguagem (`javascript`) (spec 005). |
-| `x-load-options` | Opções buscadas no catálogo do banco da credencial do nó: `postgresSchemas`, `postgresTables` (do `schema` irmão) ou `postgresColumns` (de `schema` e `table`). Sem credencial, o campo vira texto (spec 004). Spec 010: `mcpServers` (servidores MCP ativos no projeto) e `mcpTools` (tools liberadas do `serverId` irmão). |
+| `x-load-options` | Opções buscadas no catálogo do banco da credencial do nó: `postgresSchemas`, `postgresTables` (do `schema` irmão) ou `postgresColumns` (de `schema` e `table`). Sem credencial, o campo vira texto (spec 004). Spec 010: `mcpServers` (servidores MCP ativos no projeto) e `mcpTools` (tools liberadas do `serverId` irmão). Spec 008: `workflows` (workflows do projeto, para o sub-workflow). Spec 011: `aiModels` (modelos permitidos no projeto). |
 | `x-mcp-arguments` | Objeto preenchido por um formulário gerado do `inputSchema` aprovado da tool escolhida em `toolName` (cada campo com o alternador Fixo/Expressão). Valor: o nome do parâmetro do servidor (`serverId`) (spec 010). |
 
 Exemplo:

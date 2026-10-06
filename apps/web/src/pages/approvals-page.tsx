@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { AgentApprovalsSection } from './agent-approvals';
 
 const dateFormat = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
 const STATUS_LABELS: Record<PublishApprovalStatus, string> = {
@@ -22,8 +23,8 @@ const STATUS_LABELS: Record<PublishApprovalStatus, string> = {
 };
 
 /**
- * Aprovações de publicação (spec 009, FR-011): pedidos aguardando decisão (de outras pessoas) e
- * o andamento dos próprios pedidos.
+ * Aprovações: ações do agente (spec 011, FR-011) e publicação (spec 009, FR-011): pedidos
+ * aguardando decisão (de outras pessoas) e o andamento dos próprios pedidos.
  */
 export function ApprovalsPage() {
   const me = useMe().data;
@@ -35,7 +36,9 @@ export function ApprovalsPage() {
 
   return (
     <div className="grid gap-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Aprovações de publicação</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">Aprovações</h1>
+      <AgentApprovalsSection />
+      <h2 className="text-lg font-semibold tracking-tight">Publicação</h2>
       <Card className="gap-4 py-4">
         <CardHeader className="px-4">
           <CardTitle role="heading" aria-level={2}>

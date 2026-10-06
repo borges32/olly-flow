@@ -8,7 +8,15 @@ import {
   type WorkflowDefinition,
 } from '@olly/shared-types';
 
-export type NodeRunStatus = 'pending' | 'running' | 'success' | 'error' | 'skipped' | 'cancelled';
+export type NodeRunStatus =
+  | 'pending'
+  | 'running'
+  | 'success'
+  | 'error'
+  | 'skipped'
+  | 'cancelled'
+  // Spec 008, FR-012: o nó pediu espera (Wait, aprovação humana); não conta como terminado.
+  | 'waiting';
 
 /**
  * Estado de uma porta de entrada (spec 006, plan §3): `unresolved` enquanto algum nó que a
@@ -47,6 +55,23 @@ export interface RunView {
 }
 
 const FINISHED: ReadonlySet<NodeRunStatus> = new Set(['success', 'skipped', 'error', 'cancelled']);
+
+/** Estado serializável (spec 008, FR-012): o que a retomada precisa para continuar. */
+export interface StateSnapshot {
+  nodes: Record<
+    string,
+    {
+      inputs: Record<string, Item[]>;
+      sources: Record<string, SourceRef[]>;
+      status: NodeRunStatus;
+      output?: NodeOutput;
+      pinned?: boolean;
+      reused?: boolean;
+    }
+  >;
+  runCounts: Record<string, number>;
+  active: string[];
+}
 
 const EMPTY_LOOPS: LoopAnalysis = { loops: [], invalid: [], backEdges: new Set() };
 
@@ -214,6 +239,38 @@ export class ExecutionState implements RunView {
       this.nodes.set(id, { inputs: {}, sources: {}, status: 'pending' });
       this.active.delete(id);
     }
+  }
+
+  /** Cópia serializável do estado (sem erros: a execução que espera não falhou). */
+  snapshot(): StateSnapshot {
+    const nodes: StateSnapshot['nodes'] = {};
+    for (const [id, n] of this.nodes) {
+      nodes[id] = {
+        inputs: n.inputs,
+        sources: n.sources,
+        status: n.status,
+        ...(n.output && { output: n.output }),
+        ...(n.pinned && { pinned: true }),
+        ...(n.reused && { reused: true }),
+      };
+    }
+    return structuredClone({
+      nodes,
+      runCounts: Object.fromEntries(this.runCounts),
+      active: [...this.active],
+    });
+  }
+
+  /** Restaura um estado salvo pela mesma definição (retomada, spec 008). */
+  restore(snapshot: StateSnapshot): void {
+    for (const [id, saved] of Object.entries(snapshot.nodes)) {
+      if (!this.nodes.has(id)) continue;
+      this.nodes.set(id, structuredClone(saved));
+    }
+    this.runCounts.clear();
+    for (const [id, n] of Object.entries(snapshot.runCounts)) this.runCounts.set(id, n);
+    this.active.clear();
+    for (const id of snapshot.active) this.active.add(id);
   }
 
   inputsOf(nodeId: string): Record<string, Item[]> | undefined {

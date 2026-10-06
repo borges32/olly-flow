@@ -8,7 +8,7 @@
 |---|---|---|---|
 | `users` | Usuários vindos do IdP (`external_id` = `sub`) | 001 | `last_login_at` e inativação por falta de login (009) |
 | `roles` | Papéis e lista de permissões | 001 | Seed: admin, editor, executor, viewer |
-| `projects` | Agrupamento de workflows e credenciais | 001 | `max_concurrent_executions` (006); `require_publish_approval`, `executor_can_read_data`, `save_execution_data` (`all` \| `errorsOnly` \| `none`) e `retention` JSONB `{ dataDays?, metadataDays? }` (009) |
+| `projects` | Agrupamento de workflows e credenciais | 001 | `max_concurrent_executions` (006); `require_publish_approval`, `executor_can_read_data`, `save_execution_data` (`all` \| `errorsOnly` \| `none`) e `retention` JSONB `{ dataDays?, metadataDays?, memoryDays? }` (009; `memoryDays`: 011); `allowed_models`, `monthly_token_limit` (011) |
 | `project_members` | Usuário + projeto + papel | 001 | `origin` (`manual` \| `idp`, 009): vínculos `idp` são sincronizados no login pelos grupos do IdP |
 | `audit_log` | Ações de usuários (*append-only*) | 001 | Trigger impede `UPDATE`/`DELETE` |
 | `workflows` | Cabeçalho do workflow; `version` = última versão salva | 002 | `published_version`, `active` (005); `error_workflow_id` (007) |
@@ -21,17 +21,20 @@
 | `projects.max_concurrent_executions` | Cota de execuções simultâneas do projeto; `NULL` usa `OLLY_PROJECT_MAX_CONCURRENT` (spec 006, `0007_queue`) | 006 | |
 | `credentials` | Credenciais cifradas por projeto (`data_encrypted` = envelope AES-256-GCM, `key_version` da chave mestra); nome único no projeto | 004 | `key_provider` (`env` \| `vault`, 009): checkpoint da rotação e da migração. Ver [docs/credenciais.md](../credenciais.md) |
 | `execution_payloads` | Payload do gatilho para o worker | 006 | Ou object storage se grande |
-| `execution_state` | Estado serializado para retomada (`waiting`) | 008 | Usado por Wait e aprovação humana |
+| `execution_state` | Estado serializado do motor para retomada (`waiting`): snapshot, dados do disparo e valores entregues aos nós | 008 | `resume_at` (próxima retomada por tempo); removido no fim da execução. Usado pelo Wait e pela aprovação humana (spec 011) |
 | `group_role_mappings` | Grupo do IdP → papel (`project_id` nulo = global) | 009 | Único por (grupo, projeto) |
 | `publish_requests` | Pedidos de aprovação de publicação (versão, mensagem, autor, decisão, comentário) | 009 | `CHECK decided_by <> requested_by`; um pendente por workflow |
 | `masking_rules` | Regras de mascaramento LGPD (`field` \| `pattern`; `redact` \| `partial` \| `hash`) globais ou por projeto | 009 | Regras padrão (`builtin`) semeadas na migration `0009_governanca` |
 | `mcp_servers` | Catálogo de servidores MCP (`project_id` nulo = global) | 010 | Somente `streamableHttp` \| `sse`; status `pending` \| `active` \| `disabled`; `tools_snapshot` (aprovado) e `snapshot_pending_diff` (mudança a revisar); `credential_id`; único por (projeto, nome) |
 | `mcp_tool_policies` | Política de tool por servidor e projeto (`project_id` nulo = global; a do projeto prevalece) | 010 | `allowed`, `destructive`; sem registro = negado |
 | `mcp_calls` | Registro de cada chamada MCP | 010 | Argumentos e erro mascarados; `project_id` (retenção); sem FK para `executions` (particionada) |
-| `agent_steps` | Passos dos agentes | 011 | |
-| `agent_memory` | Memória de conversa | 011 | Retenção própria |
-| `approval_requests` | Aprovação humana de tools destrutivas | 011 | |
-| `llm_usage`, `llm_pricing` | Tokens e custo por execução | 011 | |
+| `agent_steps` | Passos dos agentes (`model` \| `tool` \| `approval` \| `final` \| `error`), por execução, nó, `run_index`, item e `step_index` | 011 | Conteúdo mascarado, apagado com os dados da execução (`retention.dataDays`); a linha sai com os metadados. `project_id`; sem FK para `executions` (particionada) |
+| `agent_memory` | Memória persistente de conversa: `(project_id, session_key, message JSONB)` com a mensagem serializada do LangChain | 011 | Isolada por projeto; retenção `retention.memoryDays` (padrão `OLLY_RETENTION_MEMORY_DAYS`) |
+| `approval_requests` | Aprovação humana de ações do agente: ferramenta, argumentos mascarados, motivo, `status` (`pending` \| `approved` \| `rejected` \| `expired` \| `cancelled`), prazo e decisão | 011 | Único por (`execution_id`, `node_id`, `run_index`, `approval_key`); `project_id` e `workflow_id`; retenção com os metadados da execução |
+| `llm_usage` | Tokens e custo estimado por chamada ao modelo | 011 | `project_id`, `workflow_id`, `execution_id`, `node_id`, `provider`, `model`, `cost_estimate` (nulo sem preço), `currency` |
+| `llm_pricing` | Preço por 1 milhão de tokens (`input_per_1m`, `output_per_1m`, `currency`) por modelo | 011 | Semeada com os preços públicos (migration `0012_ai_agent`), editável pela administração |
+| `ai_models` | Modelos de IA permitidos na instalação (`model`, `note`, `created_by`), cadastrados em Administração › IA | 011 | Migration `0013_ai_models`; começa vazia (negado por padrão); lida a cada uso |
+| `projects.allowed_models`, `projects.monthly_token_limit` | Modelos permitidos no projeto (`NULL` = os da instalação) e limite mensal de tokens (`NULL` = sem limite) | 011 | `retention.memoryDays` no JSONB de retenção |
 
 ## Esboço das tabelas centrais
 
@@ -93,6 +96,7 @@ CREATE TABLE execution_payloads (            -- 0007_queue (spec 006)
 -- executor_can_read_data, save_execution_data, retention; node_executions.data_masked; credentials.key_provider;
 -- tabelas group_role_mappings, publish_requests, masking_rules (ver docs/governanca.md e docs/lgpd.md)
 -- 0010_mcp (spec 010): mcp_servers, mcp_tool_policies, mcp_calls (ver docs/mcp-governanca.md)
+-- 0011_execution_state (spec 008, parte): execution_state; executions.parent_execution_id, depth, retry_of
 CREATE TABLE audit_log (                      -- sem FK em user_id: o registro sobrevive a users
   id BIGSERIAL PRIMARY KEY, user_id UUID, action TEXT NOT NULL, entity_type TEXT,
   entity_id TEXT, details JSONB, ip INET, created_at TIMESTAMPTZ DEFAULT now()

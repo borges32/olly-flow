@@ -25,6 +25,17 @@ export interface PortDef {
   displayName?: string;
   kind: PortKind;
   required?: boolean;
+  /** Spec 011, FR-001: máximo de conexões na porta (ex.: 1 modelo, 1 memória). */
+  maxConnections?: number;
+}
+
+/** Spec 011, FR-001: portas de sub-nós (modelo, memória, ferramentas) ligadas à base do Agent. */
+export const SUBNODE_PORT_KINDS = ['ai_languageModel', 'ai_memory', 'ai_tool'] as const;
+export type SubNodePortKind = (typeof SUBNODE_PORT_KINDS)[number];
+
+/** Sub-nó: todas as saídas são de um tipo `ai_*` (não entra no fluxo principal). */
+export function isSubNodeType(type: { outputs: PortDef[] }): boolean {
+  return type.outputs.length > 0 && type.outputs.every((p) => p.kind !== 'main');
 }
 
 export interface WorkflowNodeSettings {

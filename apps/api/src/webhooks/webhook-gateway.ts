@@ -30,6 +30,18 @@ interface Resolved {
   launch(item: Item): Promise<{ executionId: string }>;
 }
 
+/** O texto como objeto ou lista JSON, se for um; senão `undefined` (texto comum continua texto). */
+function jsonObjectOrList(text: string): unknown {
+  const trimmed = text.trim();
+  if (!/^[[{]/.test(trimmed)) return undefined;
+  try {
+    const value = JSON.parse(trimmed) as unknown;
+    return value !== null && typeof value === 'object' ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 const str = (v: unknown) => (typeof v === 'string' ? v : '');
 const list = (v: unknown) =>
   str(v)
@@ -281,7 +293,17 @@ export class WebhookGateway {
       }
       return { json };
     }
-    if (contentType.includes('application/x-www-form-urlencoded')) {
+    const isForm = contentType.includes('application/x-www-form-urlencoded');
+    // Clientes que enviam JSON sem declarar (`fetch` sem cabeçalho: text/plain; `curl -d`:
+    // formulário; ou sem Content-Type): um objeto ou lista JSON válido vira objeto.
+    if (isForm || contentType.startsWith('text/plain') || contentType === '') {
+      const parsed = jsonObjectOrList(rawBody.toString('utf8'));
+      if (parsed !== undefined) {
+        json.body = parsed;
+        return { json };
+      }
+    }
+    if (isForm) {
       json.body = Object.fromEntries(new URLSearchParams(rawBody.toString('utf8')));
       return { json };
     }

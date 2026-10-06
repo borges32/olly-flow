@@ -38,6 +38,8 @@ As execuções passam pela fila (Redis/BullMQ) e são executadas pelo **worker**
 
 > **Spec 010 (cliente MCP):** servidores MCP são cadastrados e aprovados em **Administração › MCP** e usados pelo nó **Cliente MCP** (somente HTTP). No modo `pnpm app:up`, o servidor de teste responde em `http://mcp-test:3333/mcp` (já liberado no anti-SSRF do compose). Governança, OAuth e ameaças: [docs/mcp-governanca.md](docs/mcp-governanca.md). O realm do Keycloak ganhou o client `olly-mcp`: com um Keycloak antigo, recrie-o (`docker compose up -d --force-recreate keycloak`).
 
+> **Spec 011 (AI Agent):** o nó **Agente de IA** recebe na base o **Modelo de chat** (credenciais OpenAI ou compatível, Anthropic, Gemini), a memória e as ferramentas. Libere os modelos em **Administração › IA** (valem na hora, sem reiniciar; lista vazia = Agent indisponível), onde cada projeto também pode restringir a lista e onde estão o uso, a tabela de preços e o limite mensal de tokens. Ações destrutivas esperam decisão em **Aprovações**. Segurança: [docs/seguranca-agentes.md](docs/seguranca-agentes.md).
+
 Abra <http://localhost:5173> e entre com um usuário de teste (senha `olly123`).
 
 Webhooks publicados respondem em `http://localhost:5173/webhook/<caminho>` (e `/webhook-test/<caminho>` enquanto o editor escuta), pelo proxy do frontend; direto na API, em `http://localhost:3000/webhook/<caminho>`. Ver [docs/nos/trigger.webhook.md](docs/nos/trigger.webhook.md). Só `admin@olly.local` (grupo `admin` do IdP) tem acesso global; os demais precisam ser adicionados a um projeto em **Administração** para ver e editar workflows.

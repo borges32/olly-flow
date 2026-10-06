@@ -9,7 +9,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { NavLink, Outlet } from 'react-router';
-import { usePublishRequests } from '@/api/queries';
+import { useAgentApprovals, usePublishRequests } from '@/api/queries';
 import { useCanAnywhere } from '@/api/use-can';
 import { useMe } from '@/api/use-me';
 import { useAuth } from '@/auth/auth-provider';
@@ -22,15 +22,18 @@ type NavItem = {
   label: string;
   icon: LucideIcon;
   adminOnly?: boolean;
-  /** Spec 009: aprovações só para quem pode publicar em algum projeto. */
-  publishersOnly?: boolean;
+  /**
+   * Aprovações só para quem decide algo: publicar (spec 009) ou executar, que aprova as ações
+   * do agente (spec 011, FR-011).
+   */
+  approversOnly?: boolean;
 };
 
 const NAV: NavItem[] = [
   { to: '/workflows', label: 'Workflows', icon: Workflow },
   { to: '/executions', label: 'Execuções', icon: History },
   { to: '/credentials', label: 'Credenciais', icon: KeyRound },
-  { to: '/approvals', label: 'Aprovações', icon: BadgeCheck, publishersOnly: true },
+  { to: '/approvals', label: 'Aprovações', icon: BadgeCheck, approversOnly: true },
   { to: '/admin', label: 'Administração', icon: Settings, adminOnly: true },
 ];
 
@@ -41,9 +44,12 @@ export function AppLayout() {
   const displayName = me?.name ?? me?.email ?? user?.profile.name ?? '';
   const canAdmin = useCanAnywhere('project:manage');
   const canPublish = useCanAnywhere('workflow:publish');
+  const canExecute = useCanAnywhere('workflow:execute');
   // Spec 009, FR-011: notificação na aplicação dos pedidos que aguardam a decisão do usuário.
   const pending = usePublishRequests({ status: 'pending' }, canPublish).data ?? [];
-  const toDecide = pending.filter((r) => r.requestedBy.id !== me?.id).length;
+  // Spec 011, FR-011: e das ações do agente aguardando aprovação.
+  const agentPending = useAgentApprovals('pending', canExecute).data ?? [];
+  const toDecide = pending.filter((r) => r.requestedBy.id !== me?.id).length + agentPending.length;
 
   return (
     <div className="flex min-h-svh">
@@ -56,7 +62,8 @@ export function AppLayout() {
         </NavLink>
         <nav aria-label="Menu principal" className="grid gap-1 p-2">
           {NAV.filter(
-            (item) => (!item.adminOnly || canAdmin) && (!item.publishersOnly || canPublish),
+            (item) =>
+              (!item.adminOnly || canAdmin) && (!item.approversOnly || canPublish || canExecute),
           ).map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}

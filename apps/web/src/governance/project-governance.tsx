@@ -94,7 +94,7 @@ export function ProjectGovernance({ projectId }: { projectId: string }) {
         </Select>
       </div>
       <RetentionForm
-        key={`${String(s.retention.dataDays)}-${String(s.retention.metadataDays)}`}
+        key={`${String(s.retention.dataDays)}-${String(s.retention.metadataDays)}-${String(s.retention.memoryDays)}`}
         settings={s}
         onSave={(retention) => {
           save.mutate({ retention });
@@ -108,19 +108,31 @@ export function ProjectGovernance({ projectId }: { projectId: string }) {
   );
 }
 
-/** Retenção (FR-017); vazio = padrão da plataforma. Reinicia quando o valor salvo muda. */
+/**
+ * Retenção (FR-017) e da memória do agente (spec 011, FR-009); vazio = padrão da plataforma.
+ * Reinicia quando o valor salvo muda.
+ */
 function RetentionForm({
   settings: s,
   onSave,
 }: {
   settings: ProjectSettings;
-  onSave: (retention: { dataDays: number | null; metadataDays: number | null }) => void;
+  onSave: (retention: {
+    dataDays: number | null;
+    metadataDays: number | null;
+    memoryDays: number | null;
+  }) => void;
 }) {
   const [dataDays, setDataDays] = useState(s.retention.dataDays?.toString() ?? '');
   const [metadataDays, setMetadataDays] = useState(s.retention.metadataDays?.toString() ?? '');
+  const [memoryDays, setMemoryDays] = useState(s.retention.memoryDays?.toString() ?? '');
   const saveRetention = (e: FormEvent) => {
     e.preventDefault();
-    onSave({ dataDays: days(dataDays), metadataDays: days(metadataDays) });
+    onSave({
+      dataDays: days(dataDays),
+      metadataDays: days(metadataDays),
+      memoryDays: days(memoryDays),
+    });
   };
   return (
     <form onSubmit={saveRetention} className="flex flex-wrap items-end gap-2">
@@ -149,6 +161,20 @@ function RetentionForm({
           value={metadataDays}
           onChange={(e) => {
             setMetadataDays(e.target.value);
+          }}
+        />
+      </div>
+      <div className="grid gap-1.5">
+        <Label htmlFor="retention-memory">Memória do agente (dias)</Label>
+        <Input
+          id="retention-memory"
+          type="number"
+          min={1}
+          className="w-40"
+          placeholder={`Padrão: ${s.effectiveRetention.memoryDays}`}
+          value={memoryDays}
+          onChange={(e) => {
+            setMemoryDays(e.target.value);
           }}
         />
       </div>

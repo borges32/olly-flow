@@ -17,6 +17,7 @@ import { ParameterPanel } from '../parameter-panel';
 import { useEditorStore } from '../store';
 import { DataPanel, type DragSource } from './data-views';
 import { ExpressionContext, type ExpressionHelpers } from './expression-context';
+import { AgentStepsPanel } from './agent-steps';
 import { McpCallsPanel } from './mcp-calls';
 
 /** Saída do `console` do nó de código (spec 005, FR-012). */
@@ -402,6 +403,14 @@ export function NodeDetailsView({
                   }
                 />
                 <ConsoleOutput lines={runOf(node.id)?.console} />
+                {node.type === 'ai.agent' && (
+                  <AgentStepsPanel
+                    executionId={runOf(node.id)?.executionId ?? run.executionId ?? undefined}
+                    nodeId={node.id}
+                    runIndex={runOf(node.id)?.runIndex}
+                    status={runOf(node.id)?.status}
+                  />
+                )}
                 {node.type === 'ai.mcpClient' && (
                   <McpCallsPanel
                     executionId={runOf(node.id)?.executionId ?? run.executionId ?? undefined}

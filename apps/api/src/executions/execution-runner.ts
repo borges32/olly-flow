@@ -12,11 +12,15 @@ import { CredentialsService } from '../credentials/credentials.service.js';
 import { CODE_RUNNER, EXPRESSION_EVALUATOR } from '../expressions/expressions.module.js';
 import { MaskingService } from '../masking/masking.service.js';
 import { McpGatewayFactory } from '../mcp/mcp-gateway.service.js';
+import { AiGatewayFactory } from '../ai/ai-gateway.service.js';
+import { ApprovalsService } from '../ai/approvals.service.js';
 import { NODE_REGISTRY } from '../node-types/node-types.module.js';
 import { ExecutionEventSink } from './execution-events.service.js';
 import type { ExecutionJob, ExecutionOutcome, WebhookResponse } from './execution-job.js';
 import { ExecutionRecorder } from './execution-recorder.js';
 import { readNodeData } from './node-data.js';
+import { SubWorkflowService } from './sub-workflows.js';
+import { ExecutionWaits } from './waits.service.js';
 
 export interface ExecutionHooks {
   onWebhookResponse?: (response: WebhookResponse) => void;
@@ -44,6 +48,10 @@ export class ExecutionRunner {
     @Inject(BINARY_STORAGE) private readonly binaries: S3BinaryStorage | null,
     @Inject(MaskingService) private readonly masking: MaskingService,
     @Inject(McpGatewayFactory) private readonly mcp: McpGatewayFactory,
+    @Inject(ExecutionWaits) private readonly waits: ExecutionWaits,
+    @Inject(SubWorkflowService) private readonly subWorkflows: SubWorkflowService,
+    @Inject(AiGatewayFactory) private readonly ai: AiGatewayFactory,
+    @Inject(ApprovalsService) private readonly approvals: ApprovalsService,
   ) {}
 
   /**
@@ -80,7 +88,31 @@ export class ExecutionRunner {
       },
       this.logger,
     );
-    const callbacks = recorder.callbacks();
+    const recorded = recorder.callbacks();
+    const callbacks: typeof recorded = {
+      ...recorded,
+      onExecutionFinish: async (result) => {
+        // Spec 008/011: o estado e os pedidos de aprovação são gravados antes de a execução
+        // aparecer em espera; uma decisão só chega depois que há o que retomar.
+        if (result.status === 'waiting' && result.snapshot) {
+          await this.waits.save(executionId, result.snapshot, {
+            ...(job.startNodeId && { startNodeId: job.startNodeId }),
+            ...(job.destinationNodeId && { destinationNodeId: job.destinationNodeId }),
+            ...(job.pinData && { pinData: job.pinData }),
+          });
+          if (result.waiting?.some((w) => (w.request.approvals?.length ?? 0) > 0)) {
+            await this.approvals.createFromWaiting({
+              executionId,
+              projectId: workflow.projectId,
+              workflowId: workflow.id,
+              waiting: result.waiting,
+              masker,
+            });
+          }
+        }
+        await recorded.onExecutionFinish?.(result);
+      },
+    };
     const controller = new AbortController();
     const timeoutMs = job.definition.settings.timeoutSec
       ? job.definition.settings.timeoutSec * 1000
@@ -140,6 +172,18 @@ export class ExecutionRunner {
         maxLoopIterations: this.config.execution.maxLoopIterations,
         // Spec 010: servidores MCP do catálogo, com política, snapshot e registro das chamadas.
         mcp: this.mcp.forExecution({ executionId, projectId: workflow.projectId, masker }),
+        // Spec 008: sub-workflows (a filha aguardada roda aqui mesmo) e retomada da espera.
+        subWorkflows: this.subWorkflows.forExecution(executionId, (child, signal) =>
+          this.execute(child, signal ? { signal } : {}),
+        ),
+        ...(job.resume && { resume: job.resume }),
+        // Spec 011: modelos, limites, uso, passos e memória do Agent.
+        ai: this.ai.forExecution({
+          executionId,
+          projectId: workflow.projectId,
+          workflowId: workflow.id,
+          masker,
+        }),
         logger: this.nodeLogger(executionId),
         callbacks,
       });
@@ -149,6 +193,13 @@ export class ExecutionRunner {
         .filter((id) => result.nodes[id]?.status === 'success')
         .map((id) => firstItems(result.nodes[id]?.output))
         .find((items) => items !== undefined);
+      if (result.status === 'waiting' && result.snapshot) {
+        // Spec 008, FR-012: estado e pedidos já gravados em `onExecutionFinish`; a retomada
+        // continua em qualquer worker.
+        status = 'waiting';
+        return { status, ...(result.waiting && { waiting: result.waiting }) };
+      }
+      if (job.resume) await this.waits.clear(executionId);
       status =
         result.status === 'cancelled' && result.error?.reason === 'worker_lost'
           ? 'error'
@@ -161,6 +212,7 @@ export class ExecutionRunner {
     } catch (error) {
       // Erros antes de qualquer nó (ex.: workflow sem gatilho).
       const message = error instanceof Error ? error.message : String(error);
+      if (job.resume) await this.waits.clear(executionId).catch(() => undefined);
       await recorder.finish('error', { message });
       return { status: 'error', error: { message } };
     } finally {

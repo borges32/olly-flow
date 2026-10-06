@@ -155,6 +155,8 @@ O teste da spec 001 que proíbe citar o fornecedor do IdP no código das apps (F
 
 **Correção encontrada pelos testes durante a implementação:** o SDK envia o corpo das requisições de token OAuth como `URLSearchParams`, e o adaptador de `fetch` só repassava texto (o Keycloak respondia "Missing form parameter: grant_type"). O teste que reproduz o problema veio antes da correção (`packages/mcp-client/src/fetch.test.ts`).
 
+**Ajuste após a revisão (06/10/2026):** um servidor aprovado e sem nenhuma tool liberada deixava a lista "Tool" do nó vazia, sem explicação (é o comportamento do FR-002: negado por padrão). O select agora mostra o motivo e onde liberar as tools (`apps/web/src/editor/mcp-options.ts`, teste `mcp-options.test.ts`).
+
 ## Dependências adicionadas
 
 | Pacote | Versão | Motivo | Licença |

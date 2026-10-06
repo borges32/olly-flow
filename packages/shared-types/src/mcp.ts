@@ -26,6 +26,8 @@ export interface McpToolDefinition {
   name: string;
   description?: string;
   inputSchema: Record<string, unknown>;
+  /** Anotações do servidor (fora do hash do snapshot). Spec 011: `readOnlyHint`. */
+  annotations?: { readOnlyHint?: boolean; destructiveHint?: boolean };
 }
 
 /** Tool aprovada no snapshot (FR-003): `hash` de nome, descrição e schema canônicos. */

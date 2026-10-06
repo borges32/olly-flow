@@ -171,4 +171,4 @@ Ao concluir, atualizar `docs/execucao.md` (laços, merge, erros).
 | 05/10/2026 | §7: portas que deixam de existir (Merge, Switch, saída de erro): confirmação e remoção das conexões no mesmo passo de desfazer | Plano pedia confirmação; o desfazer devolve as conexões |
 | 05/10/2026 | §7: configurações do workflow (workflow de erro, timeout, paralelismo) num diálogo do editor | A spec exige indicar o workflow de erro; não havia tela para `settings` |
 | 05/10/2026 | §8: 16 casos (o caso 16 cobre `$('Nó')` na iteração atual); o caso 15 executa o workflow de erro com o payload, e o disparo fica no teste de integração | O disparo depende da fila e da API |
-
+| 06/10/2026 | FR-001: número de entradas do Merge fora de 2–10 passa a ser erro ao salvar (`PARAM_OUT_OF_RANGE`, verificação genérica de `minimum`/`maximum` dos parâmetros numéricos) e aviso no campo; antes o canvas cortava para 10 em silêncio | Teste do usuário: com 15 entradas, só 10 apareciam |

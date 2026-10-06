@@ -24,6 +24,8 @@ export interface MaintenanceReport {
   dataPurged: { executions: number; objects: number };
   /** `mcpCalls`: registro das chamadas MCP (spec 010), removido com os metadados. */
   metadataDeleted: { executions: number; nodes: number; objects: number; mcpCalls: number };
+  /** Spec 011, FR-009: mensagens da memória persistente removidas pela retenção. */
+  memoryDeleted: number;
   partitionsDropped: string[];
   usersInactivated: number;
 }
@@ -31,6 +33,7 @@ export interface MaintenanceReport {
 interface StoredRetention {
   dataDays?: number | null;
   metadataDays?: number | null;
+  memoryDays?: number | null;
 }
 
 /**
@@ -60,6 +63,7 @@ export class MaintenanceService {
       ran: false,
       dataPurged: { executions: 0, objects: 0 },
       metadataDeleted: { executions: 0, nodes: 0, objects: 0, mcpCalls: 0 },
+      memoryDeleted: 0,
       partitionsDropped: [],
       usersInactivated: 0,
     };
@@ -86,6 +90,13 @@ export class MaintenanceService {
           report,
         );
         await this.purgeData(project.id, new Date(now.getTime() - dataDays * DAY_MS), report);
+        const memoryDays = retention.memoryDays ?? this.config.ai.memoryRetentionDays;
+        const memory = await this.db
+          .deleteFrom('agent_memory')
+          .where('project_id', '=', project.id)
+          .where('created_at', '<', new Date(now.getTime() - memoryDays * DAY_MS))
+          .executeTakeFirst();
+        report.memoryDeleted += Number(memory.numDeletedRows);
       }
       report.partitionsDropped = await this.dropPartitions(
         new Date(now.getTime() - maxMetadataDays * DAY_MS),
@@ -158,6 +169,13 @@ export class MaintenanceService {
         .deleteFrom('execution_payloads')
         .where('execution_id', 'in', executionIds)
         .execute();
+      // Spec 011: o conteúdo dos passos do agente é dado da execução (a linha fica).
+      await this.db
+        .updateTable('agent_steps')
+        .set({ content: null })
+        .where('execution_id', 'in', executionIds)
+        .where('content', 'is not', null)
+        .execute();
       report.dataPurged.executions += executionIds.length;
     }
   }
@@ -186,6 +204,9 @@ export class MaintenanceService {
         .where('execution_id', 'in', ids)
         .executeTakeFirst();
       report.metadataDeleted.mcpCalls += Number(calls.numDeletedRows);
+      // Spec 011: passos do agente e pedidos de aprovação saem com a execução.
+      await this.db.deleteFrom('agent_steps').where('execution_id', 'in', ids).execute();
+      await this.db.deleteFrom('approval_requests').where('execution_id', 'in', ids).execute();
       await this.db.deleteFrom('executions').where('id', 'in', ids).execute();
       report.metadataDeleted.executions += ids.length;
       report.metadataDeleted.nodes += Number(nodes.numDeletedRows);

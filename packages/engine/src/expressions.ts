@@ -26,6 +26,8 @@ export interface ExpressionScope {
   timezone: string;
   /** Spec 007, FR-007: laço mais interno que contém o nó. */
   loop?: { index: number; maxIterations: number; accumulated: Item[] };
+  /** Spec 011, FR-007: valores de `$fromAI()` (chamada de ferramenta pelo modelo). */
+  fromAI?: Record<string, unknown>;
 }
 
 /** Devolve o parâmetro resolvido para o item, ou lança `ExpressionError`. */
@@ -85,6 +87,7 @@ export function buildExpressionData(
     workflow: scope.workflow,
     timezone: scope.timezone,
     ...(scope.loop && { loop: structuredClone(scope.loop) }),
+    ...(scope.fromAI && { fromAI: structuredClone(scope.fromAI) }),
   };
 }
 

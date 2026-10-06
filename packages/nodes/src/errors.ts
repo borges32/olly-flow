@@ -61,3 +61,37 @@ export function failedItem(
 ): { json: Record<string, unknown>; pairedItem: { item: number } } {
   return { json: { ...json, ...errorJson(error) }, pairedItem: { item: itemIndex } };
 }
+
+/** Pedido de aprovação humana de um nó em espera (spec 011, FR-010). */
+export interface NodeApprovalRequest {
+  /** Identifica o pedido dentro do nó (a decisão volta com a mesma chave). */
+  key: string;
+  itemIndex: number;
+  tool: string;
+  arguments: unknown;
+  reason: string;
+}
+
+/** O que um nó pede ao entrar em espera (spec 008, FR-012). */
+export interface NodeWaitRequest {
+  /** Motivo exibido (ex.: "Aguardando até 14:30"). */
+  reason: string;
+  /** Retomada por tempo (ISO 8601), como no Wait. */
+  resumeAt?: string;
+  /** Spec 011: a decisão de cada pedido retoma o nó. */
+  approvals?: NodeApprovalRequest[];
+  /** Estado próprio do nó para continuar na retomada (serializável em JSON). */
+  data?: unknown;
+}
+
+/**
+ * Lançado pelo nó para pausar a execução (spec 008, FR-012): o motor guarda o estado e a
+ * execução fica `waiting` até a retomada, que roda o nó de novo com `ctx.resume`. Não conta
+ * como falha (sem retry nem `onError`).
+ */
+export class NodeWaitSignal extends Error {
+  override name = 'NodeWaitSignal';
+  constructor(readonly request: NodeWaitRequest) {
+    super(request.reason);
+  }
+}

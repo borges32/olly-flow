@@ -1,5 +1,8 @@
 import type { CredentialTypeDescription, NodeDescription } from '@olly/nodes';
 import type {
+  AgentApproval,
+  AgentStep,
+  ExecutionAiUsage,
   AuditList,
   CredentialSummary,
   GroupRoleMapping,
@@ -55,6 +58,15 @@ export const queryKeys = {
   mcpAvailable: (projectId: string) => ['projects', projectId, 'mcp-servers'] as const,
   mcpCalls: (executionId: string) => ['executions', executionId, 'mcp-calls'] as const,
   oauthStatus: (credentialId: string) => ['credentials', credentialId, 'oauth'] as const,
+  // Spec 011.
+  agentSteps: (executionId: string) => ['executions', executionId, 'agent-steps'] as const,
+  executionAiUsage: (executionId: string) => ['executions', executionId, 'ai-usage'] as const,
+  approvals: (status: string) => ['approvals', status] as const,
+  aiPricing: ['ai-pricing'] as const,
+  aiModels: ['ai-models'] as const,
+  aiUsage: (from: string, to: string) => ['ai-usage', from, to] as const,
+  projectAiUsage: (projectId: string) => ['projects', projectId, 'ai-usage'] as const,
+  projectAiSettings: (projectId: string) => ['projects', projectId, 'ai-settings'] as const,
 };
 
 export function useProjects() {
@@ -310,5 +322,39 @@ export function useOAuthStatus(credentialId: string | undefined) {
     queryFn: () =>
       api.get<McpOAuthStatus>(`/api/v1/credentials/${credentialId ?? ''}/oauth/status`),
     enabled: credentialId !== undefined,
+  });
+}
+
+export function useAgentSteps(executionId: string | undefined, version = '') {
+  const api = useApi();
+  return useQuery({
+    queryKey: [...queryKeys.agentSteps(executionId ?? ''), version],
+    queryFn: () => api.get<AgentStep[]>(`/api/v1/executions/${executionId ?? ''}/agent-steps`),
+    enabled: executionId !== undefined,
+  });
+}
+
+export function useExecutionAiUsage(executionId: string | undefined, version = '') {
+  const api = useApi();
+  return useQuery({
+    queryKey: [...queryKeys.executionAiUsage(executionId ?? ''), version],
+    queryFn: () => api.get<ExecutionAiUsage>(`/api/v1/executions/${executionId ?? ''}/ai-usage`),
+    enabled: executionId !== undefined,
+  });
+}
+
+/** Pedidos de aprovação do agente (spec 011, FR-011) nos projetos em que o usuário executa. */
+export function useAgentApprovals(status: 'pending' | 'decided', enabled = true) {
+  const api = useApi();
+  return useQuery({
+    queryKey: queryKeys.approvals(status),
+    queryFn: async () => {
+      const list = await api.get<AgentApproval[]>(
+        status === 'pending' ? '/api/v1/approvals?status=pending' : '/api/v1/approvals',
+      );
+      return status === 'pending' ? list : list.filter((a) => a.status !== 'pending');
+    },
+    refetchInterval: status === 'pending' ? 15_000 : false,
+    enabled,
   });
 }

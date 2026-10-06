@@ -37,6 +37,8 @@ export interface ExpressionData {
   timezone: string;
   /** Spec 007, FR-007: laço que contém o nó (`$loop`); ausente fora de laços. */
   loop?: LoopData;
+  /** Spec 011, FR-007: argumentos do modelo para a ferramenta (`$fromAI('chave')`). */
+  fromAI?: Record<string, unknown>;
 }
 
 export interface LoopData {

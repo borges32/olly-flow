@@ -1,7 +1,7 @@
 import { createNodeRegistry } from '@olly/nodes';
 import type { Edge, WorkflowDefinition, WorkflowNode } from '@olly/shared-types';
 import { describe, expect, it } from 'vitest';
-import { expressionsInStaticParams, validateWorkflow } from './validate.js';
+import { expressionsInStaticParams, numbersOutOfRange, validateWorkflow } from './validate.js';
 
 const registry = createNodeRegistry();
 
@@ -137,5 +137,60 @@ describe('spec 004 — FR-012: parâmetro sem expressão', () => {
         { columns: { values: [{ column: 'ok' }, { column: '={{ $json.c }}' }] } },
       ),
     ).toEqual(['columns.values[1].column']);
+  });
+});
+
+describe('spec 007 — FR-001: números dentro da faixa do parâmetro', () => {
+  const merge = (numberInputs: unknown): WorkflowDefinition => ({
+    nodes: [
+      {
+        id: 'mg',
+        type: 'logic.merge',
+        name: 'Juntar',
+        params: { mode: 'append', numberInputs },
+        position: [0, 0],
+      },
+    ],
+    edges: [],
+    settings: {},
+  });
+
+  it('FR-001: Merge com mais de 10 entradas é erro ao salvar (o canvas não mostraria as demais)', () => {
+    expect(validateWorkflow(merge(15), registry).errors).toEqual([
+      {
+        code: 'PARAM_OUT_OF_RANGE',
+        message: 'Nó "Juntar": o parâmetro "numberInputs" deve estar entre 2 e 10 (recebido: 15)',
+        nodeIds: ['mg'],
+      },
+    ]);
+    expect(validateWorkflow(merge(1), registry).errors.map((e) => e.code)).toEqual([
+      'PARAM_OUT_OF_RANGE',
+    ]);
+  });
+
+  it('FR-001: dentro da faixa não é erro; expressões ficam para a execução', () => {
+    expect(validateWorkflow(merge(10), registry).errors).toEqual([]);
+    expect(validateWorkflow(merge(2), registry).errors).toEqual([]);
+    expect(
+      numbersOutOfRange(
+        { properties: { limite: { type: 'integer', minimum: 1, maximum: 5 } } },
+        { limite: '={{ 99 }}' },
+      ),
+    ).toEqual([]);
+  });
+
+  it('caminhos aninhados (listas e objetos) também são verificados', () => {
+    expect(
+      numbersOutOfRange(
+        {
+          properties: {
+            regras: {
+              items: { properties: { peso: { type: 'number', minimum: 0, maximum: 1 } } },
+            },
+          },
+        },
+        { regras: [{ peso: 0.5 }, { peso: 3 }] },
+      ),
+    ).toEqual([{ path: 'regras[1].peso', value: 3, minimum: 0, maximum: 1 }]);
   });
 });

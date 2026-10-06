@@ -18,6 +18,10 @@ Credenciais guardam os dados de acesso a APIs e bancos usados pelos nós. Introd
 | `mcpBearer` | **token** | — (teste do servidor no catálogo MCP, spec 010) |
 | `mcpHeaders` | **headers** (`Nome: valor`, um por linha; cada valor é mascarado) | — (teste do servidor no catálogo MCP) |
 | `mcpOAuth` | serverUrl, clientId (vazio = registro dinâmico), **clientSecret**, scope; tokens em campos secretos ocultos, gravados pelo "Conectar" | "Conectar" (OAuth 2.1 conforme a especificação MCP; ver [mcp-governanca.md](mcp-governanca.md)) |
+| `openAiCompatible` | **apiKey**, baseURL (vazio = OpenAI), organization | — (modelos do Agent, spec 011) |
+| `anthropic` | **apiKey**, baseURL (opcional) | — |
+| `googleGemini` | **apiKey**, baseURL (vazio = endpoint compatível com OpenAI do Gemini) | — |
+| `fakeLlm` | script (roteiro JSON) | — (só com `NODE_ENV=test`: modelo simulado dos testes, FR-016) |
 
 O teste dos tipos HTTP passa pelo filtro anti-SSRF, como as requisições dos nós.
 

@@ -76,10 +76,16 @@ export class ExecutionRecorder {
       engineStatus === 'cancelled' && error?.reason === 'worker_lost' ? 'error' : engineStatus;
     error = error ? this.masker.mask(error).value : null;
     const finishedAt = new Date();
+    // Spec 008, FR-012: a execução em espera não terminou (sem `finished_at`).
+    const waiting = status === 'waiting';
     try {
       const updated = await this.db
         .updateTable('executions')
-        .set({ status, finished_at: finishedAt, error: error ? JSON.stringify(error) : null })
+        .set({
+          status,
+          finished_at: waiting ? null : finishedAt,
+          error: error ? JSON.stringify(error) : null,
+        })
         .where('id', '=', this.executionId)
         .where('status', '=', 'running')
         .executeTakeFirst();
@@ -88,6 +94,14 @@ export class ExecutionRecorder {
       this.logger.error(`Falha ao finalizar a execução ${this.executionId}: ${String(err)}`);
     }
     if (this.savePolicy === 'errorsOnly' && status === 'success') await this.discardData();
+    if (waiting) {
+      this.events.emit(
+        'executionFinished',
+        { executionId: this.executionId, status, finishedAt: null, error: null },
+        this.workflowId,
+      );
+      return status;
+    }
     this.events.emit(
       'executionFinished',
       { executionId: this.executionId, status, finishedAt: finishedAt.toISOString(), error },
@@ -162,6 +176,16 @@ export class ExecutionRecorder {
       error: m.error ? JSON.stringify(m.error) : null,
     };
     try {
+      // Retomada (spec 008): a linha `waiting` desta execução do nó dá lugar à final.
+      if (record.status !== 'waiting') {
+        await this.db
+          .deleteFrom('node_executions')
+          .where('execution_id', '=', this.executionId)
+          .where('node_id', '=', record.nodeId)
+          .where('run_index', '=', record.runIndex)
+          .where('status', '=', 'waiting')
+          .execute();
+      }
       await this.insertNode(row);
     } catch (err) {
       this.logger.error(

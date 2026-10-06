@@ -28,6 +28,14 @@ Papéis por projeto. "Admin da plataforma" é o grupo de administração do IdP 
 | Gerenciar o catálogo MCP (servidores, aprovação e políticas) (global) | `mcp:manage` | ✅ | — | — | — | — | — |
 | Listar servidores MCP e tools liberadas (uso em workflows) | `credential:use` | ✅ | ✅ | ✅ | — | — | — |
 | Ver as chamadas MCP de uma execução | `execution:read` | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| Ver os passos do agente e o uso de IA de uma execução | `execution:read` | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| Ver o uso e o custo de IA do projeto | `project:manage` | ✅ | ✅ | — | — | — | — |
+| Ver o uso de IA da plataforma e editar a tabela de preços (global) | `project:manage` | ✅ | — | — | — | — | — |
+| Cadastrar os modelos de IA permitidos na instalação (global) | `project:manage` | ✅ | — | — | — | — | — |
+| Ver a configuração de IA do projeto | `workflow:read` | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| Alterar os modelos permitidos e o limite de tokens do projeto (global) | `project:manage` | ✅ | — | — | — | — | — |
+| Listar os modelos de IA permitidos (nó Modelo de chat) | `credential:use` | ✅ | ✅ | ✅ | — | — | — |
+| Aprovar ou rejeitar uma ação do agente | `workflow:execute` | ✅ | ✅ | ✅ | ✅ | — | — |
 
 Spec 009: com a opção "Executor vê os dados das execuções" do projeto (`executor_can_read_data`), o papel Executor ganha `execution:readData` naquele projeto (FR-019). Com a aprovação de publicação ativa, publicar abre um pedido; o autor do pedido nunca o aprova (FR-011).
 

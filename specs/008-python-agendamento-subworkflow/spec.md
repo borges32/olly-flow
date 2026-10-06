@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| **Status** | Aprovada |
+| **Status** | Em implementação |
 | **Fase** | 2 — Execução avançada |
 | **Depende de** | 007 |
 | **Requisitos de produto** | PR-10, PR-03 (paginação), PR-20 (parcial) |
@@ -109,3 +109,4 @@ Nenhum.
 | Data | Alteração | Motivo |
 |---|---|---|
 | 03/10/2026 | Criação a partir do prompt da Sprint 7 | Migração para SDD |
+| 06/10/2026 | Implementação parcial antecipada: estado e retomada (FR-012), sub-workflow (FR-009 a FR-011) e `flow.wait` (T001, T040, T041), exigidos pela spec 011; o restante continua adiado | Decisão humana |

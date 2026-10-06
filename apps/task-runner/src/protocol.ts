@@ -20,6 +20,8 @@ const expressionDataSchema = z.object({
       accumulated: z.array(z.unknown()),
     })
     .optional(),
+  // Spec 011: argumentos do modelo para `$fromAI()` nas ferramentas do agente.
+  fromAI: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const requestSchema = z.discriminatedUnion('type', [

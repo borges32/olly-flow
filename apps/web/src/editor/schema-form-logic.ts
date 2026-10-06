@@ -99,3 +99,20 @@ export function newArrayItem(itemSchema: ParamSchema): Record<string, unknown> {
   }
   return item;
 }
+
+/** Mensagem quando o número fixo está fora de `minimum`/`maximum` do schema (expressões não). */
+export function rangeMessage(schema: ParamSchema, value: unknown): string | undefined {
+  if (typeof value !== 'number') return undefined;
+  const { minimum: min, maximum: max } = schema;
+  if (typeof min === 'number' && value < min) {
+    return typeof max === 'number'
+      ? `Use um valor entre ${String(min)} e ${String(max)}.`
+      : `Use no mínimo ${String(min)}.`;
+  }
+  if (typeof max === 'number' && value > max) {
+    return typeof min === 'number'
+      ? `Use um valor entre ${String(min)} e ${String(max)}.`
+      : `Use no máximo ${String(max)}.`;
+  }
+  return undefined;
+}

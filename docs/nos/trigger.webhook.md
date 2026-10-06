@@ -37,6 +37,7 @@ O painel do nó mostra as duas URLs, com botão de copiar.
 
 - **`headers`:** chegam sem `authorization`, `cookie`, `proxy-authorization` e `x-signature`, e sem o cabeçalho usado pela credencial (header ou HMAC).
 - **`body`:** JSON vira objeto; `application/x-www-form-urlencoded` vira objeto; `text/*` e XML viram texto. Outros tipos de conteúdo vão para o object storage e o item recebe `binary.data`.
+  - Corpo com um objeto ou lista JSON válido enviado como `text/plain`, `application/x-www-form-urlencoded` ou sem `Content-Type` também vira objeto: é o que fazem um `fetch` sem cabeçalho e o `curl -d`. Texto que não é JSON continua texto. A autenticação HMAC usa sempre o corpo cru.
 
 ## Autenticação
 

@@ -9,7 +9,9 @@ export type ResourceScope =
   | { workflow: string }
   | { execution: string }
   | { credential: string }
-  | { publishRequest: string };
+  | { publishRequest: string }
+  // Spec 011: pedido de aprovação humana.
+  | { approval: string };
 
 /**
  * Onde a permissão vale:
@@ -21,10 +23,11 @@ export type ResourceScope =
 export type PermissionScope = ResourceScope | 'global' | 'anyProject';
 
 export function resourceOf(scope: ResourceScope): {
-  kind: 'project' | 'workflow' | 'execution' | 'credential' | 'publishRequest';
+  kind: 'project' | 'workflow' | 'execution' | 'credential' | 'publishRequest' | 'approval';
   param: string;
 } {
   if ('publishRequest' in scope) return { kind: 'publishRequest', param: scope.publishRequest };
+  if ('approval' in scope) return { kind: 'approval', param: scope.approval };
   if ('project' in scope) return { kind: 'project', param: scope.project };
   if ('workflow' in scope) return { kind: 'workflow', param: scope.workflow };
   if ('credential' in scope) return { kind: 'credential', param: scope.credential };

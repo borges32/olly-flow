@@ -79,8 +79,9 @@ Regras com expressão regular livre não são aceitas, pelo risco de ReDoS no ca
 Job diário no worker (`OLLY_MAINTENANCE_CRON`, padrão `0 3 * * *` no fuso `OLLY_TIMEZONE`), agendado como *job scheduler* do BullMQ (um único agendamento para todos os workers), com lock no Redis (`olly:retention-lock`):
 
 1. Cria as partições mensais futuras (`olly_ensure_partitions(2)`).
-2. Por projeto, remove as execuções (metadados, nós, payloads, chamadas MCP da spec 010 e objetos no storage) mais antigas que `retention.metadataDays`.
-3. Por projeto, remove os **dados** (entrada, saída, origens, console, `data_ref` e objetos) das execuções mais antigas que `retention.dataDays`; os metadados ficam.
+2. Por projeto, remove as execuções (metadados, nós, payloads, chamadas MCP da spec 010, passos do agente e pedidos de aprovação da spec 011 e objetos no storage) mais antigas que `retention.metadataDays`.
+3. Por projeto, remove os **dados** (entrada, saída, origens, console, `data_ref`, objetos e o conteúdo dos passos do agente) das execuções mais antigas que `retention.dataDays`; os metadados ficam.
+   Spec 011: remove as mensagens da memória persistente do agente mais antigas que `retention.memoryDays` (padrão `OLLY_RETENTION_MEMORY_DAYS`, 30).
 4. Descarta (`DETACH` + `DROP`) as partições mensais que terminam antes da **maior** retenção de metadados entre os projetos.
 5. Marca como inativos os usuários sem login há `OLLY_USER_INACTIVE_DAYS`.
 6. Registra as contagens na auditoria (`retention.run`).
@@ -94,5 +95,6 @@ Execuções na fila, em andamento ou aguardando não são tocadas. Os padrões v
 | `OLLY_MASKING_SALT` | — (obrigatória em produção) | Salt da ação `hash`, por instalação. Mínimo 16 caracteres |
 | `OLLY_INLINE_DATA_LIMIT` | 262144 | Bytes de JSON por nó acima dos quais os dados vão para o storage |
 | `OLLY_RETENTION_DATA_DAYS` / `OLLY_RETENTION_METADATA_DAYS` | 30 / 365 | Retenção padrão |
+| `OLLY_RETENTION_MEMORY_DAYS` | 30 | Retenção padrão da memória do agente (spec 011) |
 | `OLLY_MAINTENANCE_CRON` | `0 3 * * *` | Horário do job diário |
 | `OLLY_USER_INACTIVE_DAYS` | 90 | Inativação por falta de login |

@@ -1,7 +1,16 @@
 import type { BinaryRef, WorkflowNode } from '@olly/shared-types';
 import type { ResolvedCredential } from '../credentials/definitions.js';
 import { mapWithConcurrency } from '../shared/concurrency.js';
-import type { CodeMode, LoopState, McpGateway, NodeContext, WebhookResponse } from '../types.js';
+import type { AiGateway } from '../ai/runtime/types.js';
+import type {
+  CodeMode,
+  LoopState,
+  McpGateway,
+  NodeContext,
+  NodeResume,
+  SubWorkflowGateway,
+  WebhookResponse,
+} from '../types.js';
 
 export interface FakeContext extends NodeContext {
   secrets: string[];
@@ -25,6 +34,10 @@ export function fakeContext(options: {
   /** Gateway MCP de teste (spec 010). */
   mcp?: McpGateway;
   runIndex?: number;
+  subWorkflows?: SubWorkflowGateway;
+  resume?: NodeResume;
+  subNodes?: NodeContext['subNodes'];
+  ai?: AiGateway;
 }): FakeContext {
   const responses: WebhookResponse[] = [];
   const perItem = Array.isArray(options.params) ? options.params : undefined;
@@ -84,6 +97,23 @@ export function fakeContext(options: {
     mcp: () => {
       if (!options.mcp) throw new Error('sem gateway MCP');
       return options.mcp;
+    },
+    subWorkflows: () => {
+      if (!options.subWorkflows) throw new Error('sem gateway de sub-workflows');
+      return options.subWorkflows;
+    },
+    ...(options.resume && { resume: options.resume }),
+    subNodes: options.subNodes ?? (() => Promise.resolve([])),
+    withFromAI: (values) =>
+      Promise.resolve((name: string) => {
+        const raw = base[name];
+        // Teste simples: `{{ $fromAI('x') }}` vira o valor de `x`.
+        const match = typeof raw === 'string' ? /\$fromAI\(\s*['"]([^'"]+)['"]/.exec(raw) : null;
+        return match?.[1] !== undefined ? values[match[1]] : raw;
+      }),
+    ai: () => {
+      if (!options.ai) throw new Error('sem gateway de IA');
+      return options.ai;
     },
     // Como o motor, para um tipo com `supportsParallelItems` (spec 006, FR-009).
     mapItems: (items, fn) => {

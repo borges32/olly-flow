@@ -1,5 +1,6 @@
 import type { Permission, RoleName } from './rbac.js';
 import type { PublishApproval } from './governance.js';
+import type { AgentStepEvent } from './ai.js';
 import type {
   ExecutionStatus,
   Item,
@@ -277,8 +278,10 @@ export interface TestWebhookReceivedEvent {
 
 export interface ExecutionFinishedEvent {
   executionId: string;
+  /** `waiting` (spec 008): a execução pausou; um novo `executionStarted` vem na retomada. */
   status: ExecutionStatus;
-  finishedAt: string;
+  /** `null` quando a execução entrou em espera. */
+  finishedAt: string | null;
   error: ExecutionErrorInfo | null;
 }
 
@@ -288,6 +291,8 @@ export interface ExecutionEvents {
   nodeFinished: NodeFinishedEvent;
   executionFinished: ExecutionFinishedEvent;
   testWebhookReceived: TestWebhookReceivedEvent;
+  /** Spec 011, FR-006: passo do agente. */
+  agentStep: AgentStepEvent;
 }
 
 /** `POST /workflows/:id/publish` (spec 005, FR-001). */

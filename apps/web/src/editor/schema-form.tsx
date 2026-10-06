@@ -21,6 +21,7 @@ import {
   isFieldVisible,
   mcpArgumentsSchema,
   newArrayItem,
+  rangeMessage,
   type ParamSchema,
 } from './schema-form-logic';
 
@@ -200,6 +201,8 @@ function Field({ name, path, schema, value, readOnly, onChange }: FieldProps) {
     <p className="text-xs text-muted-foreground">{schema.description}</p>
   );
 
+  // Faixa do schema (`minimum`/`maximum`): avisa na hora; o salvamento também recusa.
+  const outOfRange = kind === 'number' ? rangeMessage(schema, value) : undefined;
   const singleLine = () => (
     <ScalarField
       id={id}
@@ -218,11 +221,21 @@ function Field({ name, path, schema, value, readOnly, onChange }: FieldProps) {
         autoComplete="off"
         value={toText(value)}
         disabled={readOnly}
+        {...(kind === 'number' && {
+          min: schema.minimum,
+          max: schema.maximum,
+          'aria-invalid': outOfRange !== undefined,
+        })}
         onChange={(e) => {
           const raw = e.target.value;
           onChange(kind === 'number' ? (raw === '' ? undefined : Number(raw)) : raw);
         }}
       />
+      {outOfRange && (
+        <p className="text-xs text-destructive" data-testid={`${testId}-range`}>
+          {outOfRange}
+        </p>
+      )}
     </ScalarField>
   );
 
@@ -489,7 +502,7 @@ function LoadedOptions({
     current && !options.some((o) => o.value === current)
       ? [{ value: current, label: current }, ...options]
       : options;
-  return (
+  const select = (
     <Select
       id={id}
       data-testid={testId}
@@ -506,6 +519,16 @@ function LoadedOptions({
         </option>
       ))}
     </Select>
+  );
+  // Lista vazia: explica o motivo (ex.: nenhuma tool MCP liberada, spec 010).
+  if (options.length > 0 || !hint) return select;
+  return (
+    <div className="grid gap-1">
+      {select}
+      <p className="text-xs text-amber-700 dark:text-amber-300" data-testid={`${testId}-hint`}>
+        {hint}
+      </p>
+    </div>
   );
 }
 

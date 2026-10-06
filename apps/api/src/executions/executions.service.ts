@@ -174,7 +174,7 @@ export class ExecutionsService implements OnModuleInit, OnModuleDestroy {
     const who = user.name ?? user.email;
     const reason = new ExecutionCancelledError('cancelled', `Execução cancelada por ${who}`);
     const signalled =
-      ['queued', 'running'].includes(execution.status) &&
+      ['queued', 'running', 'waiting'].includes(execution.status) &&
       (await this.dispatcher.cancel(executionId, reason));
     if (!signalled) throw new ConflictError('A execução já terminou');
     await this.audit.record(this.db, ctx, {

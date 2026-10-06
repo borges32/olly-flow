@@ -1,11 +1,23 @@
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
 import type { NodeDescription } from '@olly/nodes';
 import { resolveNodePorts, type WorkflowNode } from '@olly/shared-types';
-import { AlertTriangle, Check, Loader2, Minus, Pin, Play, Square, X } from 'lucide-react';
+import {
+  AlertTriangle,
+  Check,
+  Hourglass,
+  Loader2,
+  Minus,
+  Pin,
+  Play,
+  Square,
+  X,
+} from 'lucide-react';
 import { memo } from 'react';
 import { cn } from '@/lib/utils';
 import { useNodeActions } from './node-actions';
 import { NodeIcon } from './node-icon';
+import { nodeMinSize } from './node-layout';
+import { isSubNodePort } from './subnodes';
 import type { NodeRunView } from './store';
 import type { DiffStatus } from './version-diff';
 
@@ -66,6 +78,18 @@ function RunStatus({ run }: { run: NodeRunView }) {
           <X className="size-3" /> erro
         </span>
       );
+    case 'waiting':
+      // Spec 008: espera (Wait) ou aprovação humana (spec 011); a execução retoma depois.
+      return (
+        <span
+          data-testid="node-status"
+          data-status="waiting"
+          className={cn(common, 'text-sky-600 dark:text-sky-400')}
+          title={run.error?.message ?? 'Aguardando a retomada'}
+        >
+          <Hourglass className="size-3" /> aguardando
+        </span>
+      );
     case 'cancelled':
       return (
         <span
@@ -102,9 +126,13 @@ export const WorkflowNodeView = memo(function WorkflowNodeView({
   const { node, description, errors, run, pinned, diffStatus } = data;
   const actions = useNodeActions();
   // Portas efetivas: dinâmicas (Merge, Switch) e de erro (spec 007).
-  const { inputs, outputs } = description
-    ? resolveNodePorts(description, node)
-    : { inputs: [], outputs: [] };
+  const ports = description ? resolveNodePorts(description, node) : { inputs: [], outputs: [] };
+  // Spec 011, FR-001: portas de sub-nó na vertical (base do Agent; topo do sub-nó), como no N8N.
+  const inputs = ports.inputs.filter((p) => !isSubNodePort(p));
+  const subInputs = ports.inputs.filter((p) => isSubNodePort(p));
+  const outputs = ports.outputs.filter((p) => !isSubNodePort(p));
+  const subOutputs = ports.outputs.filter((p) => isSubNodePort(p));
+  const isSubNode = ports.outputs.length > 0 && subOutputs.length === ports.outputs.length;
   const hasError = errors.length > 0;
   return (
     <div
@@ -112,9 +140,18 @@ export const WorkflowNodeView = memo(function WorkflowNodeView({
       data-x={node.position[0]}
       data-y={node.position[1]}
       data-diff={diffStatus}
+      data-subnode={isSubNode || undefined}
       title={hasError ? errors.join('\n') : undefined}
+      // Portas espaçadas: o nó cresce com o número de entradas, saídas e sub-nós.
+      style={nodeMinSize({
+        inputs: inputs.length,
+        outputs: outputs.length,
+        bottom: subInputs.length,
+      })}
       className={cn(
-        'group relative flex min-w-44 items-center gap-2 rounded-lg border-2 bg-card px-3 py-2 text-card-foreground shadow-sm',
+        'group relative flex min-w-44 items-center gap-2 border-2 bg-card px-3 py-2 text-card-foreground shadow-sm',
+        isSubNode ? 'rounded-full' : 'rounded-lg',
+        subInputs.length > 0 && 'pb-5',
         selected ? 'border-primary' : 'border-border',
         hasError && 'border-destructive',
         node.disabled && 'opacity-50',
@@ -232,6 +269,34 @@ export const WorkflowNodeView = memo(function WorkflowNodeView({
             </span>
           )}
         </Handle>
+      ))}
+      {subInputs.map((port, i) => (
+        <Handle
+          key={port.name}
+          id={port.name}
+          type="target"
+          position={Position.Bottom}
+          style={{ left: handleOffset(i, subInputs.length) }}
+          className="!size-3 !rounded-sm !border-2 !border-background !bg-violet-500"
+          title={`${port.displayName ?? port.name}${port.required ? ' (obrigatório)' : ''}`}
+          data-testid={`port-${port.name}`}
+        >
+          <span className="pointer-events-none absolute top-3 left-1/2 -translate-x-1/2 text-[10px] whitespace-nowrap text-muted-foreground">
+            {port.displayName ?? port.name}
+            {port.required && <span className="text-destructive">*</span>}
+          </span>
+        </Handle>
+      ))}
+      {subOutputs.map((port, i) => (
+        <Handle
+          key={port.name}
+          id={port.name}
+          type="source"
+          position={Position.Top}
+          style={{ left: handleOffset(i, subOutputs.length) }}
+          className="!size-3 !rounded-sm !border-2 !border-background !bg-violet-500"
+          title={port.displayName ?? port.name}
+        />
       ))}
     </div>
   );

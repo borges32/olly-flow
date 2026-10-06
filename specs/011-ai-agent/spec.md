@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| **Status** | Aprovada |
+| **Status** | Implementada (com pendências: SC-002 manual e ADR-0008) |
 | **Fase** | 3 — IA e governança |
 | **Depende de** | 010 |
 | **Requisitos de produto** | PR-16, PR-14 (MCP como tool) |
@@ -56,7 +56,7 @@ Como **editor**, quero exigir que a resposta final siga um schema JSON.
 ## Requisitos funcionais
 
 - **FR-001**: O canvas DEVE suportar sub-nós conectados à base do Agent (modelo, memória, ferramentas). O Agent exige exatamente 1 modelo, no máximo 1 memória e 0 ou mais ferramentas. Sub-nós NÃO DEVEM se conectar ao fluxo principal.
-- **FR-002**: O nó `ai.chatModel` DEVE usar credenciais por provedor aprovado (ADR-0008) e parâmetros de modelo (temperatura, máximo de tokens, timeout, tentativas). Modelos fora da lista permitida (instalação e projeto) DEVEM ser recusados.
+- **FR-002**: O nó `ai.chatModel` DEVE usar credenciais por provedor aprovado (ADR-0008) e parâmetros de modelo (temperatura e top p opcionais — enviados ao provedor só quando preenchidos, pois nem todo modelo os aceita —, máximo de tokens, timeout, tentativas). Modelos fora da lista permitida (instalação e projeto) DEVEM ser recusados. A lista da instalação DEVE ser um cadastro na administração da plataforma, com efeito imediato (sem reiniciar a aplicação).
 - **FR-003**: O nó `ai.agent` DEVE executar por item um agente com chamada de ferramentas, com prompt vindo da entrada ou definido, mensagem de sistema, limite de iterações e retorno opcional dos passos intermediários.
 - **FR-004**: O Agent DEVE poder validar a resposta final contra um JSON Schema, pedindo correção ao modelo até 2 vezes.
 - **FR-005**: A saída DEVE conter a resposta, os passos (opcional) e o uso de tokens.
@@ -111,11 +111,15 @@ RAG/vector store, chat trigger, *fine-tuning* e avaliação automática de respo
 
 ## Pontos em aberto
 
-- [PRECISA ESCLARECIMENTO: limite mensal padrão de tokens por projeto?]
-- [PRECISA ESCLARECIMENTO: quem pode aprovar ações destrutivas — qualquer executor do projeto ou um papel específico?] O padrão é `workflow:execute`.
+- ~~[PRECISA ESCLARECIMENTO: limite mensal padrão de tokens por projeto?]~~ Resolvido (06/10/2026): sem limite padrão; o limite é definido por projeto pela administração.
+- ~~[PRECISA ESCLARECIMENTO: quem pode aprovar ações destrutivas — qualquer executor do projeto ou um papel específico?]~~ Resolvido (06/10/2026): quem tem `workflow:execute` no projeto.
 
 ## Histórico de alterações
 
 | Data | Alteração | Motivo |
 |---|---|---|
 | 03/10/2026 | Criação a partir do prompt da Sprint 10 | Migração para SDD |
+| 06/10/2026 | Pontos em aberto resolvidos (sem limite mensal padrão; aprovação por `workflow:execute`); tabela de preços semeada com os preços públicos dos modelos, editável | Decisão humana |
+| 06/10/2026 | FR-002: a lista de modelos da instalação deixa de ser a variável `OLLY_ALLOWED_MODELS` e passa a ser um cadastro em Administração › IA, com efeito imediato | Decisão humana: incluir ou remover um modelo não pode exigir reciclar os pods |
+| 06/10/2026 | FR-002: `top p` acrescentado; temperatura e top p passam a ser opcionais (sem valor padrão: vazio = o padrão do modelo) | Teste do usuário com `gpt-5-mini`: o modelo recusa temperatura diferente de 1, e modelos recentes da Anthropic recusam top p |
+| 06/10/2026 | Dependência explícita da spec 008: estado/retomada (`waiting`), `flow.wait` e sub-workflow (T001, T040, T041 da 008) são implementados antes desta spec | Decisão humana: a 008 foi adiada, mas a aprovação humana e o `tool.workflow` dependem dessas partes |
