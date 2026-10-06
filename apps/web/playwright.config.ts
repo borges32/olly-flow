@@ -29,7 +29,8 @@ export default defineConfig({
       command: 'node ../api/dist/main.js',
       url: 'http://localhost:3000/health',
       // Spec 004: o servidor HTTP local dos testes de integração precisa passar no anti-SSRF.
-      env: { ...env, LOG_LEVEL: 'warn', OLLY_HTTP_ALLOWLIST: '127.0.0.1' },
+      // Spec 010: o OAuth do servidor MCP de teste usa o Keycloak do compose (localhost:8080).
+      env: { ...env, LOG_LEVEL: 'warn', OLLY_HTTP_ALLOWLIST: '127.0.0.1,localhost' },
       reuseExistingServer: !isCI,
       timeout: 60_000,
     },
@@ -37,7 +38,7 @@ export default defineConfig({
       // Spec 006: as execuções passam pela fila; o worker executa (mesmo ambiente da API).
       command: 'node ../worker/dist/main.js',
       url: 'http://localhost:3101/health',
-      env: { ...env, LOG_LEVEL: 'warn', OLLY_HTTP_ALLOWLIST: '127.0.0.1' },
+      env: { ...env, LOG_LEVEL: 'warn', OLLY_HTTP_ALLOWLIST: '127.0.0.1,localhost' },
       reuseExistingServer: !isCI,
       timeout: 60_000,
     },

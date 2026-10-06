@@ -11,9 +11,9 @@ describe('FR-010: matriz padrão de papéis', () => {
     expect([...DEFAULT_ROLE_PERMISSIONS.admin].sort()).toEqual([...PERMISSIONS].sort());
   });
 
-  it('FR-010: editor tem todas exceto user:manage, project:manage e audit:read', () => {
+  it('FR-010: editor tem todas exceto user:manage, project:manage, audit:read e mcp:manage (spec 010)', () => {
     const missing = PERMISSIONS.filter((p) => !DEFAULT_ROLE_PERMISSIONS.editor.includes(p));
-    expect(missing.sort()).toEqual(['audit:read', 'project:manage', 'user:manage']);
+    expect(missing.sort()).toEqual(['audit:read', 'mcp:manage', 'project:manage', 'user:manage']);
   });
 
   it('FR-010: executor e viewer têm as permissões da matriz', () => {

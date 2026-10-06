@@ -19,10 +19,11 @@ Cada nó vive em `packages/nodes/src/<categoria>/<nome>/` (`definition.ts`, `exe
 | `logic.loopOverItems` | Loop em lotes (Loop Over Items) | 007 | [logic.loopOverItems.md](logic.loopOverItems.md) |
 | `logic.switch` | Roteador (Switch) | 007 | [logic.switch.md](logic.switch.md) |
 | `trigger.error` | Gatilho de erro | 007 | [trigger.error.md](trigger.error.md) |
+| `ai.mcpClient` | Cliente MCP | 010 | [ai.mcpClient.md](ai.mcpClient.md) |
 
 **Portas dinâmicas (spec 007):** `dynamicPorts` descreve portas calculadas a partir dos parâmetros: `mergeInputs` (Merge) ou `switchOutputs` (Switch). A regra fica em `resolveNodePorts` (`@olly/shared-types`), usada pelo motor, pela validação e pelo editor. Com `settings.onError = 'errorOutput'`, qualquer nó ganha a saída `error`: os itens que falharam seguem por ela, com o campo `error`. Nós por item (`data.set`, `http.request`, `postgres.query`, `postgres.write`) desviam só os itens que falharam; nos demais, uma falha desvia todos os itens de entrada.
 
-Os nós de integração recebem as dependências da API por `createBuiltinNodes({ httpGuard, httpMaxResponseBytes, pools })`: filtro anti-SSRF com a allowlist, limite de resposta e pools Postgres. Credenciais: [docs/credenciais.md](../credenciais.md).
+Os nós de integração recebem as dependências da API por `createBuiltinNodes({ httpGuard, httpMaxResponseBytes, pools })`: filtro anti-SSRF com a allowlist, limite de resposta e pools Postgres. Credenciais: [docs/credenciais.md](../credenciais.md). O Cliente MCP (spec 010) usa o `McpGateway` que o motor recebe em `RunOptions.mcp` e entrega em `ctx.mcp()`: a governança (catálogo, políticas, snapshot, registro) fica na API ([docs/mcp-governanca.md](../mcp-governanca.md)).
 
 ## Convenções de `paramsSchema`
 
@@ -51,7 +52,8 @@ Use `title` (rótulo), `description` (ajuda abaixo do campo) e `default` (valor 
 | `x-no-expression` | Campo sem modo expressão: o editor não oferece o alternador e o salvamento recusa valor iniciado por `=` (erro `EXPRESSION_NOT_ALLOWED`). Ex.: SQL do `postgres.query` (spec 004). |
 | `x-multiline` | Área de texto em vez de linha única (spec 004). |
 | `x-code-editor` | Campo editado no editor de código (Monaco), com autocomplete das variáveis e dos nós. Valor: a linguagem (`javascript`) (spec 005). |
-| `x-load-options` | Opções buscadas no catálogo do banco da credencial do nó: `postgresSchemas`, `postgresTables` (do `schema` irmão) ou `postgresColumns` (de `schema` e `table`). Sem credencial, o campo vira texto (spec 004). |
+| `x-load-options` | Opções buscadas no catálogo do banco da credencial do nó: `postgresSchemas`, `postgresTables` (do `schema` irmão) ou `postgresColumns` (de `schema` e `table`). Sem credencial, o campo vira texto (spec 004). Spec 010: `mcpServers` (servidores MCP ativos no projeto) e `mcpTools` (tools liberadas do `serverId` irmão). |
+| `x-mcp-arguments` | Objeto preenchido por um formulário gerado do `inputSchema` aprovado da tool escolhida em `toolName` (cada campo com o alternador Fixo/Expressão). Valor: o nome do parâmetro do servidor (`serverId`) (spec 010). |
 
 Exemplo:
 

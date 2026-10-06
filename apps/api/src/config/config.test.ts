@@ -188,4 +188,17 @@ describe('configuração da API (validação zod na inicialização)', () => {
         .maskingSalt,
     ).toBeTruthy();
   });
+  it('spec 010 — NFR-001/FR-006: timeout de 60 s por chamada MCP e limite do resultado', () => {
+    const config = loadConfig(valid);
+    expect(config.mcp).toEqual({ callTimeoutMs: 60_000, maxResultBytes: 10 * 1024 * 1024 });
+    const custom = loadConfig({
+      ...valid,
+      OLLY_MCP_CALL_TIMEOUT_MS: '5000',
+      OLLY_MCP_MAX_RESULT_MB: '1',
+    });
+    expect(custom.mcp).toEqual({ callTimeoutMs: 5000, maxResultBytes: 1024 * 1024 });
+    expect(() => loadConfig({ ...valid, OLLY_MCP_CALL_TIMEOUT_MS: '10' })).toThrow(
+      /OLLY_MCP_CALL_TIMEOUT_MS/,
+    );
+  });
 });

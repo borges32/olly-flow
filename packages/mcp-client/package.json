@@ -1,0 +1,32 @@
+{
+  "name": "@olly/mcp-client",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Cliente MCP (spec 010): conexões reaproveitadas, transportes com anti-SSRF, stdio em container e snapshot das tools",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "eslint .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "@olly/shared-types": "workspace:*"
+  },
+  "devDependencies": {
+    "@olly/mcp-test-server": "workspace:*",
+    "@types/node": "^22.20.5",
+    "typescript": "~5.9.3",
+    "vitest": "^4.1.11"
+  }
+}

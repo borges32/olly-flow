@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| **Status** | Aprovada |
+| **Status** | Implementada |
 | **Fase** | 3 — IA e governança |
 | **Depende de** | 009 |
 | **Requisitos de produto** | PR-14 |
@@ -50,8 +50,8 @@ Como **editor**, quero conectar servidores MCP que exigem token ou OAuth.
 - **FR-001**: O sistema DEVE manter um catálogo de servidores MCP (transporte, endereço ou imagem, credencial, escopo global ou por projeto, status, quem cadastrou e quem aprovou), gerenciado com a permissão `mcp:manage`.
 - **FR-002**: Tools DEVEM ser negadas por padrão e liberadas explicitamente por servidor e projeto, com a marcação de destrutiva.
 - **FR-003**: Ao aprovar um servidor, o sistema DEVE guardar um snapshot das tools (nome, descrição, schema). Mudanças em tools liberadas DEVEM bloquear as chamadas até nova revisão, exibindo o diff.
-- **FR-004**: O cliente DEVE suportar os transportes Streamable HTTP (preferencial) e SSE (legado), ambos sujeitos ao anti-SSRF.
-- **FR-005**: O transporte stdio DEVE ser permitido somente para servidores aprovados, executados em container isolado. O sistema NÃO DEVE executar processos stdio diretamente no worker.
+- **FR-004**: O cliente DEVE suportar os transportes Streamable HTTP (preferencial) e SSE (legado), ambos sujeitos ao anti-SSRF. Nesta versão, só transportes HTTP são aceitos.
+- **FR-005**: ~~O transporte stdio DEVE ser permitido somente para servidores aprovados, executados em container isolado.~~ Removido nesta versão: o cadastro DEVE recusar o transporte stdio, e o sistema NÃO DEVE executar processos stdio (ver Fora do escopo).
 - **FR-006**: O cliente DEVE reaproveitar as conexões, aplicar timeout e cancelamento por chamada e limitar o tamanho dos resultados.
 - **FR-007**: O sistema DEVE suportar autenticação por token, por headers e por OAuth 2.1 conforme a especificação MCP, com tokens de atualização cifrados.
 - **FR-008**: O nó `ai.mcpClient` DEVE oferecer as operações chamar tool, listar tools, ler resource, listar resources, obter prompt e listar prompts.
@@ -59,7 +59,7 @@ Como **editor**, quero conectar servidores MCP que exigem token ou OAuth.
 - **FR-010**: Conteúdo binário retornado DEVE ser armazenado e referenciado no item. `isError` DEVE seguir a configuração de erro do nó.
 - **FR-011**: Cada chamada MCP DEVE ser registrada (servidor, tool, argumentos mascarados, status, duração, tamanho, erro) e exibida na execução.
 - **FR-012**: Chamadas a tools não permitidas DEVEM falhar com erro claro e ser auditadas.
-- **FR-013**: DEVE existir um servidor MCP de teste (HTTP e stdio) para testes e demonstração.
+- **FR-013**: DEVE existir um servidor MCP de teste (HTTP) para testes e demonstração.
 
 ## Requisitos não funcionais
 
@@ -72,7 +72,7 @@ Como **editor**, quero conectar servidores MCP que exigem token ou OAuth.
 
 ## Critérios de sucesso
 
-- **SC-001**: Chamada `soma` via HTTP e via stdio retorna o resultado.
+- **SC-001**: Chamada `soma` via HTTP retorna o resultado.
 - **SC-002**: Tool não liberada é recusada e auditada.
 - **SC-003**: Mudança de schema bloqueia até a revisão.
 - **SC-004**: Argumentos inválidos falham antes da chamada.
@@ -82,7 +82,8 @@ Como **editor**, quero conectar servidores MCP que exigem token ou OAuth.
 
 ## Fora do escopo
 
-AI Agent e uso das tools por agentes (spec 011).
+- AI Agent e uso das tools por agentes (spec 011).
+- Transporte stdio (servidores MCP locais em container isolado): fica para uma spec futura. Nesta versão o cliente MCP só faz chamadas via HTTP.
 
 ## Pré-requisitos humanos
 
@@ -98,3 +99,4 @@ Nenhum.
 |---|---|---|
 | 03/10/2026 | Criação a partir do prompt da Sprint 9 | Migração para SDD |
 | 03/10/2026 | Permissões RBAC explicitadas no plano (seção e tarefa T089), sem mudança de requisito | Decisão humana sobre permissões por spec |
+| 05/10/2026 | Transporte stdio fora do escopo: FR-005 removido (cadastro recusa stdio), FR-004, FR-013 e SC-001 só com HTTP | Decisão humana: nesta versão o cliente MCP faz chamadas somente via HTTP |

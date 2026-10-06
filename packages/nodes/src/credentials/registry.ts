@@ -1,6 +1,10 @@
 import { Ajv, type ValidateFunction } from 'ajv';
 import { PARAMS_SCHEMA_EXTENSIONS, type JSONSchema7 } from '../types.js';
-import { builtinCredentialTypes, type CredentialTypeDefinition } from './definitions.js';
+import {
+  builtinCredentialTypes,
+  mcpHeaderLines,
+  type CredentialTypeDefinition,
+} from './definitions.js';
 
 /** Visão pública de um tipo (ex.: `GET /credential-types`). */
 export type CredentialTypeDescription = CredentialTypeDefinition;
@@ -96,6 +100,8 @@ export class CredentialTypeRegistry {
     ) {
       values.push(Buffer.from(`${data.user}:${data.password}`).toString('base64'));
     }
+    // Spec 010: cada valor de cabeçalho MCP, além do texto inteiro.
+    if (name === 'mcpHeaders') values.push(...mcpHeaderLines(data.headers).map(([, v]) => v));
     return values;
   }
 }

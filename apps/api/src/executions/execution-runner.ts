@@ -11,6 +11,7 @@ import { DB } from '../core/tokens.js';
 import { CredentialsService } from '../credentials/credentials.service.js';
 import { CODE_RUNNER, EXPRESSION_EVALUATOR } from '../expressions/expressions.module.js';
 import { MaskingService } from '../masking/masking.service.js';
+import { McpGatewayFactory } from '../mcp/mcp-gateway.service.js';
 import { NODE_REGISTRY } from '../node-types/node-types.module.js';
 import { ExecutionEventSink } from './execution-events.service.js';
 import type { ExecutionJob, ExecutionOutcome, WebhookResponse } from './execution-job.js';
@@ -42,6 +43,7 @@ export class ExecutionRunner {
     @Inject(CredentialsService) private readonly credentials: CredentialsService,
     @Inject(BINARY_STORAGE) private readonly binaries: S3BinaryStorage | null,
     @Inject(MaskingService) private readonly masking: MaskingService,
+    @Inject(McpGatewayFactory) private readonly mcp: McpGatewayFactory,
   ) {}
 
   /**
@@ -136,6 +138,8 @@ export class ExecutionRunner {
         ...(hooks.onWebhookResponse && { onWebhookResponse: hooks.onWebhookResponse }),
         signal: controller.signal,
         maxLoopIterations: this.config.execution.maxLoopIterations,
+        // Spec 010: servidores MCP do catálogo, com política, snapshot e registro das chamadas.
+        mcp: this.mcp.forExecution({ executionId, projectId: workflow.projectId, masker }),
         logger: this.nodeLogger(executionId),
         callbacks,
       });

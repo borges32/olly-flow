@@ -2,17 +2,24 @@ import type { CredentialTypeDescription, JSONSchema7 } from '@olly/nodes';
 import type {
   CredentialSummary,
   CredentialTestResponse,
+  McpOAuthAuthorizeResponse,
   CreateCredentialRequest,
   UpdateCredentialRequest,
 } from '@olly/shared-types';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, KeyRound, Pencil, Plug, Plus, Trash2, XCircle } from 'lucide-react';
-import { useState, type FormEvent } from 'react';
+import { CheckCircle2, KeyRound, Link2, Pencil, Plug, Plus, Trash2, XCircle } from 'lucide-react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router';
 import { toast } from 'sonner';
 import { useApi } from '@/api/api-provider';
 import { ApiError } from '@/api/client';
-import { queryKeys, useCredentialTypes, useCredentials, useProjects } from '@/api/queries';
+import {
+  queryKeys,
+  useCredentialTypes,
+  useCredentials,
+  useOAuthStatus,
+  useProjects,
+} from '@/api/queries';
 import { useCan } from '@/api/use-can';
 import { Button } from '@/components/ui/button';
 import {
@@ -33,7 +40,11 @@ const dateFormat = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeSt
 const scalar = (v: unknown) =>
   typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean' ? String(v) : '';
 
-type FieldSchema = JSONSchema7 & { 'x-secret'?: boolean; 'x-multiline'?: boolean };
+type FieldSchema = JSONSchema7 & {
+  'x-secret'?: boolean;
+  'x-multiline'?: boolean;
+  'x-hidden'?: boolean;
+};
 
 const errorMessage = (e: unknown) =>
   e instanceof ApiError
@@ -42,8 +53,11 @@ const errorMessage = (e: unknown) =>
       ? e.message
       : String(e);
 
+/** Campos editáveis; os ocultos (ex.: tokens OAuth, spec 010) são gerados pela plataforma. */
 function fieldsOf(type: CredentialTypeDescription | undefined): [string, FieldSchema][] {
-  return Object.entries(type?.properties.properties ?? {}).map(([k, v]) => [k, v as FieldSchema]);
+  return Object.entries(type?.properties.properties ?? {})
+    .map(([k, v]): [string, FieldSchema] => [k, v as FieldSchema])
+    .filter(([, schema]) => !schema['x-hidden']);
 }
 
 /** Valores iniciais: campos públicos da credencial ou padrões do tipo; secretos sempre vazios. */
@@ -330,6 +344,64 @@ function TestDialog({
   );
 }
 
+/** Estado da conexão OAuth de uma credencial `mcpOAuth` (spec 010, FR-007). */
+function OAuthStatusBadge({ credentialId }: { credentialId: string }) {
+  const { data } = useOAuthStatus(credentialId);
+  if (!data) return null;
+  return (
+    <span
+      data-testid="oauth-status"
+      className={`ml-2 rounded px-1.5 py-0.5 text-[11px] ${data.connected ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300' : 'bg-amber-500/15 text-amber-700 dark:text-amber-300'}`}
+    >
+      {data.connected ? 'Conectada' : 'Não conectada'}
+    </span>
+  );
+}
+
+/**
+ * "Conectar" (spec 010, FR-007): abre a autorização do servidor MCP num popup; o callback da API
+ * avisa esta janela (`postMessage`, mesma origem) quando os tokens forem gravados.
+ */
+function OAuthConnectButton({ credential }: { credential: CredentialSummary }) {
+  const api = useApi();
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    const onMessage = (event: MessageEvent<{ type?: string; ok?: boolean; message?: string }>) => {
+      if (event.origin !== window.location.origin || event.data.type !== 'olly-mcp-oauth') return;
+      if (event.data.ok) toast.success(event.data.message ?? 'Servidor MCP conectado');
+      else toast.error('Não foi possível conectar', { description: event.data.message });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.oauthStatus(credential.id) });
+    };
+    window.addEventListener('message', onMessage);
+    return () => {
+      window.removeEventListener('message', onMessage);
+    };
+  }, [credential.id, queryClient]);
+  const connect = useMutation({
+    mutationFn: () =>
+      api.post<McpOAuthAuthorizeResponse>(`/api/v1/credentials/${credential.id}/oauth/authorize`),
+    onSuccess: ({ authorizationUrl }) => {
+      window.open(authorizationUrl, 'olly-mcp-oauth', 'popup,width=520,height=720');
+    },
+    onError: (e) =>
+      toast.error('Não foi possível iniciar a conexão', { description: errorMessage(e) }),
+  });
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      aria-label={`Conectar ${credential.name}`}
+      title="Conectar (OAuth)"
+      disabled={connect.isPending}
+      onClick={() => {
+        connect.mutate();
+      }}
+    >
+      <Link2 />
+    </Button>
+  );
+}
+
 /** Credenciais do projeto (spec 004, FR-002, FR-004, FR-005, FR-007). */
 export function CredentialsPage() {
   const api = useApi();
@@ -428,13 +500,17 @@ export function CredentialsPage() {
                       {c.name}
                     </span>
                   </td>
-                  <td className="px-4 py-2">{typeOf(c.type)?.displayName ?? c.type}</td>
+                  <td className="px-4 py-2">
+                    {typeOf(c.type)?.displayName ?? c.type}
+                    {c.type === 'mcpOAuth' && <OAuthStatusBadge credentialId={c.id} />}
+                  </td>
                   <td className="px-4 py-2 text-muted-foreground">
                     {dateFormat.format(new Date(c.updatedAt))}
                   </td>
                   <td className="px-4 py-2">
                     {canManage && (
                       <div className="flex justify-end gap-1">
+                        {c.type === 'mcpOAuth' && <OAuthConnectButton credential={c} />}
                         <Button
                           variant="ghost"
                           size="icon"

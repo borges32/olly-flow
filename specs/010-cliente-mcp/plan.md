@@ -6,7 +6,7 @@
 
 - **Cliente:** `packages/mcp-client` sobre o SDK oficial `@modelcontextprotocol/sdk` (versão estável mais recente; consultar a especificação vigente em modelcontextprotocol.io).
 - **Governança:** catálogo e políticas no banco, com snapshot das tools para detectar *rug pull*.
-- **Transportes:** HTTP/SSE via `http-guard`; stdio em container efêmero.
+- **Transportes:** somente HTTP (Streamable HTTP e SSE legado) via `http-guard`. O stdio ficou fora do escopo (spec, Histórico 05/10/2026).
 - **Nó:** `ai.mcpClient` com formulário dinâmico.
 
 ## Verificação da constituição
@@ -26,14 +26,14 @@
 | `apps/api` | Módulo `mcp` (catálogo, teste, tools, políticas, revisão de snapshot); callback OAuth |
 | `packages/nodes` | `ai.mcpClient`; credenciais `mcpBearer`, `mcpHeaders`, `mcpOAuth` |
 | `apps/web` | `/admin/mcp`; painel dinâmico do nó |
-| `infra/mcp-test-server` | Novo |
+| `infra/mcp-test-server` | Novo (somente HTTP) |
 
 ## Design
 
 ### §1 Catálogo e políticas
 - **`mcp_servers`:**
   - `id`, `name`, `description`;
-  - `transport` (`streamableHttp` | `sse` | `stdio`), `url`, `image`, `command`, `args`, `credential_id`;
+  - `transport` (`streamableHttp` | `sse`), `url`, `credential_id`. O transporte `stdio` é recusado no cadastro (FR-005);
   - `scope`, `project_id`, `status` (`pending` | `active` | `disabled`);
   - `tools_snapshot` (JSONB), `snapshot_pending_diff` (JSONB);
   - `created_by`, `approved_by`.
@@ -59,9 +59,7 @@
 ### §3 `packages/mcp-client`
 - **`McpConnectionPool`:** uma conexão por `server_id`, com *idle timeout* (5 min), reconexão e *handshake* `initialize`.
 - **Operações:** `listTools` / `listResources` / `listPrompts` (seguindo `nextCursor`), `callTool`, `readResource` e `getPrompt`.
-- **Transportes:**
-  - `StreamableHTTPClientTransport` e `SSEClientTransport` com `fetch` = `guardedFetch` (spec 004);
-  - **stdio:** worker → `ContainerStdioLauncher` → container efêmero (`docker run --rm -i --network <política> --read-only --cap-drop ALL <image>`; no Kubernetes, um Job/Pod efêmero via adapter) conectado por stdin/stdout. Interface `StdioLauncher` para trocar a implementação conforme a ADR-0006.
+- **Transportes:** `StreamableHTTPClientTransport` e `SSEClientTransport` com `fetch` = `guardedFetch` (spec 004). Sem stdio nesta versão: nenhum processo de servidor MCP é executado pela plataforma.
 - **Timeout:** `OLLY_MCP_CALL_TIMEOUT_MS` (60 000) e `AbortSignal`. No cancelamento, envia `notifications/cancelled`.
 - **Resultado:** acima de `OLLY_MCP_MAX_RESULT_MB` (10), gera erro.
 
@@ -96,7 +94,7 @@
 - TypeScript com o SDK.
 - **Tools:** `echo`, `soma`, `consulta_cliente` (dados fictícios), `apagar_registro` e `erro` (retorna `isError`).
 - Um resource (`test://info`) e um prompt (`saudacao`).
-- Transportes Streamable HTTP e stdio (imagem Docker).
+- Transporte Streamable HTTP (e SSE legado), com imagem Docker para a demonstração no compose.
 - Flag de ambiente `MUTATE_SCHEMA=1` altera o schema de `soma` (teste de snapshot).
 
 ## Modelo de dados
@@ -109,7 +107,6 @@ Tabelas `mcp_servers`, `mcp_tool_policies` e `mcp_calls`.
 |---|---|---|
 | `OLLY_MCP_CALL_TIMEOUT_MS` | 60000 | Timeout por chamada |
 | `OLLY_MCP_MAX_RESULT_MB` | 10 | Tamanho máximo do resultado |
-| `OLLY_MCP_STDIO_LAUNCHER` | `docker` | `docker` \| `kubernetes` |
 
 ## Decisões técnicas
 
@@ -117,7 +114,7 @@ Tabelas `mcp_servers`, `mcp_tool_policies` e `mcp_calls`.
 |---|---|---|
 | Negado por padrão | Liberado por padrão | Superfície mínima para agentes |
 | Snapshot com bloqueio | Confiar no servidor | Mitiga *tool poisoning*/*rug pull* |
-| stdio em container | Processo no worker | Isola código de terceiros |
+| Somente HTTP nesta versão | stdio em container | Decisão humana (05/10/2026); o stdio exigiria um lançador de containers no ARO OpenShift (ADR-0006) |
 
 ## Permissões RBAC
 
@@ -135,7 +132,7 @@ Atenção: o seed deriva o editor como "todas as permissões, exceto as de admin
 |---|---|---|
 | FR-001, FR-002, FR-012 | Integração | `mcp-catalog.int.test.ts` (SC-002) |
 | FR-003 | Integração | `mcp-snapshot.int.test.ts` (SC-003) |
-| FR-004, FR-005 | Integração | `mcp-transports.int.test.ts` (SC-001, SC-005) |
+| FR-004, FR-005 | Integração | `mcp-transports.int.test.ts` (SC-001, SC-005; cadastro recusa stdio) |
 | FR-006 | Integração | Timeout e cancelamento |
 | FR-007 | Integração | `mcp-oauth.int.test.ts` com Keycloak dev (SC-006) |
 | FR-008–FR-010 | Unidade + integração | `mcp-client-node.test.ts` (SC-004) |
@@ -146,7 +143,6 @@ Atenção: o seed deriva o editor como "todas as permissões, exceto as de admin
 | Risco | Mitigação |
 |---|---|
 | Evolução da especificação MCP | Encapsular o SDK em `packages/mcp-client`; registrar a versão |
-| Docker indisponível no ambiente-alvo | `StdioLauncher` com adapter Kubernetes |
 
 Ao concluir, produzir `docs/mcp-governanca.md` (catálogo, políticas, snapshot, ameaças).
 
@@ -155,3 +151,12 @@ Ao concluir, produzir `docs/mcp-governanca.md` (catálogo, políticas, snapshot,
 | Data | Alteração | Motivo |
 |---|---|---|
 | 03/10/2026 | Seção "Permissões RBAC" e tarefa T089 | Decisão humana: cada spec acrescenta e garante as permissões que cria |
+| 05/10/2026 | Sem stdio: `mcp_servers` sem `image`/`command`/`args`, sem `StdioLauncher` nem `OLLY_MCP_STDIO_LAUNCHER`; servidor de teste só HTTP | Spec, Histórico 05/10/2026 (decisão humana) |
+| 05/10/2026 | §1: sem coluna `scope` (`project_id` nulo = global); `server_info` (capacidades) e `approved_at`; trocar URL, transporte, credencial ou escopo volta o servidor a pendente e descarta o snapshot; rotas extras `POST /:id/disable` e `GET /executions/:id/mcp-calls` (`execution:read`, argumentos só com `execution:readData`); `mcp:manage` só no escopo da plataforma (como `audit:read`, spec 009) | Escopo derivável; reaprovação evita trocar o servidor aprovado por outro |
+| 05/10/2026 | §1: a credencial do catálogo pode ser de qualquer projeto num servidor global (escolha da administração da plataforma); a do nó prevalece na execução | Credenciais são por projeto; servidores globais servem a todos |
+| 05/10/2026 | §2: o bloqueio compara, a cada chamada, o hash da tool anunciada pela sessão com o do snapshot (além da divergência gravada); a comparação também roda a cada `notifications/tools/list_changed`; só tools do snapshot podem ser liberadas | Pega a mudança mesmo numa sessão já aberta e entre workers |
+| 05/10/2026 | §3: limite de tamanho aplicado ao corpo das respostas a POST enquanto chega (aborta só a chamada dona da resposta) e conferido no resultado; o `fetch` com anti-SSRF converte a resposta para a `Response` global e deixa os redirecionamentos com o SDK (mesma origem, cada salto revalidado) | Memória limitada e compatibilidade com o SDK |
+| 05/10/2026 | §4: `mcpHeaders` com um único campo secreto multilinha (`Nome: valor` por linha), cada valor mascarado; `mcpOAuth` com `serverUrl`, `clientId` (vazio = registro dinâmico), `clientSecret` e os tokens em campos secretos ocultos; `state` e verificador PKCE no Redis por 10 min (uso único); rotas `POST /credentials/:id/oauth/authorize` (`credential:manage`) e `GET /credentials/:id/oauth/status` (`credential:use`); client `olly-mcp` no realm de desenvolvimento | O registro de credenciais trata segredos de primeiro nível; tokens nunca saem da API |
+| 05/10/2026 | §5: contrato do nó: `NodeContext.runIndex` e `NodeContext.mcp()` (`McpGateway` de `@olly/nodes`), `RunOptions.mcp` no motor; extensão `x-mcp-arguments` e fontes `mcpServers`/`mcpTools` de `x-load-options`; "listar tools" devolve só as liberadas no projeto; formulário com coerção de tipos (texto das expressões), modo JSON sem coerção | O nó não acessa o banco: a governança fica no gateway da API (como as credenciais) |
+| 05/10/2026 | §6: `mcp_calls` com `project_id` (retenção), `server_name`, `operation` e `target` (tool, URI ou prompt); todas as operações registradas; `isError` registrado como `error`; tool alterada auditada como `mcp.tool_blocked` | Rastreabilidade de toda chamada (FR-011) |
+| 05/10/2026 | §7: tools extras no servidor de teste (`imagem`, `lento`, `grande`) e modos de autenticação (bearer, cabeçalho, OAuth com revogação de tokens) | Testes de FR-006, FR-007 e FR-010 |

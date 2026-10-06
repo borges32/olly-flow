@@ -1,7 +1,7 @@
 import type { BinaryRef, WorkflowNode } from '@olly/shared-types';
 import type { ResolvedCredential } from '../credentials/definitions.js';
 import { mapWithConcurrency } from '../shared/concurrency.js';
-import type { CodeMode, LoopState, NodeContext, WebhookResponse } from '../types.js';
+import type { CodeMode, LoopState, McpGateway, NodeContext, WebhookResponse } from '../types.js';
 
 export interface FakeContext extends NodeContext {
   secrets: string[];
@@ -22,6 +22,9 @@ export function fakeContext(options: {
   signal?: AbortSignal;
   runCode?: (request: { code: string; mode: CodeMode }) => Promise<unknown>;
   loop?: LoopState;
+  /** Gateway MCP de teste (spec 010). */
+  mcp?: McpGateway;
+  runIndex?: number;
 }): FakeContext {
   const responses: WebhookResponse[] = [];
   const perItem = Array.isArray(options.params) ? options.params : undefined;
@@ -77,6 +80,11 @@ export function fakeContext(options: {
     },
     ...(options.loop && { loop: options.loop }),
     maxLoopIterations: 10_000,
+    runIndex: options.runIndex ?? 0,
+    mcp: () => {
+      if (!options.mcp) throw new Error('sem gateway MCP');
+      return options.mcp;
+    },
     // Como o motor, para um tipo com `supportsParallelItems` (spec 006, FR-009).
     mapItems: (items, fn) => {
       const parallel = node.settings?.parallelItems;

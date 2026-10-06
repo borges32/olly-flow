@@ -44,3 +44,4 @@ export { whileNode, WHILE_DEFAULT_MAX_ITERATIONS } from './logic/while/definitio
 export { loopOverItemsNode } from './logic/loop-over-items/definition.js';
 export { switchNode } from './logic/switch/definition.js';
 export { errorTrigger, SAMPLE_ERROR_PAYLOAD } from './trigger/error/definition.js';
+export { mcpClientNode, mcpClientParamsSchema } from './ai/mcp-client/definition.js';

@@ -7,6 +7,7 @@ import type {
   PortDef,
   WorkflowNode,
 } from '@olly/shared-types';
+import type { McpToolDefinition } from '@olly/shared-types';
 import type { ResolvedCredential } from './credentials/definitions.js';
 
 export type { JSONSchema7, JSONSchema7Definition };
@@ -36,6 +37,9 @@ export const PARAMS_SCHEMA_EXTENSIONS = [
   'x-load-options',
   // Spec 005: campo editado no editor de código (valor: linguagem).
   'x-code-editor',
+  // Spec 010: formulário gerado do `inputSchema` da tool MCP selecionada (valor: nome do
+  // parâmetro com o servidor; a tool vem de `toolName`).
+  'x-mcp-arguments',
 ] as const;
 
 /** Origens de opções dinâmicas (`x-load-options`). */
@@ -43,6 +47,9 @@ export const LOAD_OPTIONS_SOURCES = [
   'postgresSchemas',
   'postgresTables',
   'postgresColumns',
+  // Spec 010: servidores MCP ativos no projeto e as tools liberadas do servidor escolhido.
+  'mcpServers',
+  'mcpTools',
 ] as const;
 export type LoadOptionsSource = (typeof LOAD_OPTIONS_SOURCES)[number];
 
@@ -98,6 +105,46 @@ export interface LoopState {
   data: Record<string, unknown>;
 }
 
+/** Identifica a chamada MCP no registro (`mcp_calls`, spec 010 FR-011). */
+export interface McpCallRef {
+  serverId: string;
+  nodeId: string;
+  runIndex: number;
+  itemIndex: number;
+  /** Credencial do nó (prevalece sobre a do catálogo, FR-007). */
+  credential?: ResolvedCredential;
+  signal?: AbortSignal;
+}
+
+/** Resultado de `tools/call` (FR-010). `content` segue a especificação MCP. */
+export interface McpToolCallResult {
+  content: Record<string, unknown>[];
+  structuredContent?: Record<string, unknown>;
+  isError?: boolean;
+}
+
+/**
+ * Acesso governado aos servidores MCP do catálogo (spec 010, plan §5–§6), fornecido pela API ao
+ * motor: só servidores ativos e disponíveis no projeto; tools negadas por padrão (FR-002) e
+ * bloqueadas se mudaram desde a aprovação (FR-003); cada operação é registrada com os
+ * argumentos mascarados (FR-011) e as negações, auditadas (FR-012).
+ */
+export interface McpGateway {
+  /** Tool liberada, com o schema aprovado; lança se negada ou alterada (registra e audita). */
+  prepareTool(ref: McpCallRef & { toolName: string }): Promise<McpToolDefinition>;
+  callTool(
+    ref: McpCallRef & { toolName: string; arguments: Record<string, unknown> },
+  ): Promise<McpToolCallResult>;
+  /** Somente as tools liberadas no projeto. */
+  listTools(ref: McpCallRef): Promise<McpToolDefinition[]>;
+  listResources(ref: McpCallRef): Promise<Record<string, unknown>[]>;
+  readResource(ref: McpCallRef & { uri: string }): Promise<{ contents: Record<string, unknown>[] }>;
+  listPrompts(ref: McpCallRef): Promise<Record<string, unknown>[]>;
+  getPrompt(
+    ref: McpCallRef & { name: string; arguments: Record<string, string> },
+  ): Promise<{ description?: string; messages: Record<string, unknown>[] }>;
+}
+
 export interface NodeContext {
   readonly executionId: string;
   readonly workflowId: string;
@@ -130,6 +177,10 @@ export interface NodeContext {
   readonly loop?: LoopState;
   /** Teto global de iterações (`OLLY_MAX_LOOP_ITERATIONS`, spec 007 NFR-001). */
   readonly maxLoopIterations: number;
+  /** Execução deste nó na execução (0, 1... nos laços; spec 010: registro das chamadas MCP). */
+  readonly runIndex: number;
+  /** Servidores MCP do catálogo (spec 010). Lança se o motor não recebeu o gateway. */
+  mcp(): McpGateway;
 }
 
 export interface NodeDefinition {

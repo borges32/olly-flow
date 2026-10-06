@@ -16,13 +16,20 @@ export const PERMISSIONS = [
   'credential:manage',
   'credential:use',
   'audit:read',
+  // Spec 010: catálogo de servidores MCP e políticas de tools (somente administração).
+  'mcp:manage',
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
 export const ROLE_NAMES = ['admin', 'editor', 'executor', 'viewer'] as const;
 export type RoleName = (typeof ROLE_NAMES)[number];
 
-const ADMIN_ONLY: readonly Permission[] = ['user:manage', 'project:manage', 'audit:read'];
+const ADMIN_ONLY: readonly Permission[] = [
+  'user:manage',
+  'project:manage',
+  'audit:read',
+  'mcp:manage',
+];
 
 /** Permissões padrão de cada papel (seed da spec 001, matriz da visão de produto). */
 export const DEFAULT_ROLE_PERMISSIONS: Readonly<Record<RoleName, readonly Permission[]>> = {

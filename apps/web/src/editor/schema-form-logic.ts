@@ -19,7 +19,25 @@ export type ParamSchema = JSONSchema7 & {
   'x-load-options'?: LoadOptionsSource;
   /** Editor de código (spec 005): linguagem. */
   'x-code-editor'?: string;
+  /** Spec 010: formulário gerado do `inputSchema` da tool MCP escolhida no nó. */
+  'x-mcp-arguments'?: string;
 };
+
+/**
+ * Schema de argumentos de uma tool MCP como formulário (spec 010, FR-009): sem título, o campo
+ * usa o nome; os obrigatórios são indicados.
+ */
+export function mcpArgumentsSchema(inputSchema: Record<string, unknown>): ParamSchema {
+  const schema = inputSchema as ParamSchema;
+  const required = new Set(schema.required ?? []);
+  const properties: Record<string, JSONSchema7Definition> = {};
+  for (const [name, def] of Object.entries(schema.properties ?? {})) {
+    const prop = asSchema(def);
+    const title = prop.title ?? name;
+    properties[name] = { ...prop, title: required.has(name) ? `${title} *` : title };
+  }
+  return { type: 'object', properties };
+}
 
 export function asSchema(def: JSONSchema7Definition | undefined): ParamSchema {
   return typeof def === 'object' ? def : {};

@@ -1,6 +1,8 @@
 packages:
   - apps/*
   - packages/*
+  # Spec 010: servidor MCP de teste e demonstração.
+  - infra/mcp-test-server
 
 # pnpm 10 não executa scripts de instalação por padrão; liberamos apenas o necessário.
 onlyBuiltDependencies:

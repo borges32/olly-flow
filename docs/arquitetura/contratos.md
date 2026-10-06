@@ -79,6 +79,11 @@ export interface NodeDefinition {
 - `NodeDefinition.dynamicPorts` (`mergeInputs` | `switchOutputs`) descreve portas calculadas pelos parâmetros, e `resolveNodePorts(tipo, nó)` (`@olly/shared-types`) devolve as portas efetivas, inclusive a saída `error` quando `settings.onError = 'errorOutput'`;
 - os laços são analisados por `analyzeLoops` (`@olly/shared-types`): ciclos só pela porta `continue` de um nó de laço dominador. `NodeExecuteInput` traz `inputs` (itens por porta) e `items` (atalho para `inputs.main`).
 
+Spec 010:
+- `NodeContext.runIndex` (execução do nó na execução: 0, 1... nos laços);
+- `NodeContext.mcp()` devolve o `McpGateway` (`@olly/nodes`), que o motor recebe em `RunOptions.mcp` (a API o monta por execução); sem gateway, lança erro. O gateway expõe `prepareTool`, `callTool`, `listTools`, `listResources`, `readResource`, `listPrompts` e `getPrompt`, todos com `McpCallRef { serverId, nodeId, runIndex, itemIndex, credential?, signal? }`, e aplica catálogo, políticas, snapshot, registro e auditoria;
+- extensão `x-mcp-arguments` (formulário gerado do `inputSchema` da tool) e fontes `mcpServers`/`mcpTools` em `x-load-options`.
+
 `NodeRegistry` (`register`, `get(type, version?)`, `list()` sem `execute`) recusa nós cujo `paramsSchema` não seja um JSON Schema draft-07 válido com `type: "object"` na raiz. Palavras-chave desconhecidas são erro; as extensões aceitas são `x-display-options`, `x-secret` e `x-hidden` (ver [docs/nos/README.md](../nos/README.md)).
 
 ## Tipos de nó
@@ -115,7 +120,7 @@ export interface NodeDefinition {
 
 **Responsabilidade por spec (decisão de 03/10/2026):** cada spec acrescenta as permissões que cria ao catálogo, ao seed e a esta tabela, e as declara na seção "Permissões RBAC" do seu `plan.md`. As permissões das specs 002 a 009 já estão no catálogo e no seed desde a spec 001; essas specs apenas as aplicam e testam.
 
-Catálogo e papéis padrão em `packages/shared-types/src/rbac.ts` (seed da spec 001): `admin` tem todas; `editor`, todas exceto `user:manage`, `project:manage` e `audit:read`; `executor`, `workflow:read`, `workflow:execute` e `execution:read`; `viewer`, `workflow:read` e `execution:read`. `mcp:manage` entra no catálogo e no seed na spec 010.
+Catálogo e papéis padrão em `packages/shared-types/src/rbac.ts` (seed da spec 001): `admin` tem todas; `editor`, todas exceto `user:manage`, `project:manage`, `audit:read` e `mcp:manage`; `executor`, `workflow:read`, `workflow:execute` e `execution:read`; `viewer`, `workflow:read` e `execution:read`. `mcp:manage` entrou no catálogo e no seed na spec 010, como permissão exclusiva do admin, e vale só no escopo da plataforma.
 
 **Permissões efetivas (spec 002):** o grupo de administração do IdP (`OIDC_ADMIN_GROUP`) concede todas as permissões em todos os projetos; os demais usuários têm as permissões do seu papel somente nos projetos dos quais são membros (`project_members`). `GET /api/v1/me` devolve `permissions: { global: Permission[], projects: { [projectId]: Permission[] } }` (`EffectivePermissions` em `@olly/shared-types`). Toda rota declara `@Public()`, `@Authenticated()`, `@RequireProjectMember(param)` ou `@RequirePermission(permissão, escopo)`; recurso de projeto do qual o usuário não é membro responde 404.
 
@@ -187,3 +192,17 @@ Tipos em `packages/shared-types/src/governance.ts`. Detalhes em [docs/governanca
   - canal `olly:masking-rules-changed` (invalidação das regras na API e nos workers);
   - lock `olly:retention-lock`;
   - fila BullMQ `maintenance`, com o *job scheduler* `maintenance-daily`.
+
+## Cliente MCP (spec 010)
+
+Tipos em `packages/shared-types/src/mcp.ts`; cliente em `packages/mcp-client` (SDK oficial, especificação MCP 2025-11-25). Detalhes em [docs/mcp-governanca.md](../mcp-governanca.md).
+
+- **Transportes:** somente `streamableHttp` e `sse` (o cadastro recusa `stdio`). Todo tráfego pelo `fetch` com anti-SSRF (`HttpGuard` da spec 004).
+- **Rotas:**
+  - `GET|POST /mcp-servers`, `GET|PUT|DELETE /mcp-servers/:serverId`, `POST /mcp-servers/:serverId/test|approve|disable`, `GET /mcp-servers/:serverId/tools?projectId=`, `PUT /mcp-servers/:serverId/policies`, `POST /mcp-servers/:serverId/snapshot/accept` (`mcp:manage` global);
+  - `GET /projects/:id/mcp-servers` (`credential:use`): servidores ativos e tools liberadas, com o schema aprovado;
+  - `GET /executions/:id/mcp-calls` (`execution:read`; argumentos mascarados só com `execution:readData`);
+  - `POST /credentials/:id/oauth/authorize` (`credential:manage`), `GET /credentials/:id/oauth/status` (`credential:use`) e `GET /oauth/callback` (público; vale pelo `state` de uso único).
+- **Auditoria:** `mcp.server_create|update|delete|test|approve|disable`, `mcp.policy_update`, `mcp.snapshot_accept`, `mcp.tool_denied`, `mcp.tool_blocked` e `credential.oauth_connect`.
+- **Redis:** `olly:mcp-oauth:<state>` (autorização OAuth pendente: credencial e verificador PKCE, TTL de 10 min).
+- **Configuração:** `OLLY_MCP_CALL_TIMEOUT_MS` (60 000) e `OLLY_MCP_MAX_RESULT_MB` (10).

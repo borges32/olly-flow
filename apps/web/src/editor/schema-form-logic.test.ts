@@ -1,6 +1,13 @@
 import type { JSONSchema7Definition } from '@olly/nodes';
 import { describe, expect, it } from 'vitest';
-import { fieldKind, isFieldVisible, newArrayItem, type ParamSchema } from './schema-form-logic';
+import {
+  asSchema,
+  fieldKind,
+  isFieldVisible,
+  mcpArgumentsSchema,
+  newArrayItem,
+  type ParamSchema,
+} from './schema-form-logic';
 
 describe('spec 002 — FR-009: painel gerado pelo schema', () => {
   const siblings: Record<string, JSONSchema7Definition> = {
@@ -53,5 +60,28 @@ describe('spec 002 — FR-009: painel gerado pelo schema', () => {
         properties: { name: { type: 'string' }, type: { type: 'string', default: 'string' } },
       }),
     ).toEqual({ name: '', type: 'string' });
+  });
+});
+
+describe('spec 010 — FR-009: formulário a partir do inputSchema da tool MCP', () => {
+  it('FR-009: campos do schema, com o nome como rótulo e os obrigatórios indicados', () => {
+    const schema = mcpArgumentsSchema({
+      $schema: 'https://json-schema.org/draft/2020-12/schema',
+      type: 'object',
+      properties: {
+        a: { type: 'number', description: 'Primeira parcela' },
+        b: { type: 'number', title: 'Segunda' },
+        nota: { type: 'string' },
+      },
+      required: ['a', 'b'],
+    });
+    expect(schema.type).toBe('object');
+    expect(
+      Object.fromEntries(
+        Object.entries(schema.properties ?? {}).map(([k, v]) => [k, asSchema(v).title]),
+      ),
+    ).toEqual({ a: 'a *', b: 'Segunda *', nota: 'nota' });
+    expect(fieldKind(asSchema(schema.properties?.a))).toBe('number');
+    expect(asSchema(schema.properties?.a).description).toBe('Primeira parcela');
   });
 });

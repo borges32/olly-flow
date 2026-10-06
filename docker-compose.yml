@@ -163,7 +163,8 @@ services:
       OLLY_VAULT_SECRET_ID: ${OLLY_VAULT_SECRET_ID:-olly-api-dev-secret}
       # Spec 009: salt do hash do mascaramento (valor fictício de desenvolvimento).
       OLLY_MASKING_SALT: ${OLLY_MASKING_SALT:-olly-dev-masking-salt-0001}
-      OLLY_HTTP_ALLOWLIST: ${OLLY_HTTP_ALLOWLIST:-}
+      # Spec 010: o servidor MCP de teste (`mcp-test`) é interno; liberado só no desenvolvimento.
+      OLLY_HTTP_ALLOWLIST: ${OLLY_HTTP_ALLOWLIST:-mcp-test}
       # Spec 005: a API fica atrás do nginx do serviço `web` (IP real para a allowlist do webhook).
       OLLY_TRUST_PROXY: 'true'
       S3_ENDPOINT: http://minio:9000
@@ -237,6 +238,23 @@ services:
         condition: service_healthy
     healthcheck:
       test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1/']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  mcp-test:
+    # Spec 010, FR-013: servidor MCP de teste (Streamable HTTP em /mcp, SSE legado em /sse).
+    # Cadastre-o em /admin/mcp com a URL http://mcp-test:3333/mcp. `MUTATE_SCHEMA=1` muda o
+    # schema de `soma` (demonstração do bloqueio por snapshot).
+    profiles: ['app']
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile
+      target: mcp-test-server
+    environment:
+      MUTATE_SCHEMA: ${MCP_TEST_MUTATE_SCHEMA:-0}
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:3333/health']
       interval: 5s
       timeout: 5s
       retries: 20

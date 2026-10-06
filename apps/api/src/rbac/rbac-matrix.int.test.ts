@@ -240,6 +240,22 @@ const ACTIONS: Action[] = [
       ok((await u.call('GET', '/audit')).statusCode) &&
       ok((await u.call('GET', '/audit/export.csv')).statusCode),
   },
+  {
+    name: 'Gerenciar o catálogo MCP (servidores, aprovação e políticas)',
+    permission: 'mcp:manage',
+    global: true,
+    run: async (u) => ok((await u.call('GET', '/mcp-servers')).statusCode),
+  },
+  {
+    name: 'Listar servidores MCP e tools liberadas (uso em workflows)',
+    permission: 'credential:use',
+    run: async (u) => ok((await u.call('GET', `/projects/${project.id}/mcp-servers`)).statusCode),
+  },
+  {
+    name: 'Ver as chamadas MCP de uma execução',
+    permission: 'execution:read',
+    run: async (u) => ok((await u.call('GET', `/executions/${executionId}/mcp-calls`)).statusCode),
+  },
 ];
 
 const expected = (subject: Subject, action: Action) => {
@@ -266,6 +282,8 @@ Papéis por projeto. "Admin da plataforma" é o grupo de administração do IdP 
 ${rows.join('\n')}
 
 Spec 009: com a opção "Executor vê os dados das execuções" do projeto (\`executor_can_read_data\`), o papel Executor ganha \`execution:readData\` naquele projeto (FR-019). Com a aprovação de publicação ativa, publicar abre um pedido; o autor do pedido nunca o aprova (FR-011).
+
+Spec 010: os argumentos (mascarados) das chamadas MCP só aparecem para quem tem \`execution:readData\`; os demais veem a chamada sem os argumentos.
 `;
 }
 

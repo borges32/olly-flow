@@ -11,9 +11,10 @@ RUN pnpm install --frozen-lockfile
 ARG VITE_OIDC_AUTHORITY=http://localhost:8080/realms/olly
 ARG VITE_OIDC_CLIENT_ID=olly-web
 ENV VITE_OIDC_AUTHORITY=$VITE_OIDC_AUTHORITY VITE_OIDC_CLIENT_ID=$VITE_OIDC_CLIENT_ID
-RUN pnpm turbo run build --filter=@olly/api... --filter=@olly/worker --filter=@olly/web
+RUN pnpm turbo run build --filter=@olly/api... --filter=@olly/worker --filter=@olly/web \
+  --filter=@olly/mcp-test-server
 # Deixa só as dependências de produção para a imagem da API.
-RUN rm -rf node_modules apps/*/node_modules packages/*/node_modules \
+RUN rm -rf node_modules apps/*/node_modules packages/*/node_modules infra/mcp-test-server/node_modules \
   && pnpm install --frozen-lockfile --prod --offline
 
 FROM node:22-alpine AS api
@@ -42,3 +43,14 @@ FROM nginx:1.29-alpine AS web
 COPY infra/docker/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /repo/apps/web/dist /usr/share/nginx/html
 EXPOSE 80
+
+# Spec 010, FR-013: servidor MCP de teste e demonstração (somente HTTP).
+FROM node:22-alpine AS mcp-test-server
+ENV NODE_ENV=production
+WORKDIR /repo
+COPY --from=build /repo/package.json /repo/pnpm-workspace.yaml ./
+COPY --from=build /repo/node_modules ./node_modules
+COPY --from=build /repo/infra/mcp-test-server ./infra/mcp-test-server
+USER node
+EXPOSE 3333
+CMD ["node", "infra/mcp-test-server/dist/main.js"]

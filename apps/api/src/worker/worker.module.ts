@@ -16,6 +16,7 @@ import { ExpressionsModule } from '../expressions/expressions.module.js';
 import { NodeTypesModule } from '../node-types/node-types.module.js';
 import { MaintenanceScheduler } from '../maintenance/maintenance.scheduler.js';
 import { MaintenanceService } from '../maintenance/maintenance.service.js';
+import { McpRuntimeModule } from '../mcp/mcp.module.js';
 import { ExecutionProcessor } from './execution-processor.js';
 import { RedisEventPublisher } from './redis-event-publisher.js';
 
@@ -38,6 +39,8 @@ export class WorkerModule {
         BinaryModule,
         CredentialsModule,
         ExpressionsModule,
+        // Spec 010: conexões MCP e gateway das execuções.
+        McpRuntimeModule,
       ],
       providers: [
         RedisEventPublisher,

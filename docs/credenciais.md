@@ -15,6 +15,9 @@ Credenciais guardam os dados de acesso a APIs e bancos usados pelos nós. Introd
 | `webhookHeaderAuth` | name, **value** | — (autentica chamadas recebidas pelo Webhook, spec 005) |
 | `webhookBasicAuth` | user, **password** | — |
 | `webhookHmac` | **secret**, headerName (`X-Signature`), algorithm (`sha256`, `sha1`, `sha512`), encoding (`hex`, `base64`) | — |
+| `mcpBearer` | **token** | — (teste do servidor no catálogo MCP, spec 010) |
+| `mcpHeaders` | **headers** (`Nome: valor`, um por linha; cada valor é mascarado) | — (teste do servidor no catálogo MCP) |
+| `mcpOAuth` | serverUrl, clientId (vazio = registro dinâmico), **clientSecret**, scope; tokens em campos secretos ocultos, gravados pelo "Conectar" | "Conectar" (OAuth 2.1 conforme a especificação MCP; ver [mcp-governanca.md](mcp-governanca.md)) |
 
 O teste dos tipos HTTP passa pelo filtro anti-SSRF, como as requisições dos nós.
 

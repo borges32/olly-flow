@@ -269,6 +269,46 @@ export class CredentialsService {
     return { credential, secrets: this.types.secretValues(row.type, credential.data) };
   }
 
+  /**
+   * Spec 010: credencial configurada no catálogo MCP pela administração da plataforma (pode ser
+   * de outro projeto, inclusive num servidor global). Nunca sai da API.
+   */
+  async resolveById(id: string): Promise<CredentialAccess> {
+    const row = await this.load(id);
+    const credential = await this.resolved(row);
+    return { credential, secrets: this.types.secretValues(row.type, credential.data) };
+  }
+
+  /**
+   * Spec 010, FR-007: grava campos gerados pela plataforma (tokens OAuth), cifrados. Em transação
+   * com `FOR UPDATE`: a API e os workers podem renovar o token ao mesmo tempo.
+   */
+  async patchData(id: string, patch: Record<string, unknown>): Promise<ResolvedCredential> {
+    return this.db.transaction().execute(async (trx) => {
+      const row = await trx
+        .selectFrom('credentials')
+        .selectAll()
+        .where('id', '=', id)
+        .forUpdate()
+        .executeTakeFirst();
+      if (!row) throw new NotFoundError('Credencial não encontrada');
+      const data = { ...(await this.decrypt(row)), ...patch };
+      const { blob, keyVersion, keyProvider } = await encryptCredentialData(data, this.keys, id);
+      const saved = await trx
+        .updateTable('credentials')
+        .set({
+          data_encrypted: blob,
+          key_version: keyVersion,
+          key_provider: keyProvider,
+          updated_at: new Date(),
+        })
+        .where('id', '=', id)
+        .returning('updated_at')
+        .executeTakeFirstOrThrow();
+      return { id, type: row.type, data, updatedAt: iso(saved.updated_at) };
+    });
+  }
+
   /** Tipos de credencial existentes no projeto, por id (validação ao salvar workflows). */
   async typesById(projectId: string, ids: string[]): Promise<Map<string, string>> {
     if (ids.length === 0) return new Map();

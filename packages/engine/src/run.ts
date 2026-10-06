@@ -7,6 +7,7 @@ import {
   type NodeDefinition,
   type NodeLogger,
   type LoopState,
+  type McpGateway,
   type NodeRegistry,
   type ResolvedCredential,
   type WebhookResponse,
@@ -187,6 +188,8 @@ export interface RunOptions {
   callbacks?: RunCallbacks;
   /** Teto global de iterações por laço (spec 007, NFR-001). Padrão: 10 000. */
   maxLoopIterations?: number;
+  /** Servidores MCP do catálogo para o nó `ai.mcpClient` (spec 010). */
+  mcp?: McpGateway;
 }
 
 export interface NodeRunResult {
@@ -233,6 +236,7 @@ interface ContextDeps {
   runCode: NodeContext['runCode'];
   respondToWebhook: NodeContext['respondToWebhook'];
   loop: LoopState | undefined;
+  runIndex: number;
 }
 
 /** Concorrência por item do nó (spec 006, FR-009): 1 se o tipo não suporta ou está desligado. */
@@ -253,6 +257,7 @@ function createContext({
   runCode,
   respondToWebhook,
   loop,
+  runIndex,
 }: ContextDeps): NodeContext {
   const binary = () => options.binary ?? unavailable('Armazenamento de binários');
   return {
@@ -283,6 +288,8 @@ function createContext({
     mapItems: (items, fn) => mapWithConcurrency(items, itemConcurrency(node, type), fn, signal),
     ...(loop && { loop }),
     maxLoopIterations: options.maxLoopIterations ?? DEFAULT_MAX_LOOP_ITERATIONS,
+    runIndex,
+    mcp: () => options.mcp ?? unavailable('Cliente MCP'),
     helpers: {
       pairedItem: (item, itemIndex, input) => ({
         ...item,
@@ -576,6 +583,7 @@ export async function runWorkflow(
     type: NodeDefinition,
     inputs: Record<string, Item[]>,
     onAttempt: (attempt: number) => void,
+    runIndex: number,
   ): Promise<NodeOutput> => {
     const { retry, timeoutMs, onError } = node.settings ?? {};
     const maxTries = Math.max(1, retry?.maxTries ?? 1);
@@ -607,6 +615,7 @@ export async function runWorkflow(
               runCode: runCodeFor(node, items),
               respondToWebhook,
               loop: loopStates.get(node.id),
+              runIndex,
             });
             return type.execute({ inputs, items }, ctx);
           },
@@ -732,9 +741,15 @@ export async function runWorkflow(
       } else if (node.disabled) {
         output = passThrough(ports, run.inputs);
       } else {
-        output = await executeWithResilience(node, type, run.inputs, (n) => {
-          attempts = n;
-        });
+        output = await executeWithResilience(
+          node,
+          type,
+          run.inputs,
+          (n) => {
+            attempts = n;
+          },
+          runIndex,
+        );
       }
       output = fillPairedItems(output, countItems(run.inputs));
       run.status = 'success';

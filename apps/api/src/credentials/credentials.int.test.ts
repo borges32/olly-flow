@@ -197,6 +197,10 @@ describe('spec 004 — FR-002/FR-007: API de credenciais e permissões', () => {
       'httpBearer',
       'httpHeaderAuth',
       'httpQueryAuth',
+      // Spec 010: servidores MCP.
+      'mcpBearer',
+      'mcpHeaders',
+      'mcpOAuth',
       'oauth2ClientCredentials',
       'postgres',
       // Spec 005: autenticação de webhooks recebidos.

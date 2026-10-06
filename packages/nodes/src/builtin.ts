@@ -1,3 +1,4 @@
+import { mcpClientNode } from './ai/mcp-client/definition.js';
 import { codeJavascriptNode } from './code/javascript/definition.js';
 import { setNode } from './data/set/definition.js';
 import { setVariableNode } from './data/set-variable/definition.js';
@@ -59,6 +60,8 @@ export function createBuiltinNodes(options: BuiltinNodeOptions = {}): NodeDefini
     loopOverItemsNode,
     switchNode,
     errorTrigger,
+    // Spec 010: cliente MCP (o acesso aos servidores vem do motor, `ctx.mcp()`).
+    mcpClientNode,
   ];
 }
 

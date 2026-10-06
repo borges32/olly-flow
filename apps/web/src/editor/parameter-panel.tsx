@@ -149,6 +149,7 @@ export function ParameterPanel({
             <ParamOptionsContext.Provider
               value={{
                 params: node.params,
+                projectId,
                 ...(node.credentialId && { credentialId: node.credentialId }),
               }}
             >

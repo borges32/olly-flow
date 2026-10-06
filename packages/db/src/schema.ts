@@ -95,6 +95,64 @@ export interface MaskingRulesTable {
   updated_at: GeneratedTimestamp;
 }
 
+/** Servidor MCP do catálogo (spec 010, FR-001). `project_id` NULL = global. */
+export interface McpServersTable {
+  id: Generated<string>;
+  name: string;
+  description: Generated<string>;
+  transport: 'streamableHttp' | 'sse';
+  url: string;
+  credential_id: string | null;
+  project_id: string | null;
+  status: ColumnType<McpServerStatus, McpServerStatus | undefined, McpServerStatus>;
+  /** JSONB `{ [tool]: { description, inputSchema, hash } }` (FR-003): insira com `JSON.stringify`. */
+  tools_snapshot: ColumnType<unknown, string | null | undefined, string | null>;
+  /** JSONB: divergência detectada aguardando revisão. */
+  snapshot_pending_diff: ColumnType<unknown, string | null | undefined, string | null>;
+  /** JSONB: capacidades e versão do servidor. */
+  server_info: ColumnType<unknown, string | null | undefined, string | null>;
+  created_by: string | null;
+  approved_by: string | null;
+  approved_at: Timestamp | null;
+  created_at: GeneratedTimestamp;
+  updated_at: GeneratedTimestamp;
+}
+
+export type McpServerStatus = 'pending' | 'active' | 'disabled';
+
+/** Política de tool (spec 010, FR-002): sem registro = negado. */
+export interface McpToolPoliciesTable {
+  id: Generated<string>;
+  server_id: string;
+  project_id: string | null;
+  tool_name: string;
+  allowed: Generated<boolean>;
+  destructive: Generated<boolean>;
+  updated_by: string | null;
+  updated_at: GeneratedTimestamp;
+}
+
+/** Registro de chamada MCP (spec 010, FR-011). */
+export interface McpCallsTable {
+  id: Generated<string>;
+  execution_id: string;
+  project_id: string;
+  node_id: string;
+  run_index: Generated<number>;
+  item_index: Generated<number>;
+  server_id: string | null;
+  server_name: string;
+  operation: string;
+  target: string | null;
+  /** JSONB mascarado: insira com `JSON.stringify`. */
+  arguments: ColumnType<unknown, string | null | undefined, string | null>;
+  status: 'success' | 'error' | 'denied' | 'blocked';
+  duration_ms: Generated<number>;
+  result_bytes: number | null;
+  error: string | null;
+  created_at: GeneratedTimestamp;
+}
+
 export interface AuditLogTable {
   /** BIGSERIAL: o driver `pg` devolve como string. */
   id: Generated<string>;
@@ -231,6 +289,9 @@ export interface Database {
   group_role_mappings: GroupRoleMappingsTable;
   publish_requests: PublishRequestsTable;
   masking_rules: MaskingRulesTable;
+  mcp_servers: McpServersTable;
+  mcp_tool_policies: McpToolPoliciesTable;
+  mcp_calls: McpCallsTable;
 }
 
 export type User = Selectable<UsersTable>;
@@ -250,3 +311,6 @@ export type Credential = Selectable<CredentialsTable>;
 export type GroupRoleMapping = Selectable<GroupRoleMappingsTable>;
 export type PublishRequest = Selectable<PublishRequestsTable>;
 export type MaskingRuleRow = Selectable<MaskingRulesTable>;
+export type McpServerRow = Selectable<McpServersTable>;
+export type McpToolPolicyRow = Selectable<McpToolPoliciesTable>;
+export type McpCallRow = Selectable<McpCallsTable>;

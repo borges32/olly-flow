@@ -103,6 +103,9 @@ const envSchema = z.object({
   OLLY_RETENTION_METADATA_DAYS: z.coerce.number().int().min(1).max(36_500).default(365),
   // Job diário de retenção, partições e inativação (cron, no fuso OLLY_TIMEZONE).
   OLLY_MAINTENANCE_CRON: z.string().min(9).default('0 3 * * *'),
+  // Spec 010: cliente MCP (timeout por chamada em ms, NFR-001; tamanho máximo do resultado).
+  OLLY_MCP_CALL_TIMEOUT_MS: z.coerce.number().int().min(1000).max(3_600_000).default(60_000),
+  OLLY_MCP_MAX_RESULT_MB: z.coerce.number().positive().max(1024).default(10),
 });
 
 export interface AppConfig {
@@ -152,6 +155,8 @@ export interface AppConfig {
     maintenanceCron: string;
   };
   http: { allowlist: string[]; maxResponseBytes: number };
+  /** Spec 010: cliente MCP. */
+  mcp: { callTimeoutMs: number; maxResultBytes: number };
   postgres: { poolMax: number };
   dispatcher: { maxConcurrent: number };
   /** Spec 006: fila de execuções e workers. Tempos em ms. */
@@ -293,6 +298,10 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
         .map((x) => x.trim())
         .filter(Boolean),
       maxResponseBytes: Math.floor(e.OLLY_HTTP_MAX_RESPONSE_MB * 1024 * 1024),
+    },
+    mcp: {
+      callTimeoutMs: e.OLLY_MCP_CALL_TIMEOUT_MS,
+      maxResultBytes: Math.floor(e.OLLY_MCP_MAX_RESULT_MB * 1024 * 1024),
     },
     postgres: { poolMax: e.OLLY_PG_POOL_MAX },
     dispatcher: { maxConcurrent: e.OLLY_MAX_CONCURRENT_EXECUTIONS },

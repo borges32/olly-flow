@@ -36,6 +36,8 @@ As execuções passam pela fila (Redis/BullMQ) e são executadas pelo **worker**
 
 > **Spec 009 (governança e LGPD):** o compose sobe também um **Vault** de desenvolvimento (`:8200`). Para usá-lo como cofre da chave mestra, veja [docs/governanca.md](docs/governanca.md); mascaramento, política de dados e retenção estão em [docs/lgpd.md](docs/lgpd.md). Em produção, `OLLY_MASKING_SALT` é obrigatório. A publicação passa a exigir uma mensagem e pode exigir aprovação (menu **Aprovações**).
 
+> **Spec 010 (cliente MCP):** servidores MCP são cadastrados e aprovados em **Administração › MCP** e usados pelo nó **Cliente MCP** (somente HTTP). No modo `pnpm app:up`, o servidor de teste responde em `http://mcp-test:3333/mcp` (já liberado no anti-SSRF do compose). Governança, OAuth e ameaças: [docs/mcp-governanca.md](docs/mcp-governanca.md). O realm do Keycloak ganhou o client `olly-mcp`: com um Keycloak antigo, recrie-o (`docker compose up -d --force-recreate keycloak`).
+
 Abra <http://localhost:5173> e entre com um usuário de teste (senha `olly123`).
 
 Webhooks publicados respondem em `http://localhost:5173/webhook/<caminho>` (e `/webhook-test/<caminho>` enquanto o editor escuta), pelo proxy do frontend; direto na API, em `http://localhost:3000/webhook/<caminho>`. Ver [docs/nos/trigger.webhook.md](docs/nos/trigger.webhook.md). Só `admin@olly.local` (grupo `admin` do IdP) tem acesso global; os demais precisam ser adicionados a um projeto em **Administração** para ver e editar workflows.

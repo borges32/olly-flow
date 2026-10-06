@@ -74,6 +74,20 @@ async function oldExecution(
     .insertInto('execution_payloads')
     .values({ execution_id: id, data: JSON.stringify({ triggerItems: [] }) })
     .execute();
+  // Spec 010: chamada MCP registrada na execução (segue a retenção dos metadados).
+  await ctx.database.db
+    .insertInto('mcp_calls')
+    .values({
+      execution_id: id,
+      project_id: wf.projectId,
+      node_id: 'mcp',
+      server_name: 'Teste',
+      operation: 'callTool',
+      target: 'soma',
+      status: 'success',
+      created_at: startedAt,
+    })
+    .execute();
   await minio.s3.send(
     new PutObjectCommand({ Bucket: 'olly', Key: `executions/${id}/binario`, Body: 'conteúdo' }),
   );
@@ -192,6 +206,14 @@ describe('spec 009 — FR-017/SC-007: retenção por projeto, partições e audi
       .where('execution_id', 'in', [c.semDados, c.apagada, p.semDados])
       .execute();
     expect(payloads).toEqual([]);
+    // Spec 010 (constituição VIII.3): chamadas MCP saem com os metadados da execução.
+    const mcpCalls = await ctx.database.db
+      .selectFrom('mcp_calls')
+      .select('execution_id')
+      .where('execution_id', 'in', [c.recente, c.semDados, c.apagada, p.particaoAntiga])
+      .execute();
+    expect(mcpCalls.map((r) => r.execution_id).sort()).toEqual([c.recente, c.semDados].sort());
+    expect(report.metadataDeleted.mcpCalls).toBe(2);
 
     const audit = await ctx.database.db
       .selectFrom('audit_log')

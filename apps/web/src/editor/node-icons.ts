@@ -7,6 +7,7 @@ import {
   Merge,
   PenLine,
   Play,
+  PlugZap,
   Repeat,
   Reply,
   Siren,
@@ -33,6 +34,8 @@ export const NODE_ICONS: Record<string, LucideIcon> = {
   layers: Layers,
   split: Split,
   siren: Siren,
+  // Spec 010.
+  'plug-zap': PlugZap,
 };
 
 /** Ícones conhecidos (o teste garante que todo nó da plataforma tenha o seu). */

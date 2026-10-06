@@ -51,6 +51,13 @@ export async function testCredential(
       return fail(error);
     }
   }
+  if (credential.type.startsWith('mcp')) {
+    // Spec 010: a credencial MCP é testada pela conexão com o servidor (catálogo MCP) ou, no
+    // OAuth, pelo botão "Conectar".
+    throw new CredentialTestInputError(
+      'Credenciais MCP são testadas pelo teste do servidor no catálogo MCP (ou "Conectar", no OAuth)',
+    );
+  }
   if (!options.url) {
     throw new CredentialTestInputError('Informe uma URL para testar esta credencial');
   }

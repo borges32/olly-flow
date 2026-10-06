@@ -16,6 +16,7 @@ import { GovernanceModule } from './governance/governance.module.js';
 import { HealthModule } from './health/health.module.js';
 import { maskingLogOptions } from './masking/log-masking.js';
 import { MaskingModule } from './masking/masking.module.js';
+import { McpModule } from './mcp/mcp.module.js';
 import { NodeTypesModule } from './node-types/node-types.module.js';
 import { ProjectsModule } from './projects/projects.module.js';
 import { UsersModule } from './users/users.module.js';
@@ -77,6 +78,8 @@ export class AppModule {
         ExecutionsModule,
         WebhooksModule,
         GovernanceModule,
+        // Spec 010: catálogo MCP, políticas, chamadas e OAuth.
+        McpModule,
       ],
       providers: [{ provide: APP_FILTER, useClass: DomainExceptionFilter }],
     };

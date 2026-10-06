@@ -25,5 +25,10 @@ Papéis por projeto. "Admin da plataforma" é o grupo de administração do IdP 
 | Mapear grupos do IdP e gerenciar usuários (global) | `user:manage` | ✅ | — | — | — | — | — |
 | Regras globais de mascaramento (global) | `project:manage` | ✅ | — | — | — | — | — |
 | Consultar e exportar a auditoria (global) | `audit:read` | ✅ | — | — | — | — | — |
+| Gerenciar o catálogo MCP (servidores, aprovação e políticas) (global) | `mcp:manage` | ✅ | — | — | — | — | — |
+| Listar servidores MCP e tools liberadas (uso em workflows) | `credential:use` | ✅ | ✅ | ✅ | — | — | — |
+| Ver as chamadas MCP de uma execução | `execution:read` | ✅ | ✅ | ✅ | ✅ | ✅ | — |
 
 Spec 009: com a opção "Executor vê os dados das execuções" do projeto (`executor_can_read_data`), o papel Executor ganha `execution:readData` naquele projeto (FR-019). Com a aprovação de publicação ativa, publicar abre um pedido; o autor do pedido nunca o aprova (FR-011).
+
+Spec 010: os argumentos (mascarados) das chamadas MCP só aparecem para quem tem `execution:readData`; os demais veem a chamada sem os argumentos.

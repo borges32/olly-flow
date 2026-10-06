@@ -33,6 +33,7 @@
     "@olly/db": "workspace:*",
     "@olly/engine": "workspace:*",
     "@olly/expressions": "workspace:*",
+    "@olly/mcp-client": "workspace:*",
     "@olly/nodes": "workspace:*",
     "@olly/shared-types": "workspace:*",
     "@olly/task-runner": "workspace:*",
@@ -52,6 +53,7 @@
   },
   "devDependencies": {
     "@nestjs/testing": "^11.2.7",
+    "@olly/mcp-test-server": "workspace:*",
     "@testcontainers/redis": "^11.14.0",
     "@types/node": "^22.20.5",
     "socket.io-client": "^4.8.1",

@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils';
 import { insertExpression, scalarText } from './expression-utils';
 import { FIELD_MIME, useExpressionHelpers } from './ndv/expression-context';
 import { ExpressionInput } from './ndv/expression-input';
-import { useLoadOptions } from './param-options';
+import { useLoadOptions, useMcpToolSchema } from './param-options';
 import { useEditorStore } from './store';
 
 // Monaco só é baixado quando um nó de código é aberto (spec 005, plan §10).
@@ -19,6 +19,7 @@ import {
   asSchema,
   fieldKind,
   isFieldVisible,
+  mcpArgumentsSchema,
   newArrayItem,
   type ParamSchema,
 } from './schema-form-logic';
@@ -224,6 +225,18 @@ function Field({ name, path, schema, value, readOnly, onChange }: FieldProps) {
       />
     </ScalarField>
   );
+
+  if (schema['x-mcp-arguments']) {
+    return (
+      <McpArgumentsField
+        label={label}
+        path={path}
+        value={value}
+        readOnly={readOnly}
+        onChange={onChange}
+      />
+    );
+  }
 
   switch (kind) {
     case 'boolean':
@@ -472,7 +485,10 @@ function LoadedOptions({
       </div>
     );
   }
-  const list = current && !options.includes(current) ? [current, ...options] : options;
+  const list =
+    current && !options.some((o) => o.value === current)
+      ? [{ value: current, label: current }, ...options]
+      : options;
   return (
     <Select
       id={id}
@@ -485,11 +501,62 @@ function LoadedOptions({
     >
       <option value="">Selecione…</option>
       {list.map((opt) => (
-        <option key={opt} value={opt}>
-          {opt}
+        <option key={opt.value} value={opt.value}>
+          {opt.label}
         </option>
       ))}
     </Select>
+  );
+}
+
+/**
+ * Argumentos da tool MCP (spec 010, FR-009): formulário gerado do `inputSchema` aprovado, com o
+ * alternador Fixo/Expressão em cada campo. A alternativa é o modo JSON do nó.
+ */
+function McpArgumentsField({
+  label,
+  path,
+  value,
+  readOnly,
+  onChange,
+}: {
+  label: string;
+  path: string;
+  value: unknown;
+  readOnly: boolean;
+  onChange: (value: unknown) => void;
+}) {
+  const { tool, loading, hint } = useMcpToolSchema();
+  const args =
+    value !== null && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  const schema = tool ? mcpArgumentsSchema(tool.inputSchema) : undefined;
+  return (
+    <fieldset className="grid gap-3 rounded-md border p-3" data-testid={`param-${path}`}>
+      <legend className="px-1 text-sm font-medium">
+        {label}
+        {tool && <span className="font-mono text-muted-foreground"> · {tool.name}</span>}
+      </legend>
+      {tool?.description && <p className="text-xs text-muted-foreground">{tool.description}</p>}
+      {schema ? (
+        Object.keys(schema.properties ?? {}).length > 0 ? (
+          <SchemaForm
+            schema={schema}
+            value={args}
+            readOnly={readOnly}
+            onChange={(v) => {
+              onChange(v);
+            }}
+            pathPrefix={path}
+          />
+        ) : (
+          <p className="text-xs text-muted-foreground">Esta tool não recebe argumentos.</p>
+        )
+      ) : (
+        <p className="text-xs text-muted-foreground">{loading ? 'Carregando a tool…' : hint}</p>
+      )}
+    </fieldset>
   );
 }
 

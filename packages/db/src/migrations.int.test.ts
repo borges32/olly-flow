@@ -13,6 +13,9 @@ const TABLES = [
   'executions',
   'group_role_mappings',
   'masking_rules',
+  'mcp_calls',
+  'mcp_servers',
+  'mcp_tool_policies',
   'node_executions',
   'project_members',
   'projects',
@@ -24,7 +27,9 @@ const TABLES = [
   'workflows',
 ];
 
-const BEFORE_0009 = TABLES.filter(
+const BEFORE_0010 = TABLES.filter((n) => !n.startsWith('mcp_'));
+
+const BEFORE_0009 = BEFORE_0010.filter(
   (n) => !['group_role_mappings', 'masking_rules', 'publish_requests'].includes(n),
 );
 
@@ -60,6 +65,7 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
       'Up 0007_queue',
       'Up 0008_error_workflow',
       'Up 0009_governanca',
+      'Up 0010_mcp',
     ]);
     expect(await publicTables()).toEqual(TABLES);
   });
@@ -71,6 +77,7 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
   it('FR-009/SC-003: down reverte tudo e up reaplica sem erro', async () => {
     const reverted = await migrateDown(t.db, { all: true });
     expect(reverted).toEqual([
+      'Down 0010_mcp',
       'Down 0009_governanca',
       'Down 0008_error_workflow',
       'Down 0007_queue',
@@ -90,6 +97,18 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
     expect(await publicTables()).toEqual(TABLES);
   });
 
+  it('spec 010: down de 0010 remove só as tabelas do MCP', async () => {
+    const transports = await sql<{ def: string }>`
+      SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint
+      WHERE conrelid = 'mcp_servers'::regclass AND contype = 'c'`.execute(t.db);
+    // FR-005: o banco também só aceita transportes HTTP.
+    expect(transports.rows.map((r) => r.def).join(' ')).not.toContain('stdio');
+    expect(await migrateDown(t.db)).toEqual(['Down 0010_mcp']);
+    expect(await publicTables()).toEqual(BEFORE_0010);
+    await migrateToLatest(t.db);
+    expect(await publicTables()).toEqual(TABLES);
+  });
+
   it('spec 009: down de 0009 remove só as tabelas e colunas de governança', async () => {
     const columns = async () => {
       const { rows } = await sql<{ name: string }>`
@@ -105,6 +124,7 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
     const rules = await sql<{ n: number }>`
       SELECT count(*)::int AS n FROM masking_rules WHERE builtin`.execute(t.db);
     expect(rules.rows[0]?.n).toBe(14);
+    await migrateDown(t.db); // 0010 (spec 010)
     expect(await migrateDown(t.db)).toEqual(['Down 0009_governanca']);
     expect(await columns()).toEqual([]);
     expect(await publicTables()).toEqual(BEFORE_0009);
@@ -112,6 +132,7 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
   });
 
   it('FR-014 (spec 007): down de 0008 remove só a coluna error_workflow_id', async () => {
+    await migrateDown(t.db); // 0010 (spec 010)
     await migrateDown(t.db); // 0009 (spec 009)
     const column = async () => {
       const { rows } = await sql<{ n: number }>`
@@ -127,6 +148,7 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
   });
 
   it('FR-001/FR-005/FR-012 (spec 006): down de 0007 remove só a tabela de payloads, o batimento e a cota', async () => {
+    await migrateDown(t.db); // 0010 (spec 010)
     await migrateDown(t.db); // 0009 (spec 009)
     const columns = async () => {
       const { rows } = await sql<{ name: string }>`
@@ -148,6 +170,7 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
   });
 
   it('FR-001/FR-012 (spec 005): down de 0006 remove só as colunas de publicação e console', async () => {
+    await migrateDown(t.db); // 0010 (spec 010)
     await migrateDown(t.db); // 0009 (spec 009)
     const columns = async () => {
       const { rows } = await sql<{ name: string }>`
@@ -172,6 +195,7 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
   });
 
   it('FR-001 (spec 004): down de 0005 remove só a tabela credentials', async () => {
+    await migrateDown(t.db); // 0010 (spec 010)
     await migrateDown(t.db); // 0009 (spec 009)
     await migrateDown(t.db);
     await migrateDown(t.db);
@@ -184,6 +208,7 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
   });
 
   it('FR-020 (spec 003): down de 0004 remove só a coluna reused', async () => {
+    await migrateDown(t.db); // 0010 (spec 010)
     await migrateDown(t.db); // 0009 (spec 009)
     await migrateDown(t.db);
     await migrateDown(t.db);
@@ -205,6 +230,7 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
   });
 
   it('FR-001/FR-002 (spec 002): down de 0003 e 0002 remove só as tabelas delas', async () => {
+    await migrateDown(t.db); // 0010 (spec 010)
     await migrateDown(t.db); // 0009 (spec 009)
     const base = BEFORE_0009.filter((n) => n !== 'credentials' && n !== 'execution_payloads');
     await migrateDown(t.db);

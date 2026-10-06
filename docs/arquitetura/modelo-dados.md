@@ -25,9 +25,9 @@
 | `group_role_mappings` | Grupo do IdP → papel (`project_id` nulo = global) | 009 | Único por (grupo, projeto) |
 | `publish_requests` | Pedidos de aprovação de publicação (versão, mensagem, autor, decisão, comentário) | 009 | `CHECK decided_by <> requested_by`; um pendente por workflow |
 | `masking_rules` | Regras de mascaramento LGPD (`field` \| `pattern`; `redact` \| `partial` \| `hash`) globais ou por projeto | 009 | Regras padrão (`builtin`) semeadas na migration `0009_governanca` |
-| `mcp_servers` | Catálogo de servidores MCP | 010 | Snapshot de tools |
-| `mcp_tool_policies` | Allowlist de tools por servidor e projeto | 010 | `destructive` |
-| `mcp_calls` | Log de chamadas MCP | 010 | Argumentos mascarados |
+| `mcp_servers` | Catálogo de servidores MCP (`project_id` nulo = global) | 010 | Somente `streamableHttp` \| `sse`; status `pending` \| `active` \| `disabled`; `tools_snapshot` (aprovado) e `snapshot_pending_diff` (mudança a revisar); `credential_id`; único por (projeto, nome) |
+| `mcp_tool_policies` | Política de tool por servidor e projeto (`project_id` nulo = global; a do projeto prevalece) | 010 | `allowed`, `destructive`; sem registro = negado |
+| `mcp_calls` | Registro de cada chamada MCP | 010 | Argumentos e erro mascarados; `project_id` (retenção); sem FK para `executions` (particionada) |
 | `agent_steps` | Passos dos agentes | 011 | |
 | `agent_memory` | Memória de conversa | 011 | Retenção própria |
 | `approval_requests` | Aprovação humana de tools destrutivas | 011 | |
@@ -92,6 +92,7 @@ CREATE TABLE execution_payloads (            -- 0007_queue (spec 006)
 -- 0009_governanca (spec 009): users.last_login_at; project_members.origin; projects.require_publish_approval,
 -- executor_can_read_data, save_execution_data, retention; node_executions.data_masked; credentials.key_provider;
 -- tabelas group_role_mappings, publish_requests, masking_rules (ver docs/governanca.md e docs/lgpd.md)
+-- 0010_mcp (spec 010): mcp_servers, mcp_tool_policies, mcp_calls (ver docs/mcp-governanca.md)
 CREATE TABLE audit_log (                      -- sem FK em user_id: o registro sobrevive a users
   id BIGSERIAL PRIMARY KEY, user_id UUID, action TEXT NOT NULL, entity_type TEXT,
   entity_id TEXT, details JSONB, ip INET, created_at TIMESTAMPTZ DEFAULT now()

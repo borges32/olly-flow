@@ -5,6 +5,11 @@ import type {
   GroupRoleMapping,
   MaskingRule,
   ProjectSettings,
+  McpCall,
+  McpOAuthStatus,
+  McpServer,
+  McpServerOption,
+  McpToolView,
   PublishApproval,
   UserAdminSummary,
   WorkflowVersionSummary,
@@ -43,6 +48,13 @@ export const queryKeys = {
   audit: (filters: Record<string, string>) => ['audit', filters] as const,
   postgresOptions: (credentialId: string, source: string, schema = '', table = '') =>
     ['credentials', credentialId, 'postgres', source, schema, table] as const,
+  // Spec 010.
+  mcpServers: ['mcp-servers'] as const,
+  mcpTools: (serverId: string, projectId: string | null) =>
+    ['mcp-servers', serverId, 'tools', projectId ?? 'global'] as const,
+  mcpAvailable: (projectId: string) => ['projects', projectId, 'mcp-servers'] as const,
+  mcpCalls: (executionId: string) => ['executions', executionId, 'mcp-calls'] as const,
+  oauthStatus: (credentialId: string) => ['credentials', credentialId, 'oauth'] as const,
 };
 
 export function useProjects() {
@@ -243,5 +255,60 @@ export function useAudit(filters: Record<string, string>) {
     },
     initialPageParam: '',
     getNextPageParam: (last) => last.nextCursor ?? undefined,
+  });
+}
+
+// Spec 010: cliente MCP.
+
+export function useMcpServers(enabled = true) {
+  const api = useApi();
+  return useQuery({
+    queryKey: queryKeys.mcpServers,
+    queryFn: () => api.get<McpServer[]>('/api/v1/mcp-servers'),
+    enabled,
+  });
+}
+
+export function useMcpTools(serverId: string | undefined, projectId: string | null) {
+  const api = useApi();
+  return useQuery({
+    queryKey: queryKeys.mcpTools(serverId ?? '', projectId),
+    queryFn: () =>
+      api.get<McpToolView[]>(
+        `/api/v1/mcp-servers/${serverId ?? ''}/tools${projectId ? `?projectId=${projectId}` : ''}`,
+      ),
+    enabled: serverId !== undefined,
+  });
+}
+
+/** Servidores ativos no projeto e as tools liberadas (formulário do nó, FR-009). */
+export function useMcpAvailable(projectId: string | undefined) {
+  const api = useApi();
+  return useQuery({
+    queryKey: queryKeys.mcpAvailable(projectId ?? ''),
+    queryFn: () => api.get<McpServerOption[]>(`/api/v1/projects/${projectId ?? ''}/mcp-servers`),
+    enabled: projectId !== undefined,
+    retry: false,
+    staleTime: 30_000,
+  });
+}
+
+/** `version` (ex.: status do nó) refaz a consulta quando o nó termina. */
+export function useMcpCalls(executionId: string | undefined, version = '', enabled = true) {
+  const api = useApi();
+  return useQuery({
+    queryKey: [...queryKeys.mcpCalls(executionId ?? ''), version],
+    queryFn: () => api.get<McpCall[]>(`/api/v1/executions/${executionId ?? ''}/mcp-calls`),
+    enabled: enabled && executionId !== undefined,
+  });
+}
+
+export function useOAuthStatus(credentialId: string | undefined) {
+  const api = useApi();
+  return useQuery({
+    queryKey: queryKeys.oauthStatus(credentialId ?? ''),
+    queryFn: () =>
+      api.get<McpOAuthStatus>(`/api/v1/credentials/${credentialId ?? ''}/oauth/status`),
+    enabled: credentialId !== undefined,
   });
 }

@@ -9,6 +9,7 @@
 | Emissor | `http://localhost:8080/realms/olly` |
 | Client do frontend | `olly-web` (público, Authorization Code + PKCE S256, redirect `http://localhost:5173/*`) |
 | Audience da API | `olly-api` (mapper de audience no client `olly-web`) |
+| Client OAuth do MCP (spec 010) | `olly-mcp` (público, Authorization Code + PKCE S256, redirect `http://localhost:5173/api/v1/oauth/callback`; tokens com a audience `olly-mcp-test`, aceita pelo servidor MCP de teste) |
 | Claim de grupos | `groups` (nome simples do grupo, sem caminho) |
 | Console de administração | `http://localhost:8080/admin` (usuário/senha em `KEYCLOAK_ADMIN_USER`/`KEYCLOAK_ADMIN_PASSWORD`) |
 

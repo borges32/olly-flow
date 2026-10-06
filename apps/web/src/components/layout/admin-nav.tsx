@@ -8,11 +8,13 @@ export function AdminNav() {
   const users = useCan('user:manage');
   const masking = useCan('project:manage');
   const audit = useCan('audit:read');
+  const mcp = useCan('mcp:manage');
   const tabs = [
     projects && { to: '/admin', label: 'Projetos', end: true },
     users && { to: '/admin/sso', label: 'SSO e usuários' },
     masking && { to: '/admin/masking', label: 'Mascaramento' },
     audit && { to: '/admin/audit', label: 'Auditoria' },
+    mcp && { to: '/admin/mcp', label: 'MCP' },
   ].filter((t): t is { to: string; label: string; end?: boolean } => Boolean(t));
   return (
     <nav aria-label="Administração" className="flex gap-1 border-b">

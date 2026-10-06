@@ -69,6 +69,7 @@ export async function startTestContext(
       maintenanceCron: '0 3 * * *',
     },
     http: { allowlist: [], maxResponseBytes: 50 * 1024 * 1024 },
+    mcp: { callTimeoutMs: 60_000, maxResultBytes: 10 * 1024 * 1024 },
     postgres: { poolMax: 5 },
     dispatcher: { maxConcurrent: 10 },
     queue: {

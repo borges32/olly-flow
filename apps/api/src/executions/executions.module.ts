@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module.js';
+import { McpRuntimeModule } from '../mcp/mcp.module.js';
 import { QueueDispatcher } from '../queue/queue-dispatcher.js';
 import { RoutingDispatcher } from '../queue/routing-dispatcher.js';
 import { WorkerLostSweeper } from '../queue/worker-lost-sweeper.js';
@@ -13,7 +14,7 @@ import { ExecutionsGateway } from './executions.gateway.js';
 import { ExecutionsService } from './executions.service.js';
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, McpRuntimeModule],
   controllers: [ExecutionsController],
   providers: [
     ExecutionsService,

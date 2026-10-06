@@ -22,7 +22,8 @@ export interface MaintenanceReport {
   /** `false`: outra instância estava rodando (lock). */
   ran: boolean;
   dataPurged: { executions: number; objects: number };
-  metadataDeleted: { executions: number; nodes: number; objects: number };
+  /** `mcpCalls`: registro das chamadas MCP (spec 010), removido com os metadados. */
+  metadataDeleted: { executions: number; nodes: number; objects: number; mcpCalls: number };
   partitionsDropped: string[];
   usersInactivated: number;
 }
@@ -58,7 +59,7 @@ export class MaintenanceService {
     const report: MaintenanceReport = {
       ran: false,
       dataPurged: { executions: 0, objects: 0 },
-      metadataDeleted: { executions: 0, nodes: 0, objects: 0 },
+      metadataDeleted: { executions: 0, nodes: 0, objects: 0, mcpCalls: 0 },
       partitionsDropped: [],
       usersInactivated: 0,
     };
@@ -180,6 +181,11 @@ export class MaintenanceService {
         .where('execution_id', 'in', ids)
         .executeTakeFirst();
       await this.db.deleteFrom('execution_payloads').where('execution_id', 'in', ids).execute();
+      const calls = await this.db
+        .deleteFrom('mcp_calls')
+        .where('execution_id', 'in', ids)
+        .executeTakeFirst();
+      report.metadataDeleted.mcpCalls += Number(calls.numDeletedRows);
       await this.db.deleteFrom('executions').where('id', 'in', ids).execute();
       report.metadataDeleted.executions += ids.length;
       report.metadataDeleted.nodes += Number(nodes.numDeletedRows);

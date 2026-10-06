@@ -188,6 +188,86 @@ export const webhookHmacCredential: CredentialTypeDefinition = {
   },
 };
 
+/** Spec 010, FR-007: `Authorization: Bearer` para o servidor MCP. */
+export const mcpBearerCredential: CredentialTypeDefinition = {
+  name: 'mcpBearer',
+  displayName: 'MCP: Bearer token',
+  description: 'Envia `Authorization: Bearer <token>` ao servidor MCP.',
+  properties: {
+    type: 'object',
+    required: ['token'],
+    properties: { token: secret('Token') },
+  },
+};
+
+/**
+ * Spec 010, FR-007: cabeçalhos para o servidor MCP, um por linha (`Nome: valor`). O campo
+ * inteiro é secreto e cada valor entra no mascaramento.
+ */
+export const mcpHeadersCredential: CredentialTypeDefinition = {
+  name: 'mcpHeaders',
+  displayName: 'MCP: cabeçalhos',
+  description: 'Cabeçalhos enviados ao servidor MCP, um por linha, no formato `Nome: valor`.',
+  properties: {
+    type: 'object',
+    required: ['headers'],
+    properties: { headers: secret('Cabeçalhos', { 'x-multiline': true } as JSONSchema7) },
+  },
+};
+
+const hiddenSecret = { type: 'string', 'x-secret': true, 'x-hidden': true } as JSONSchema7;
+
+/**
+ * Spec 010, FR-007: OAuth 2.1 conforme a especificação MCP. Depois de salvar, "Conectar" faz a
+ * descoberta, o registro dinâmico (sem Client ID), o Authorization Code + PKCE e guarda os
+ * tokens cifrados nos campos ocultos; o token é renovado automaticamente.
+ */
+export const mcpOAuthCredential: CredentialTypeDefinition = {
+  name: 'mcpOAuth',
+  displayName: 'MCP: OAuth 2.1',
+  description:
+    'Autorização OAuth do servidor MCP (descoberta, PKCE e renovação automática). Salve e use "Conectar".',
+  properties: {
+    type: 'object',
+    required: ['serverUrl'],
+    properties: {
+      serverUrl: { type: 'string', title: 'URL do servidor MCP', minLength: 1 },
+      clientId: {
+        type: 'string',
+        title: 'Client ID',
+        description: 'Vazio: registro dinâmico do cliente, se o servidor de autorização permitir.',
+        default: '',
+      },
+      clientSecret: {
+        type: 'string',
+        title: 'Client secret (opcional)',
+        default: '',
+        'x-secret': true,
+      } as JSONSchema7,
+      scope: { type: 'string', title: 'Escopo', default: '' },
+      accessToken: hiddenSecret,
+      refreshToken: hiddenSecret,
+      /** Cliente obtido pelo registro dinâmico (JSON). */
+      registeredClient: hiddenSecret,
+      expiresAt: { type: 'string', 'x-hidden': true } as JSONSchema7,
+    },
+  },
+};
+
+/** Spec 010: valores de cada linha `Nome: valor` (mascaramento dos cabeçalhos MCP). */
+export function mcpHeaderLines(text: unknown): [string, string][] {
+  if (typeof text !== 'string') return [];
+  return text
+    .split(/\r?\n/)
+    .map((line) => {
+      const i = line.indexOf(':');
+      return i > 0
+        ? ([line.slice(0, i).trim(), line.slice(i + 1).trim()] as [string, string])
+        : null;
+    })
+    .filter((pair): pair is [string, string] => pair !== null && pair[0] !== '' && pair[1] !== '');
+}
+
 export const builtinCredentialTypes: readonly CredentialTypeDefinition[] = [
   httpBearerCredential,
   httpBasicCredential,
@@ -198,6 +278,9 @@ export const builtinCredentialTypes: readonly CredentialTypeDefinition[] = [
   webhookHeaderAuthCredential,
   webhookBasicAuthCredential,
   webhookHmacCredential,
+  mcpBearerCredential,
+  mcpHeadersCredential,
+  mcpOAuthCredential,
 ];
 
 /** Tipos usados pelo `http.request` (autenticação por credencial). */

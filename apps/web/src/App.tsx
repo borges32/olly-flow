@@ -10,6 +10,7 @@ import { Toaster } from '@/components/ui/toaster';
 import { EditorPage } from '@/editor/editor-page';
 import { AdminAuditPage } from '@/pages/admin-audit-page';
 import { AdminMaskingPage } from '@/pages/admin-masking-page';
+import { AdminMcpPage } from '@/pages/admin-mcp-page';
 import { AdminPage } from '@/pages/admin-page';
 import { AdminSsoPage } from '@/pages/admin-sso-page';
 import { ApprovalsPage } from '@/pages/approvals-page';
@@ -49,6 +50,7 @@ const router = createBrowserRouter([
           { path: 'admin/sso', element: <AdminSsoPage /> },
           { path: 'admin/masking', element: <AdminMaskingPage /> },
           { path: 'admin/audit', element: <AdminAuditPage /> },
+          { path: 'admin/mcp', element: <AdminMcpPage /> },
           { path: 'approvals', element: <ApprovalsPage /> },
           { path: '*', element: <NotFoundPage /> },
         ],
