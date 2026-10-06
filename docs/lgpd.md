@@ -12,7 +12,7 @@ Mascaramento, política de dados das execuções e retenção. Introduzidos na [
 - eventos em tempo real (WebSocket);
 - logs da aplicação (pino), tanto o objeto quanto a mensagem.
 
-**Onde não se aplica:** aos dados que passam de um nó para o outro, que seguem com os valores reais (FR-015).
+**Onde não se aplica:** aos dados que passam de um nó para o outro, que seguem com os valores reais (FR-015). Exceção: na execução parcial de teste, um nó reaproveitado entrega os dados como foram gravados (ver abaixo).
 
 ### Regras
 
@@ -49,7 +49,7 @@ Regras com expressão regular livre não são aceitas, pelo risco de ReDoS no ca
 
 ### Efeitos colaterais
 
-- A **execução parcial** do editor (spec 003, FR-020) não reaproveita nó cujos dados gravados foram alterados pelo mascaramento (coluna `node_executions.data_masked`) ou descartados pela política de dados: o nó executa de novo. Assim, valores mascarados nunca entram em outro nó.
+- A **execução parcial** do editor (spec 003, FR-020) reaproveita o nó **como ele foi gravado**: se havia campos mascarados (coluna `node_executions.data_masked`), eles chegam mascarados ao nó seguinte, e o editor avisa quais (`maskedFields`, no painel do nó). Ex.: o cabeçalho `postman-token` enviado pelo Postman chega como `***`. Para usar os valores originais, execute o fluxo a partir do gatilho. Dados descartados pela política não são reaproveitados (o nó executa de novo). Exceção ao FR-015 válida só nas execuções de teste (decisão do PO, 06/10/2026).
 - Os segredos das credenciais continuam sendo trocados por `***` como na spec 004. Além disso, `*authorization*` oculta o cabeçalho inteiro.
 
 ### Custo (NFR-002)

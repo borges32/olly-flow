@@ -376,3 +376,36 @@ function strength(action: MaskingAction): number {
 
 /** Mascarador que não faz nada (sem regras). */
 export const NO_MASKING: Masker = createMasker([], { salt: '' });
+
+const HASHED = /^sha256:[0-9a-f]{64}$/;
+
+/**
+ * Caminhos com valores mascarados (`***` das ações `redact`/`partial` ou `sha256:` da ação
+ * `hash`) num dado já gravado. Usado para avisar, na execução parcial de teste, quais campos
+ * chegaram mascarados ao nó seguinte (spec 009, FR-015).
+ */
+export function maskedPaths(value: unknown, path = ''): string[] {
+  if (typeof value === 'string') {
+    return value.includes(MASK) || HASHED.test(value) ? [path] : [];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((v, i) => maskedPaths(v, `${path}[${String(i)}]`));
+  }
+  if (value !== null && typeof value === 'object') {
+    return Object.entries(value as Record<string, unknown>).flatMap(([k, v]) =>
+      maskedPaths(v, path ? `${path}.${k}` : k),
+    );
+  }
+  return [];
+}
+
+/** Campos mascarados dos itens de saída de um nó (sem prefixo de porta, item ou `json`). */
+export function maskedItemFields(
+  output: Record<string, { json: unknown }[]> | null | undefined,
+): string[] {
+  const fields = new Set<string>();
+  for (const items of Object.values(output ?? {})) {
+    for (const item of items) for (const p of maskedPaths(item.json)) fields.add(p);
+  }
+  return [...fields];
+}

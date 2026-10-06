@@ -60,7 +60,7 @@ function RunStatus({ run }: { run: NodeRunView }) {
           className={cn(common, 'text-emerald-600 dark:text-emerald-400')}
           title={
             run.reused
-              ? `${run.itemsOut} itens (dados da execução anterior)`
+              ? `${run.itemsOut} itens (dados da execução anterior${run.maskedFields?.length ? `; campos mascarados: ${run.maskedFields.join(', ')}` : ''})`
               : `${run.itemsOut} itens em ${run.durationMs ?? 0} ms`
           }
         >

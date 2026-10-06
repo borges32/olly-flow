@@ -1,6 +1,12 @@
 import type { Logger } from '@nestjs/common';
 import type { Db, NewNodeExecution } from '@olly/db';
-import { NO_MASKING, type Masker, type NodeRunRecord, type RunCallbacks } from '@olly/engine';
+import {
+  maskedItemFields,
+  NO_MASKING,
+  type Masker,
+  type NodeRunRecord,
+  type RunCallbacks,
+} from '@olly/engine';
 import type { SaveExecutionDataPolicy } from '@olly/shared-types';
 import { sql } from 'kysely';
 import type { S3BinaryStorage } from '../binary/s3-binary-store.js';
@@ -21,6 +27,11 @@ export interface RecorderOptions {
   /** Spec 009, FR-013: dados acima disto (bytes de JSON) vão para o object storage. */
   inlineLimit?: number;
   storage?: S3BinaryStorage | null;
+  /**
+   * Spec 009, FR-015: nós reaproveitados (execução parcial de teste) cuja saída gravada tinha
+   * campos mascarados. A nova linha herda a marca, e o editor é avisado dos campos.
+   */
+  reusedMasked?: ReadonlySet<string>;
 }
 
 /**
@@ -153,6 +164,8 @@ export class ExecutionRecorder {
     });
     const m = masked.value;
     const keepData = this.savePolicy !== 'none';
+    const reusedMasked = record.reused && (this.options.reusedMasked?.has(record.nodeId) ?? false);
+    const maskedFields = reusedMasked ? maskedItemFields(m.output) : [];
     const data = keepData
       ? await this.placeData(record, { input: m.input, inputSources: sources, output: m.output })
       : { input_data: null, input_sources: null, output_data: null, data_ref: null };
@@ -172,7 +185,7 @@ export class ExecutionRecorder {
       items_out: record.itemsOut,
       ...data,
       data_truncated: truncated,
-      data_masked: masked.changed,
+      data_masked: masked.changed || reusedMasked,
       error: m.error ? JSON.stringify(m.error) : null,
     };
     try {
@@ -204,6 +217,7 @@ export class ExecutionRecorder {
         durationMs: record.finishedAt.getTime() - record.startedAt.getTime(),
         pinned: record.pinned,
         reused: record.reused,
+        ...(keepData && maskedFields.length > 0 && { maskedFields }),
         dataTruncated: truncated,
         data: keepData ? { input: m.input, output: m.output ?? {} } : { input: {}, output: {} },
         ...(keepData && m.console && { console: m.console }),

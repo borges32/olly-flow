@@ -12,6 +12,7 @@ import {
   RecordedRun,
   buildExpressionData,
   collectInputs,
+  maskedItemFields,
   validateWorkflow,
 } from '@olly/engine';
 import { exposedEnv, type ExpressionEvaluator } from '@olly/expressions';
@@ -443,6 +444,10 @@ export class ExecutionsService implements OnModuleInit, OnModuleDestroy {
             itemsOut: n.items_out,
             pinned: n.pinned,
             reused: n.reused,
+            // Spec 009, FR-015: campos que chegaram mascarados ao nó seguinte (reaproveitado).
+            ...(n.reused &&
+              n.data_masked &&
+              data?.output && { maskedFields: maskedItemFields(data.output) }),
             dataTruncated: n.data_truncated,
             input: data?.input ?? null,
             output: data?.output ?? null,

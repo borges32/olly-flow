@@ -48,6 +48,8 @@ export interface NodeRunView {
   pinned: boolean;
   /** Saída reaproveitada de uma execução anterior (FR-020). */
   reused: boolean;
+  /** Spec 009, FR-015: campos da saída reaproveitada que chegaram mascarados. */
+  maskedFields?: string[];
   dataTruncated: boolean;
   error: NodeExecutionError | null;
   input?: Record<string, Item[]>;
@@ -417,6 +419,7 @@ export const useEditorStore = create<EditorState>()((set, get) => {
         durationMs: e.durationMs,
         pinned: e.pinned,
         reused: e.reused,
+        ...(e.maskedFields && { maskedFields: e.maskedFields }),
         dataTruncated: e.dataTruncated,
         error: e.error,
         input: e.data.input,
@@ -473,6 +476,7 @@ export const useEditorStore = create<EditorState>()((set, get) => {
           }),
           pinned: n.pinned,
           reused: n.reused,
+          ...(n.maskedFields && { maskedFields: n.maskedFields }),
           dataTruncated: n.dataTruncated,
           error: n.error,
           ...(n.input && { input: n.input }),

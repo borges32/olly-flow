@@ -267,7 +267,7 @@ describe('spec 009 — FR-016: regras padrão, globais e por projeto', () => {
     expect(audit.map((a) => a.action)).toEqual(['masking_rule.create', 'masking_rule.delete']);
   });
 
-  it('FR-015: execução parcial não reaproveita dados mascarados (o nó roda de novo)', async () => {
+  it('FR-015: execução parcial de teste reaproveita os dados como gravados e avisa os campos mascarados', async () => {
     const wf = await createWorkflow(editor, project.id, definition);
     const first = await startTestRun(editor, wf);
     await waitForStatus(editor, first);
@@ -278,9 +278,13 @@ describe('spec 009 — FR-016: regras padrão, globais e por projeto', () => {
     });
     const detail = await waitForStatus(editor, res.json<{ executionId: string }>().executionId);
     const usa = detail.nodes.find((n) => n.nodeId === 'u');
-    expect(usa?.reused).toBe(false);
+    // O nó reaproveitado entrega o que foi gravado: os campos mascarados chegam mascarados.
+    expect(usa?.reused).toBe(true);
+    expect(usa?.maskedFields).toEqual(expect.arrayContaining(['cpf', 'senha', 'copia', 'obs']));
     expect(detail.nodes.find((n) => n.nodeId === 'c')?.output?.main?.[0]?.json).toEqual({
-      ok: true,
+      ok: false,
     });
+    // Sem reaproveitamento, nada a avisar.
+    expect(detail.nodes.find((n) => n.nodeId === 'c')?.maskedFields).toBeUndefined();
   });
 });

@@ -402,6 +402,7 @@ export function NodeDetailsView({
                     </div>
                   }
                 />
+                <MaskedReuseNotice fields={runOf(node.id)?.maskedFields} />
                 <ConsoleOutput lines={runOf(node.id)?.console} />
                 {node.type === 'ai.agent' && (
                   <AgentStepsPanel
@@ -425,5 +426,24 @@ export function NodeDetailsView({
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>
+  );
+}
+
+/**
+ * Spec 009, FR-015: na execução parcial, o nó reaproveitado entregou os dados como gravados; os
+ * campos mascarados chegaram assim ao nó seguinte.
+ */
+function MaskedReuseNotice({ fields }: { fields: string[] | undefined }) {
+  if (!fields?.length) return null;
+  return (
+    <p
+      role="status"
+      data-testid="ndv-masked-reuse"
+      className="shrink-0 border-t bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-100"
+    >
+      Dados reaproveitados da execução anterior com campos mascarados, entregues assim ao nó
+      seguinte: <span className="font-mono">{fields.join(', ')}</span>. Para usar os valores
+      originais, execute o fluxo a partir do gatilho.
+    </p>
   );
 }

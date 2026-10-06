@@ -94,6 +94,8 @@ export class ExecutionRunner {
     // Em sequência: uma conexão do pool por vez no início da execução.
     const masker = await this.masking.forProject(workflow.projectId);
     const savePolicy = await this.savePolicy(job);
+    // Spec 009, FR-015: nós reaproveitados com campos mascarados (preenchido ao carregar).
+    const reusedMasked = new Set<string>();
     const recorder = new ExecutionRecorder(
       this.db,
       this.events,
@@ -105,6 +107,7 @@ export class ExecutionRunner {
         savePolicy,
         inlineLimit: this.config.governance.inlineDataLimit,
         storage: this.binaries,
+        reusedMasked,
       },
       this.logger,
     );
@@ -169,7 +172,9 @@ export class ExecutionRunner {
     );
     let status: ExecutionOutcome['status'] = 'error';
     try {
-      const runData = job.reuse ? await this.loadReusable(workflow.id, job.reuse) : undefined;
+      const runData = job.reuse
+        ? await this.loadReusable(workflow.id, job.reuse, job.mode, reusedMasked)
+        : undefined;
       const result = await runWorkflow(job.definition, this.registry, {
         executionId,
         mode: job.mode,
@@ -270,18 +275,28 @@ export class ExecutionRunner {
   private async loadReusable(
     workflowId: string,
     reuse: Record<string, string>,
+    mode: ExecutionJob['mode'],
+    reusedMasked: Set<string>,
   ): Promise<Record<string, ReusedNodeRun>> {
     const pairs = Object.entries(reuse);
     if (pairs.length === 0) return {};
     const rows = await this.db
       .selectFrom('node_executions as ne')
       .innerJoin('executions as e', 'e.id', 'ne.execution_id')
-      .select(['ne.node_id', 'ne.input_data', 'ne.input_sources', 'ne.output_data', 'ne.data_ref'])
+      .select([
+        'ne.node_id',
+        'ne.input_data',
+        'ne.input_sources',
+        'ne.output_data',
+        'ne.data_ref',
+        'ne.data_masked',
+      ])
       .where('e.workflow_id', '=', workflowId)
       .where('ne.status', '=', 'success')
       .where('ne.data_truncated', '=', false)
-      // Spec 009, FR-015: dados mascarados ou descartados pela política não voltam aos nós.
-      .where('ne.data_masked', '=', false)
+      // Spec 009, FR-015: só a execução parcial de teste reaproveita dados com campos mascarados
+      // (entregues como gravados, com aviso no editor); dados descartados pela política não voltam.
+      .$if(mode !== 'test', (q) => q.where('ne.data_masked', '=', false))
       .where((eb) =>
         eb.or([eb('ne.output_data', 'is not', null), eb('ne.data_ref', 'is not', null)]),
       )
@@ -298,6 +313,7 @@ export class ExecutionRunner {
     const loaded = await Promise.all(
       rows.map(async (r) => {
         const data = await readNodeData(r, this.binaries);
+        if (r.data_masked && data.output !== null) reusedMasked.add(r.node_id);
         return [r.node_id, data] as const;
       }),
     );

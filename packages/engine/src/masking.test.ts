@@ -3,6 +3,8 @@ import { runInNewContext } from 'node:vm';
 import { describe, expect, it } from 'vitest';
 import {
   createMasker,
+  maskedItemFields,
+  maskedPaths,
   isValidCnpj,
   isValidCpf,
   maskingRuleProblem,
@@ -236,5 +238,27 @@ describe('spec 009 — NFR-002: custo do mascaramento', () => {
     // Referência: gravar envolve serializar e escrever no banco; o mascaramento custa da ordem
     // da serialização. A medição comparativa com a gravação fica no relatório.
     expect(maskMs).toBeLessThan(Math.max(50, serializeMs * 20));
+  });
+});
+
+describe('spec 009 — FR-015: campos mascarados num dado gravado', () => {
+  it('FR-015: acha ***, máscaras parciais e hashes, com o caminho do campo', () => {
+    expect(
+      maskedPaths({
+        headers: { 'postman-token': '***', host: 'localhost' },
+        cpf: '***.***.247-**',
+        doc: `sha256:${'a'.repeat(64)}`,
+        lista: [{ senha: '***' }, { ok: 1 }],
+      }),
+    ).toEqual(['headers.postman-token', 'cpf', 'doc', 'lista[0].senha']);
+  });
+
+  it('FR-015: junta os campos de todos os itens, sem repetir', () => {
+    expect(
+      maskedItemFields({
+        main: [{ json: { a: '***', b: 'x' } }, { json: { a: '***', c: '***' } }],
+      }),
+    ).toEqual(['a', 'c']);
+    expect(maskedItemFields(null)).toEqual([]);
   });
 });

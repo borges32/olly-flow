@@ -76,7 +76,7 @@ Como **auditor**, quero filtrar e exportar a auditoria.
 - **FR-012**: Cada workflow DEVE ter a política de dados de execução: salvar tudo, só erros ou nada (somente metadados).
 - **FR-013**: Payloads acima de um limite DEVEM ser armazenados no object storage, com leitura transparente.
 - **FR-014**: O sistema DEVE mascarar dados sensíveis por nome de campo e por padrão de valor (CPF, CNPJ, e-mail, cartão, telefone, JWT, chaves de API), com as ações ocultar, parcial ou hash, antes de persistir, transmitir por WebSocket ou registrar em log.
-- **FR-015**: O mascaramento NÃO DEVE alterar os dados que trafegam entre os nós.
+- **FR-015**: O mascaramento NÃO DEVE alterar os dados que trafegam entre os nós. Exceção: na execução parcial do editor (modo teste), um nó reaproveitado de uma execução anterior entrega os dados como foram gravados, inclusive os campos mascarados, e o editor avisa quais campos chegaram mascarados.
 - **FR-016**: Regras padrão (CPF, CNPJ, senha, token, authorization, cartão) DEVEM vir ativas, com regras adicionais globais e por projeto.
 - **FR-017**: Um job diário DEVE criar partições futuras e remover os dados e metadados expirados conforme a retenção por projeto, incluindo os objetos no storage, auditando o que removeu.
 - **FR-018**: O sistema DEVE oferecer consulta e exportação CSV (em *streaming*) da auditoria, restrita a `audit:read`.
@@ -125,3 +125,4 @@ MCP, AI Agent, notificações por e-mail e Kubernetes.
 | 05/10/2026 | FR-012: a política de dados vale para as execuções de **produção**; execuções de teste guardam sempre os dados (mascarados) e seguem a retenção | O editor depende dos dados de teste (pré-visualização, execução parcial); como no N8N, que separa "salvar execuções manuais" |
 | 05/10/2026 | FR-011: um pedido pendente por workflow; o autor pode cancelar o próprio pedido (não aprova nem rejeita) | Evita pedidos concorrentes para a mesma publicação |
 | 05/10/2026 | FR-015: a execução parcial do editor não reaproveita dados alterados pelo mascaramento ou descartados pela política; o nó executa de novo | Garante que valores mascarados nunca entrem em outro nó |
+| 06/10/2026 | FR-015: a execução parcial de teste passa a reaproveitar dados com campos mascarados (entregues como gravados), com aviso dos campos no editor; antes o nó executava de novo | Decisão do PO após teste com o Postman: o cabeçalho `postman-token`, mascarado pela regra `*token*`, impedia o play no nó seguinte ao Webhook e zerava o contexto |

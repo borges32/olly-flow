@@ -28,11 +28,33 @@ export interface TelemetryHandle {
 function readable(message: string): string {
   if (!message.startsWith('{')) return message;
   try {
-    const parsed = JSON.parse(message) as { message?: unknown };
-    return typeof parsed.message === 'string' ? `Falha ao exportar: ${parsed.message}` : message;
+    const parsed = JSON.parse(message) as { message?: unknown; errors?: unknown };
+    if (typeof parsed.message === 'string' && parsed.message) {
+      return `Falha ao exportar: ${parsed.message}`;
+    }
+    // AggregateError (várias tentativas de conexão): a primeira causa basta.
+    if (typeof parsed.errors === 'string' && parsed.errors) {
+      return `Falha ao exportar: ${parsed.errors.split(',')[0]?.replace(/^Error: /, '') ?? ''}`;
+    }
+    return message;
   } catch {
     return message;
   }
+}
+
+/**
+ * Endereços OTLP sem esquema: o SDK os descarta e exporta para `localhost` sem avisar. Devolve as
+ * mensagens a registrar na subida (spec 012, FR-004).
+ */
+export function endpointProblems(env: NodeJS.ProcessEnv = process.env): string[] {
+  return ENDPOINT_VARS.flatMap((name) => {
+    const value = env[name]?.trim();
+    if (!value || /^https?:\/\//i.test(value)) return [];
+    const host = value.replace(/:\d+$/, '');
+    return [
+      `${name}="${value}" precisa começar com http:// ou https:// (ex.: http://${host}:4318 para http/protobuf ou http://${host}:4317 com OTEL_EXPORTER_OTLP_PROTOCOL=grpc)`,
+    ];
+  });
 }
 
 /** Falhas do exportador no log local, no máximo uma por minuto por mensagem (coletor fora). */
@@ -73,6 +95,7 @@ export function startTelemetry(options: {
 }): TelemetryHandle {
   const env = options.env ?? process.env;
   if (!telemetryEnabled(env)) return { enabled: false, shutdown: () => Promise.resolve() };
+  for (const problem of endpointProblems(env)) console.warn(`[telemetria] ${problem}`);
   diag.setLogger(
     rateLimitedDiag((m) => {
       console.warn(m);

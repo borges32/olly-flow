@@ -173,6 +173,11 @@ export interface NodeExecutionDetail {
   pinned: boolean;
   /** Saída reaproveitada de uma execução anterior (FR-020). */
   reused: boolean;
+  /**
+   * Spec 009, FR-015: com `reused`, os campos da saída que chegaram mascarados (ex.:
+   * `headers.postman-token`), entregues assim ao nó seguinte.
+   */
+  maskedFields?: string[];
   /** Entrada/saída gravadas além do limite foram cortadas (FR-015). */
   dataTruncated: boolean;
   input: Record<string, Item[]> | null;
@@ -259,6 +264,8 @@ export interface NodeFinishedEvent {
   durationMs: number;
   pinned: boolean;
   reused: boolean;
+  /** Spec 009, FR-015: campos mascarados da saída reaproveitada. */
+  maskedFields?: string[];
   dataTruncated: boolean;
   data: { input: Record<string, Item[]>; output: NodeOutput };
   /** Sem `execution:readData`, `data` vem vazio (spec 005, FR-014). */

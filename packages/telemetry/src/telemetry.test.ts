@@ -2,6 +2,7 @@ import { context, trace } from '@opentelemetry/api';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   activeTraceIds,
+  endpointProblems,
   extractTraceContext,
   injectTraceContext,
   ollyMetrics,
@@ -30,6 +31,13 @@ describe('spec 012 — FR-004: telemetria ligada só com coletor', () => {
     expect(startTelemetry({ serviceName: 'x', env: {} }).enabled).toBe(false);
   });
 
+  it('FR-004: endereço sem http(s):// gera aviso claro (o SDK o ignoraria e usaria localhost)', () => {
+    expect(endpointProblems({ OTEL_EXPORTER_OTLP_ENDPOINT: '10.194.52.108:4317' })).toEqual([
+      'OTEL_EXPORTER_OTLP_ENDPOINT="10.194.52.108:4317" precisa começar com http:// ou https:// (ex.: http://10.194.52.108:4318 para http/protobuf ou http://10.194.52.108:4317 com OTEL_EXPORTER_OTLP_PROTOCOL=grpc)',
+    ]);
+    expect(endpointProblems({ OTEL_EXPORTER_OTLP_ENDPOINT: 'http://otel:4318' })).toEqual([]);
+  });
+
   it('FR-004: falhas do coletor aparecem no log local no máximo uma vez por minuto', () => {
     const lines: string[] = [];
     let now = 0;
@@ -43,10 +51,18 @@ describe('spec 012 — FR-004: telemetria ligada só com coletor', () => {
     now = 61_000;
     logger.error('Falha ao exportar', new Error('ECONNREFUSED'));
     logger.error(JSON.stringify({ message: 'connect ECONNREFUSED 127.0.0.1:4318', stack: 'x' }));
+    logger.error(
+      JSON.stringify({
+        stack: 'AggregateError [ECONNREFUSED]: ...',
+        errors: 'Error: connect ECONNREFUSED ::1:4318,Error: connect ECONNREFUSED 127.0.0.1:4318',
+        message: '',
+      }),
+    );
     expect(lines).toEqual([
       '[telemetria] Falha ao exportar: ECONNREFUSED',
       '[telemetria] Falha ao exportar: ECONNREFUSED',
       '[telemetria] Falha ao exportar: connect ECONNREFUSED 127.0.0.1:4318',
+      '[telemetria] Falha ao exportar: connect ECONNREFUSED ::1:4318',
     ]);
   });
 });

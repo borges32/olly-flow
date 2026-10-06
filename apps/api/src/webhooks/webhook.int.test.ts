@@ -508,7 +508,8 @@ describe('spec 005 — HU-2/FR-007: webhook de teste', () => {
       method: 'POST',
       url: '/webhook-test/passo/5',
       payload: '{"q":2,"p":3}',
-      headers: { 'content-type': 'application/json' },
+      // O Postman manda `postman-token`, mascarado pela regra padrão `*token*` (spec 009).
+      headers: { 'content-type': 'application/json', 'postman-token': 'a1b2c3' },
     });
     // Para no Webhook: a chamada recebe 202 mesmo no modo "nó de resposta".
     expect(res.statusCode).toBe(202);
@@ -528,7 +529,10 @@ describe('spec 005 — HU-2/FR-007: webhook de teste', () => {
       reuse: { w: executionId },
     });
     const second = await waitFinished(editor, next.json<{ executionId: string }>().executionId);
-    expect(second.nodes.find((n) => n.nodeId === 'w')).toMatchObject({ reused: true });
+    expect(second.nodes.find((n) => n.nodeId === 'w')).toMatchObject({
+      reused: true,
+      maskedFields: ['headers.postman-token'],
+    });
     expect(second.nodes.find((n) => n.nodeId === 's')?.output?.main?.[0]?.json).toEqual({
       pedido: '5',
       total: 6,

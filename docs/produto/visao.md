@@ -60,7 +60,7 @@ Os itens PR-01 a PR-14 são os requisitos originais solicitados. Os itens PR-15 
 |---|---|
 | NFR-G01 | Código de usuário (JS/Python) e expressões executam isolados, sem acesso ao host, com limites de recursos |
 | NFR-G02 | Credenciais criptografadas em repouso; nunca expostas na UI, API, logs ou dados de execução |
-| NFR-G03 | Login exclusivamente via provedor de identidade institucional (OIDC). A spec 014 (primeiro usuário, em rascunho) pode afetar este requisito |
+| NFR-G03 | Login por usuário local (e-mail e senha) como padrão; login pelo provedor de identidade institucional (OIDC) opcional, ativável e desativado por padrão. O primeiro usuário de uma instalação nova é local e administrador global (spec 014; decisão do PO em 06/10/2026, que substitui "login exclusivamente via OIDC") |
 | NFR-G04 | Toda ação administrativa e de edição é auditável |
 | NFR-G05 | Dados pessoais mascarados em logs e históricos (LGPD), com retenção configurável |
 | NFR-G06 | Workers escaláveis horizontalmente; falha de um worker não deixa execuções em estado indefinido |

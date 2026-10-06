@@ -331,3 +331,43 @@ describe('spec 006 — FR-010/FR-013: nós simultâneos, linha do tempo e cancel
     });
   });
 });
+
+describe('spec 009 — FR-015: reaproveitamento com campos mascarados', () => {
+  it('FR-015: o editor guarda os campos mascarados do nó reaproveitado', () => {
+    const node = {
+      nodeId: 'w',
+      nodeName: 'Webhook',
+      runIndex: 0,
+      status: 'success' as const,
+      startedAt: '2026-10-06T21:24:09.000Z',
+      finishedAt: '2026-10-06T21:24:09.010Z',
+      itemsIn: 0,
+      itemsOut: 1,
+      pinned: false,
+      reused: true,
+      maskedFields: ['headers.postman-token'],
+      dataTruncated: false,
+      input: null,
+      output: { main: [{ json: { headers: { 'postman-token': '***' } } }] },
+      console: null,
+      error: null,
+    };
+    store().runStarted('e1', {});
+    store().applyExecution({
+      id: 'e1',
+      workflowId: workflow.id,
+      projectId: workflow.projectId,
+      mode: 'test',
+      triggerType: 'manual',
+      triggeredBy: null,
+      status: 'success',
+      startedAt: node.startedAt,
+      finishedAt: node.finishedAt,
+      error: null,
+      dataRedacted: false,
+      definition: null,
+      nodes: [node],
+    } as unknown as Parameters<ReturnType<typeof store>['applyExecution']>[0]);
+    expect(store().run.nodes.w?.maskedFields).toEqual(['headers.postman-token']);
+  });
+});
