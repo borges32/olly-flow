@@ -121,6 +121,12 @@ Catálogo e papéis padrão em `packages/shared-types/src/rbac.ts` (seed da spec
 
 Matriz por papel: [`docs/rbac-matriz.md`](../rbac-matriz.md), gerada pelo teste da spec 005.
 
+**Spec 009:**
+- `audit:read`, `user:manage` e as regras globais de mascaramento (`project:manage`) valem só no escopo da plataforma (`@RequirePermission(..., 'global')`). O papel admin de um projeto não as tem.
+- Grupos do IdP mapeados para um papel **global** (`group_role_mappings` sem projeto) entram em `EffectivePermissions.global` enquanto o token trouxer o grupo, e valem em todos os projetos.
+- Com `projects.executor_can_read_data`, o papel Executor ganha `execution:readData` no projeto. A concessão é calculada no `ProjectPermissionResolver`, de modo que `/me`, as rotas e o WebSocket a enxergam igual.
+- O escopo de recurso aceita `{ publishRequest: 'id' }` (projeto do pedido de publicação).
+
 ## Convenção de expressões (spec 003)
 
 - Um parâmetro string que começa com `=` é uma expressão-template: `"=Olá {{ $json.nome }}"`.
@@ -146,4 +152,38 @@ Matriz por papel: [`docs/rbac-matriz.md`](../rbac-matriz.md), gerada pelo teste 
 - Iterações (spec 007): `nodeStarted`/`nodeFinished` e `NodeExecutionDetail` trazem `runIndex`; `GET /executions/:id` lista uma linha por execução de cada nó, ordenadas por início e `runIndex`.
 - Workflow de erro (spec 007): `settings.errorWorkflowId`, validado ao salvar (mesmo projeto, outro workflow, com `trigger.error`) e espelhado em `workflows.error_workflow_id`. As execuções disparadas por ele têm `triggerType: 'error'`.
 - Rotas (spec 006): `POST /executions/:id/cancel` (`workflow:execute`; 409 se já terminou; auditado como `execution.cancel`), `GET /projects/:id/queue-stats` (`execution:read`; `{ running, queued, limit, customLimit }`) e `PUT /projects/:id/quota { maxConcurrentExecutions: number | null }` (administração da plataforma; auditado como `project.quota`).
-- Webhooks: `/webhook/<path>` (publicado) e `/webhook-test/<path>` (escuta do editor), fora de `/api/v1`, com autenticação própria por credencial. Publicação: `POST /workflows/:id/publish { version? }` e `POST /workflows/:id/unpublish` (`workflow:publish`). Escuta: `POST`/`DELETE /workflows/:id/listen-test-webhook` (`workflow:execute`). Execuções: `GET /executions` (filtros e cursor; `execution:read`).
+- Webhooks: `/webhook/<path>` (publicado) e `/webhook-test/<path>` (escuta do editor), fora de `/api/v1`, com autenticação própria por credencial. Publicação: `POST /workflows/:id/publish { version?, message }` (mensagem obrigatória desde a spec 009) e `POST /workflows/:id/unpublish` (`workflow:publish`). Escuta: `POST`/`DELETE /workflows/:id/listen-test-webhook` (`workflow:execute`). Execuções: `GET /executions` (filtros e cursor; `execution:read`).
+
+## Governança e LGPD (spec 009)
+
+Tipos em `packages/shared-types/src/governance.ts`. Detalhes em [docs/governanca.md](../governanca.md) e [docs/lgpd.md](../lgpd.md).
+
+- **Chave mestra (`@olly/db`):**
+  - `KeyProvider { id, currentKeyVersion(): Promise<number>, wrap(dek): Promise<{ wrapped, keyVersion }>, unwrap(wrapped, keyVersion) }`;
+  - `KeyRing { current, provider(id) }`, com os provedores `EnvKeyProvider` e `VaultTransitKeyProvider`; `createKeyRing(options)` escolhe por `OLLY_KEY_PROVIDER`;
+  - o envelope ganhou `kp` (provedor; ausente = `env`);
+  - `rewrapCredentialData` recifra só a DEK (rotação e migração).
+- **Mascaramento (`@olly/engine`):**
+  - `createMasker(rules, { salt })` devolve `Masker { mask(value) → { value, changed }, maskText(text) }`;
+  - regras `MaskingRuleSpec { kind: 'field' | 'pattern', matcher, action: 'redact' | 'partial' | 'hash' }`;
+  - aplicado pelo `ExecutionRecorder` (banco e eventos) e pelos logs (pino); nunca entre os nós.
+- **Rotas:**
+  - `POST /auth/login` (público; valida o token, sincroniza os grupos, audita `auth.login`/`auth.login_failed`);
+  - `GET /admin/users`, `PUT /admin/users/:userId/active` e `GET|POST /sso/group-mappings`, `DELETE /sso/group-mappings/:mappingId` (`user:manage` global);
+  - `GET|PUT /projects/:id/settings` (membro / `project:manage`);
+  - `GET|POST /masking-rules`, `PUT|DELETE /masking-rules/:ruleId` (`project:manage` global);
+  - `GET|POST /projects/:id/masking-rules`, `PUT|DELETE /projects/:id/masking-rules/:ruleId` (`project:manage`);
+  - `GET /workflows/:id/versions/:version` e `GET /workflows/:id/diff?from=&to=` (`workflow:read`);
+  - `POST /workflows/:id/versions/:version/restore` (`workflow:update`);
+  - `GET /publish-requests?status=&workflowId=` (autenticado; filtra pelos projetos em que o usuário publica e pelos próprios pedidos);
+  - `POST /publish-requests/:id/approve|reject|cancel` (`workflow:publish` no projeto do pedido);
+  - `GET /audit` e `GET /audit/export.csv` (`audit:read` global).
+- **Mudanças em contratos existentes:**
+  - `PUT /workflows/:id` aceita `message?`;
+  - `PublishResponse.pendingApproval?` quando a publicação vira pedido;
+  - `ProjectMember.origin` (`manual` | `idp`);
+  - `WorkflowSettings.saveExecutionData` passa a valer nas execuções de produção (o padrão vem do projeto).
+- **Redis:**
+  - canal `olly:masking-rules-changed` (invalidação das regras na API e nos workers);
+  - lock `olly:retention-lock`;
+  - fila BullMQ `maintenance`, com o *job scheduler* `maintenance-daily`.

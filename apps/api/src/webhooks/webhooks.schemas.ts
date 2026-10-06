@@ -1,10 +1,11 @@
 import { workflowDefinitionShapeSchema } from '@olly/shared-types';
 import { z } from 'zod';
 
-export const publishSchema = z
-  .object({ version: z.number().int().min(1).optional() })
-  .nullish()
-  .transform((v) => v ?? {});
+/** Spec 009, FR-009: a mensagem é obrigatória ao publicar. */
+export const publishSchema = z.object({
+  version: z.number().int().min(1).optional(),
+  message: z.string().trim().min(1, 'informe a mensagem da publicação').max(500),
+});
 export type PublishBody = z.infer<typeof publishSchema>;
 
 export const listenSchema = z.object({

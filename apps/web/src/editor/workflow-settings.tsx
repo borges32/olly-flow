@@ -1,6 +1,8 @@
 import { Settings } from 'lucide-react';
 import { useState } from 'react';
-import { useWorkflows } from '@/api/queries';
+import type { SaveExecutionDataPolicy } from '@olly/shared-types';
+import { useProjectSettings, useWorkflows } from '@/api/queries';
+import { SAVE_POLICY_LABELS } from '@/governance/labels';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -21,7 +23,8 @@ const positiveOrUndefined = (raw: string) => {
 
 /**
  * Configurações do workflow: workflow de erro (spec 007, FR-014), timeout global (spec 006,
- * FR-011) e paralelismo máximo entre nós (spec 006, FR-006). Salvas com o workflow.
+ * FR-011), paralelismo máximo entre nós (spec 006, FR-006) e política de dados das execuções
+ * (spec 009, FR-012). Salvas com o workflow.
  */
 export function WorkflowSettingsButton({
   workflowId,
@@ -35,6 +38,7 @@ export function WorkflowSettingsButton({
   const [open, setOpen] = useState(false);
   const settings = useEditorStore((s) => s.settings);
   const workflows = useWorkflows(open ? projectId : undefined, 1, 100);
+  const projectSettings = useProjectSettings(open ? projectId : undefined);
   const candidates = (workflows.data?.items ?? []).filter((w) => w.id !== workflowId);
   const set = (patch: Parameters<ReturnType<typeof useEditorStore.getState>['setSettings']>[0]) => {
     useEditorStore.getState().setSettings(patch);
@@ -83,6 +87,36 @@ export function WorkflowSettingsButton({
               <p className="text-xs text-muted-foreground">
                 Acionado quando uma execução de produção falha. Ele precisa começar por um nó
                 “Gatilho de erro”.
+              </p>
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="ws-save-data">Dados das execuções de produção</Label>
+              <Select
+                id="ws-save-data"
+                value={settings.saveExecutionData ?? ''}
+                disabled={readOnly}
+                onChange={(e) => {
+                  set({
+                    saveExecutionData: (e.target.value || undefined) as
+                      SaveExecutionDataPolicy | undefined,
+                  });
+                }}
+              >
+                <option value="">
+                  Padrão do projeto
+                  {projectSettings.data
+                    ? ` (${SAVE_POLICY_LABELS[projectSettings.data.saveExecutionData]})`
+                    : ''}
+                </option>
+                {Object.entries(SAVE_POLICY_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Spec 009: com “só erros”, execuções com sucesso guardam só status e contagens.
+                Execuções de teste sempre guardam os dados (mascarados).
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3">

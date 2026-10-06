@@ -93,6 +93,14 @@ export async function webhookIssues(
   return { errors, warnings };
 }
 
+export interface PreparedPublication {
+  workflowId: string;
+  projectId: string;
+  version: number;
+  webhooks: { nodeId: string; method: string; path: string }[];
+  warnings: WorkflowIssue[];
+}
+
 /** Publicação e despublicação de workflows (spec 005, FR-001, FR-002, plan §1). */
 @Injectable()
 export class PublishingService {
@@ -105,17 +113,18 @@ export class PublishingService {
     @Inject(WebhookRegistry) private readonly routes: WebhookRegistry,
   ) {}
 
-  async publish(
-    ctx: AuditContext,
-    workflowId: string,
-    requested?: number,
-  ): Promise<PublishResponse> {
+  /**
+   * Valida a versão para publicação (estrutura e webhooks). Usado antes de publicar e antes de
+   * abrir um pedido de aprovação (spec 009), para não pedir aprovação do que não publicaria.
+   */
+  async prepare(workflowId: string, requested?: number): Promise<PreparedPublication> {
     const workflow = await this.db
       .selectFrom('workflows')
       .select(['id', 'version', 'project_id'])
       .where('id', '=', workflowId)
       .where('deleted_at', 'is', null)
-      .executeTakeFirstOrThrow();
+      .executeTakeFirst();
+    if (!workflow) throw new NotFoundError('Workflow não encontrado');
     const version = requested ?? workflow.version;
     const row = await this.db
       .selectFrom('workflow_versions')
@@ -139,11 +148,32 @@ export class PublishingService {
         issues: errors.map((e) => ({ code: e.code, message: e.message, nodeIds: e.nodeIds })),
       });
     }
-    const webhooks = webhookNodes(definition).map((n) => ({
-      nodeId: n.id,
-      method: methodOf(n),
-      path: pathOf(n),
-    }));
+    return {
+      workflowId,
+      projectId: workflow.project_id,
+      version,
+      webhooks: webhookNodes(definition).map((n) => ({
+        nodeId: n.id,
+        method: methodOf(n),
+        path: pathOf(n),
+      })),
+      warnings: [...structure.warnings, ...hooks.warnings],
+    };
+  }
+
+  /**
+   * Publica (spec 005, FR-001/FR-002). Spec 009, FR-009: a mensagem é obrigatória; vira a
+   * mensagem da versão quando ela não tem uma e fica na auditoria. `approval` registra o pedido
+   * aprovado que originou a publicação.
+   */
+  async publish(
+    ctx: AuditContext,
+    workflowId: string,
+    requested: number | undefined,
+    message: string,
+    approval?: { requestId: string; requestedBy: string },
+  ): Promise<PublishResponse> {
+    const { version, webhooks, warnings } = await this.prepare(workflowId, requested);
     await this.db
       .transaction()
       .execute(async (trx) => {
@@ -165,11 +195,23 @@ export class PublishingService {
           .set({ published_version: version, active: true })
           .where('id', '=', workflowId)
           .execute();
+        await trx
+          .updateTable('workflow_versions')
+          .set({ message })
+          .where('workflow_id', '=', workflowId)
+          .where('version', '=', version)
+          .where('message', 'is', null)
+          .execute();
         await this.audit.record(trx, ctx, {
           action: 'workflow.publish',
           entityType: 'workflow',
           entityId: workflowId,
-          details: { version, webhooks: webhooks.map((w) => `${w.method} ${w.path}`) },
+          details: {
+            version,
+            message,
+            webhooks: webhooks.map((w) => `${w.method} ${w.path}`),
+            ...(approval && { approval }),
+          },
         });
       })
       .catch((error: unknown) => {
@@ -185,7 +227,7 @@ export class PublishingService {
       publishedVersion: version,
       active: true,
       webhooks: webhooks.map(({ method, path }) => ({ method, path })),
-      warnings: [...structure.warnings, ...hooks.warnings],
+      warnings,
     };
   }
 

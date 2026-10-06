@@ -30,9 +30,10 @@ O teste dos tipos HTTP passa pelo filtro anti-SSRF, como as requisições dos n�
 ## Segurança
 
 - **Envelope encryption:** cada credencial tem uma chave de dados própria (AES-256-GCM). A chave de dados é cifrada pela chave mestra do `KeyProvider`. O id da credencial entra como dado autenticado, então trocar envelopes entre registros faz a decifragem falhar.
-- **Provedor `env`** (desenvolvimento): chave mestra em `OLLY_MASTER_KEY` (base64 de 32 bytes; gere com `openssl rand -base64 32`). A API não sobe sem ela. O provedor institucional (Vault/KMS) depende da [ADR-0007](adr/0007-gestao-de-segredos.md) e entra na spec 009.
+- **Provedor `env`** (desenvolvimento): chave mestra em `OLLY_MASTER_KEY` (base64 de 32 bytes; gere com `openssl rand -base64 32`). A API não sobe sem ela.
+- **Provedor `vault`** (spec 009): a chave mestra fica no Vault Transit e nunca sai dele. Rotação e migração sem parada: ver [governanca.md](governanca.md#cofre-da-chave-mestra-fr-001-a-fr-003). O provedor institucional definitivo depende da [ADR-0007](adr/0007-gestao-de-segredos.md).
 - **Respostas da API:** levam só os campos públicos (`publicFields`) e a lista de campos secretos preenchidos.
-- **Mascaramento:** os valores secretos, e as formas derivadas (Basic em base64, token OAuth2 obtido), viram `***` em tudo que é gravado ou transmitido sobre a execução: log de execução, eventos em tempo real, mensagens de erro e logs dos nós. Os dados que passam entre os nós não mudam.
+- **Mascaramento:** além das regras LGPD da spec 009 ([lgpd.md](lgpd.md)), os valores secretos e as formas derivadas (Basic em base64, token OAuth2 obtido), viram `***` em tudo que é gravado ou transmitido sobre a execução: log de execução, eventos em tempo real, mensagens de erro e logs dos nós. Os dados que passam entre os nós não mudam.
 - **Auditoria:** criação, alteração (só os nomes dos campos), teste e exclusão vão para a auditoria, sem valores.
 - Um teste automatizado faz uma varredura com valores sentinela em respostas, logs e banco (`credential-leak.int.test.ts`).
 

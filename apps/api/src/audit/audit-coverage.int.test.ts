@@ -49,7 +49,7 @@ describe('spec 005 — FR-016: cobertura da auditoria', () => {
       settings: {},
     };
     await editor.call('PUT', `/workflows/${wf.id}`, { definition, baseVersion: 1 });
-    await editor.call('POST', `/workflows/${wf.id}/publish`, {});
+    await editor.call('POST', `/workflows/${wf.id}/publish`, { message: 'Publicação de teste' });
     await editor.call('POST', `/workflows/${wf.id}/unpublish`);
     const { executionId } = (
       await editor.call('POST', `/workflows/${wf.id}/test-run`, { definition })

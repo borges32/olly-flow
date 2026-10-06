@@ -1,5 +1,7 @@
 import { Global, Module } from '@nestjs/common';
 import { ExecutionsModule } from '../executions/executions.module.js';
+import { PublishApprovalsService } from './publish-approvals.service.js';
+import { PublishRequestsController } from './publish-requests.controller.js';
 import { PublishingService } from './publishing.service.js';
 import { TestListeners } from './test-listeners.js';
 import { WebhookGateway } from './webhook-gateway.js';
@@ -10,10 +12,11 @@ import { WebhooksController } from './webhooks.controller.js';
 @Global()
 @Module({
   imports: [ExecutionsModule],
-  controllers: [WebhooksController],
+  controllers: [WebhooksController, PublishRequestsController],
   providers: [
     WebhookRegistry,
     PublishingService,
+    PublishApprovalsService,
     WebhookGateway,
     { provide: TestListeners, useFactory: () => new TestListeners() },
   ],

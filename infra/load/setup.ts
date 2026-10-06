@@ -117,7 +117,7 @@ for (const [path, responseMode] of [
       settings: {},
     },
   });
-  await call('POST', `/workflows/${wf.id}/publish`, {});
+  await call('POST', `/workflows/${wf.id}/publish`, { message: 'Publicação de teste' });
   console.log(`publicado: POST ${API}/webhook/${path} (${responseMode})`);
 }
 console.log(`PROJECT_ID=${project.id}`);

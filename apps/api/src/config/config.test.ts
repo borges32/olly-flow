@@ -7,6 +7,7 @@ const valid = {
   OIDC_ISSUER_URL: 'http://localhost:8080/realms/olly/',
   OIDC_AUDIENCE: 'olly-api',
   OLLY_MASTER_KEY: Buffer.alloc(32, 7).toString('base64'),
+  OLLY_MASKING_SALT: 'salt-de-producao-0123456789',
 };
 
 describe('configuração da API (validação zod na inicialização)', () => {
@@ -138,5 +139,53 @@ describe('configuração da API (validação zod na inicialização)', () => {
     expect(() => loadConfig({ ...valid, OLLY_MAX_LOOP_ITERATIONS: '0' })).toThrow(
       /OLLY_MAX_LOOP_ITERATIONS/,
     );
+  });
+
+  it('spec 009 — FR-001/FR-005/FR-013/FR-017: cofre, grupos, dados e retenção', () => {
+    const config = loadConfig(valid);
+    expect(config.credentials.keyProvider).toBe('env');
+    expect(config.oidc.groupsClaim).toBe('groups');
+    expect(config.governance).toMatchObject({
+      userInactiveDays: 90,
+      inlineDataLimit: 262_144,
+      retention: { dataDays: 30, metadataDays: 365 },
+      maintenanceCron: '0 3 * * *',
+    });
+    // FR-001: Vault selecionado por configuração, autenticado por AppRole (sem token fixo).
+    const vault = loadConfig({
+      ...valid,
+      OLLY_MASTER_KEY: undefined,
+      OLLY_KEY_PROVIDER: 'vault',
+      OLLY_VAULT_ADDR: 'http://vault:8200',
+      OLLY_VAULT_ROLE_ID: 'role',
+      OLLY_VAULT_SECRET_ID: 'secret',
+    });
+    expect(vault.credentials).toMatchObject({
+      keyProvider: 'vault',
+      vault: { address: 'http://vault:8200', auth: 'approle', transitKey: 'olly-credentials' },
+    });
+    expect(() =>
+      loadConfig({ ...valid, OLLY_KEY_PROVIDER: 'vault', OLLY_VAULT_ADDR: 'http://vault:8200' }),
+    ).toThrow(/OLLY_VAULT_ROLE_ID/);
+    expect(() => loadConfig({ ...valid, OLLY_MASTER_KEY: undefined })).toThrow(/OLLY_MASTER_KEY/);
+    // FR-002: chaves anteriores para a rotação do provedor `env`.
+    const rotated = loadConfig({
+      ...valid,
+      OLLY_MASTER_KEY_VERSION: '2',
+      OLLY_MASTER_KEYS_PREVIOUS: `1:${Buffer.alloc(32, 1).toString('base64')}`,
+    });
+    expect(rotated.credentials.masterKeyVersion).toBe(2);
+    expect(Object.keys(rotated.credentials.previousMasterKeys ?? {})).toEqual(['1']);
+    expect(() => loadConfig({ ...valid, OLLY_MASTER_KEYS_PREVIOUS: 'x' })).toThrow(
+      /OLLY_MASTER_KEYS_PREVIOUS/,
+    );
+    // FR-014: salt do hash obrigatório em produção.
+    expect(() => loadConfig({ ...valid, OLLY_MASKING_SALT: undefined })).toThrow(
+      /OLLY_MASKING_SALT/,
+    );
+    expect(
+      loadConfig({ ...valid, NODE_ENV: 'development', OLLY_MASKING_SALT: undefined }).governance
+        .maskingSalt,
+    ).toBeTruthy();
   });
 });

@@ -21,7 +21,9 @@
     "app:reset": "docker compose --profile app down -v && docker compose --profile app up -d --build --wait",
     "db:migrate": "turbo run build --filter=@olly/db --output-logs=errors-only && pnpm --filter @olly/db run migrate",
     "db:rollback": "turbo run build --filter=@olly/db --output-logs=errors-only && pnpm --filter @olly/db run rollback",
-    "db:seed": "turbo run build --filter=@olly/db --output-logs=errors-only && pnpm --filter @olly/db run seed"
+    "db:seed": "turbo run build --filter=@olly/db --output-logs=errors-only && pnpm --filter @olly/db run seed",
+    "credentials:rotate": "turbo run build --filter=@olly/api --output-logs=errors-only && pnpm --filter @olly/api run credentials rotate",
+    "credentials:migrate": "turbo run build --filter=@olly/api --output-logs=errors-only && pnpm --filter @olly/api run credentials migrate"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

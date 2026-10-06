@@ -14,6 +14,8 @@ export interface UsersTable {
   is_active: Generated<boolean>;
   created_at: GeneratedTimestamp;
   updated_at: Timestamp | null;
+  /** Último login (spec 009, FR-006): base da inativação por falta de uso. */
+  last_login_at: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
 }
 
 export interface RolesTable {
@@ -28,13 +30,69 @@ export interface ProjectsTable {
   created_at: GeneratedTimestamp;
   /** Cota de execuções simultâneas (spec 006, FR-012); `null` usa o padrão da configuração. */
   max_concurrent_executions: ColumnType<number | null, number | null | undefined, number | null>;
+  /** Spec 009: governança do projeto (FR-011, FR-012, FR-017, FR-019). */
+  require_publish_approval: Generated<boolean>;
+  executor_can_read_data: Generated<boolean>;
+  save_execution_data: ColumnType<
+    SaveExecutionData,
+    SaveExecutionData | undefined,
+    SaveExecutionData
+  >;
+  /** JSONB `{ dataDays?, metadataDays? }`: insira com `JSON.stringify`. */
+  retention: ColumnType<unknown, string | undefined, string>;
 }
+
+export type SaveExecutionData = 'all' | 'errorsOnly' | 'none';
 
 export interface ProjectMembersTable {
   project_id: string;
   user_id: string;
   role_id: number;
   created_at: GeneratedTimestamp;
+  /** `idp`: herdado de um grupo do IdP (spec 009, FR-005), sincronizado no login. */
+  origin: ColumnType<'manual' | 'idp', 'manual' | 'idp' | undefined, 'manual' | 'idp'>;
+}
+
+/** Grupo do IdP → papel (spec 009, FR-005); `project_id` nulo = global. */
+export interface GroupRoleMappingsTable {
+  id: Generated<string>;
+  idp_group: string;
+  project_id: string | null;
+  role_id: number;
+  created_by: string | null;
+  created_at: GeneratedTimestamp;
+}
+
+/** Pedido de publicação (spec 009, FR-011). */
+export interface PublishRequestsTable {
+  id: Generated<string>;
+  workflow_id: string;
+  project_id: string;
+  version: number;
+  message: string;
+  requested_by: string;
+  status: ColumnType<PublishRequestStatus, PublishRequestStatus | undefined, PublishRequestStatus>;
+  decided_by: string | null;
+  comment: string | null;
+  created_at: GeneratedTimestamp;
+  decided_at: Timestamp | null;
+}
+
+export type PublishRequestStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
+
+/** Regra de mascaramento (spec 009, FR-014, FR-016). */
+export interface MaskingRulesTable {
+  id: Generated<string>;
+  scope: 'global' | 'project';
+  project_id: string | null;
+  kind: 'field' | 'pattern';
+  matcher: string;
+  action: 'redact' | 'partial' | 'hash';
+  enabled: Generated<boolean>;
+  builtin: Generated<boolean>;
+  description: string | null;
+  created_at: GeneratedTimestamp;
+  updated_at: GeneratedTimestamp;
 }
 
 export interface AuditLogTable {
@@ -135,6 +193,8 @@ export interface NodeExecutionsTable {
   output_data: ColumnType<unknown, string | null | undefined, string | null>;
   data_truncated: Generated<boolean>;
   data_ref: string | null;
+  /** Dados alterados pelo mascaramento (spec 009): não servem para reaproveitamento. */
+  data_masked: Generated<boolean>;
   error: ColumnType<unknown, string | null | undefined, string | null>;
   /** Saída do `console` do nó de código (spec 005, FR-012). */
   console: ColumnType<unknown, string | null | undefined, string | null>;
@@ -148,6 +208,8 @@ export interface CredentialsTable {
   /** Envelope cifrado (`packages/db/src/crypto.ts`); nunca sai da API. */
   data_encrypted: Buffer;
   key_version: number;
+  /** Provedor da chave mestra que cifrou a DEK (spec 009): `env` ou `vault`. */
+  key_provider: ColumnType<string, string | undefined, string>;
   created_by: string | null;
   created_at: GeneratedTimestamp;
   updated_at: GeneratedTimestamp;
@@ -166,6 +228,9 @@ export interface Database {
   node_executions: NodeExecutionsTable;
   execution_payloads: ExecutionPayloadsTable;
   credentials: CredentialsTable;
+  group_role_mappings: GroupRoleMappingsTable;
+  publish_requests: PublishRequestsTable;
+  masking_rules: MaskingRulesTable;
 }
 
 export type User = Selectable<UsersTable>;
@@ -182,3 +247,6 @@ export type Execution = Selectable<ExecutionsTable>;
 export type NodeExecution = Selectable<NodeExecutionsTable>;
 export type NewNodeExecution = Insertable<NodeExecutionsTable>;
 export type Credential = Selectable<CredentialsTable>;
+export type GroupRoleMapping = Selectable<GroupRoleMappingsTable>;
+export type PublishRequest = Selectable<PublishRequestsTable>;
+export type MaskingRuleRow = Selectable<MaskingRulesTable>;

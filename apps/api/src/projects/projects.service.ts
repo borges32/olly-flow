@@ -1,10 +1,24 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { Db } from '@olly/db';
-import type { ProjectMember, ProjectSummary, RoleName, UserSummary } from '@olly/shared-types';
+import type {
+  ProjectMember,
+  ProjectSettings,
+  ProjectSettingsUpdate,
+  ProjectSummary,
+  RoleName,
+  UserSummary,
+} from '@olly/shared-types';
 import { AuditService, type AuditContext } from '../audit/audit.service.js';
 import type { AuthenticatedUser } from '../auth/auth.types.js';
-import { ConflictError, NotFoundError } from '../common/errors.js';
+import { ConflictError, NotFoundError, UnprocessableError } from '../common/errors.js';
+import { seesAllProjects } from '../rbac/ability.factory.js';
+import { APP_CONFIG, type AppConfig } from '../config/config.js';
 import { DB } from '../core/tokens.js';
+
+interface StoredRetention {
+  dataDays?: number | null;
+  metadataDays?: number | null;
+}
 
 const iso = (d: Date) => d.toISOString();
 
@@ -14,7 +28,90 @@ export class ProjectsService {
   constructor(
     @Inject(DB) private readonly db: Db,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
+
+  /** Spec 009: configurações de governança do projeto. */
+  async settings(projectId: string): Promise<ProjectSettings> {
+    const row = await this.db
+      .selectFrom('projects')
+      .select([
+        'require_publish_approval',
+        'executor_can_read_data',
+        'save_execution_data',
+        'retention',
+      ])
+      .where('id', '=', projectId)
+      .executeTakeFirst();
+    if (!row) throw new NotFoundError('Projeto não encontrado');
+    const retention = (row.retention ?? {}) as StoredRetention;
+    const defaults = this.config.governance.retention;
+    return {
+      requirePublishApproval: row.require_publish_approval,
+      executorCanReadData: row.executor_can_read_data,
+      saveExecutionData: row.save_execution_data,
+      retention: {
+        dataDays: retention.dataDays ?? null,
+        metadataDays: retention.metadataDays ?? null,
+      },
+      effectiveRetention: {
+        dataDays: retention.dataDays ?? defaults.dataDays,
+        metadataDays: retention.metadataDays ?? defaults.metadataDays,
+      },
+    };
+  }
+
+  /** Só os campos enviados mudam; a mudança é auditada com o antes e o depois. */
+  async updateSettings(
+    ctx: AuditContext,
+    projectId: string,
+    update: ProjectSettingsUpdate,
+  ): Promise<ProjectSettings> {
+    const before = await this.settings(projectId);
+    const retention = {
+      dataDays:
+        update.retention?.dataDays === undefined
+          ? before.retention.dataDays
+          : update.retention.dataDays,
+      metadataDays:
+        update.retention?.metadataDays === undefined
+          ? before.retention.metadataDays
+          : update.retention.metadataDays,
+    };
+    const defaults = this.config.governance.retention;
+    if (
+      (retention.dataDays ?? defaults.dataDays) > (retention.metadataDays ?? defaults.metadataDays)
+    ) {
+      throw new UnprocessableError(
+        'A retenção dos dados não pode ser maior que a das execuções (metadados)',
+      );
+    }
+    await this.db.transaction().execute(async (trx) => {
+      await trx
+        .updateTable('projects')
+        .set({
+          ...(update.requirePublishApproval !== undefined && {
+            require_publish_approval: update.requirePublishApproval,
+          }),
+          ...(update.executorCanReadData !== undefined && {
+            executor_can_read_data: update.executorCanReadData,
+          }),
+          ...(update.saveExecutionData !== undefined && {
+            save_execution_data: update.saveExecutionData,
+          }),
+          retention: JSON.stringify(retention),
+        })
+        .where('id', '=', projectId)
+        .execute();
+      await this.audit.record(trx, ctx, {
+        action: 'project.settings',
+        entityType: 'project',
+        entityId: projectId,
+        details: { from: before, changes: update },
+      });
+    });
+    return this.settings(projectId);
+  }
 
   /** Administrador global vê todos; os demais, só os projetos dos quais são membros. */
   async list(user: AuthenticatedUser): Promise<ProjectSummary[]> {
@@ -27,7 +124,7 @@ export class ProjectsService {
       )
       .leftJoin('roles', 'roles.id', 'project_members.role_id')
       .select(['projects.id', 'projects.name', 'projects.created_at', 'roles.name as role'])
-      .$if(!user.isAdmin, (qb) => qb.where('project_members.user_id', '=', user.id))
+      .$if(!seesAllProjects(user), (qb) => qb.where('project_members.user_id', '=', user.id))
       .orderBy('projects.name')
       .execute();
     return rows.map((r) => ({
@@ -135,6 +232,7 @@ export class ProjectsService {
         'users.name',
         'roles.name as role',
         'project_members.created_at',
+        'project_members.origin',
       ])
       .where('project_members.project_id', '=', projectId)
       .orderBy('users.email')
@@ -145,6 +243,7 @@ export class ProjectsService {
       name: r.name,
       role: r.role as RoleName,
       createdAt: iso(r.created_at),
+      origin: r.origin,
     }));
   }
 
@@ -176,7 +275,10 @@ export class ProjectsService {
       await trx
         .insertInto('project_members')
         .values({ project_id: projectId, user_id: userId, role_id: roleId })
-        .onConflict((oc) => oc.columns(['project_id', 'user_id']).doUpdateSet({ role_id: roleId }))
+        // Spec 009: ajuste manual vira vínculo `manual` (a sincronização do IdP não o toca mais).
+        .onConflict((oc) =>
+          oc.columns(['project_id', 'user_id']).doUpdateSet({ role_id: roleId, origin: 'manual' }),
+        )
         .execute();
       await this.audit.record(trx, ctx, {
         action: 'project.member.set',

@@ -1,6 +1,14 @@
+import type { VaultOptions } from '@olly/db';
 import { z } from 'zod';
 
 const LOG_LEVELS = ['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'] as const;
+
+const masterKey = z
+  .string()
+  .refine(
+    (v) => Buffer.from(v, 'base64').length === 32,
+    'deve ser uma chave de 32 bytes em base64',
+  );
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('production'),
@@ -17,6 +25,8 @@ const envSchema = z.object({
   // Grupo do IdP que concede administração global (spec 002). O nome institucional depende
   // da ADR-0005; o padrão é o grupo do IdP de desenvolvimento.
   OIDC_ADMIN_GROUP: z.string().min(1).default('admin'),
+  // Spec 009 (FR-005): claim com os grupos do usuário no access token.
+  OIDC_GROUPS_CLAIM: z.string().min(1).default('groups'),
   // Spec 003: sandbox de expressões e log de execuções.
   OLLY_EXPRESSION_TIMEOUT_MS: z.coerce.number().int().min(1).max(10_000).default(100),
   OLLY_ISOLATE_MEMORY_MB: z.coerce.number().int().min(8).max(4096).default(128),
@@ -29,14 +39,22 @@ const envSchema = z.object({
     )
     .default('America/Sao_Paulo'),
   // Spec 004: credenciais, HTTP e Postgres.
-  OLLY_KEY_PROVIDER: z.enum(['env']).default('env'),
-  // Provedor `env`: KEK base64 de 32 bytes. Obrigatória (a API não sobe sem ela).
-  OLLY_MASTER_KEY: z
-    .string()
-    .refine(
-      (v) => Buffer.from(v, 'base64').length === 32,
-      'deve ser uma chave de 32 bytes em base64',
-    ),
+  // Spec 009 (FR-001): `vault` = Vault Transit (ADR-0007, pendente); `env` = desenvolvimento.
+  OLLY_KEY_PROVIDER: z.enum(['env', 'vault']).default('env'),
+  // Provedor `env`: KEK base64 de 32 bytes, obrigatória. Com `vault`, só enquanto houver
+  // credenciais cifradas pelo `env` a migrar (FR-003).
+  OLLY_MASTER_KEY: masterKey.optional(),
+  OLLY_MASTER_KEY_VERSION: z.coerce.number().int().min(1).default(1),
+  // Rotação do `env` (FR-002): chaves anteriores, `versão:base64` separadas por vírgula.
+  OLLY_MASTER_KEYS_PREVIOUS: z.string().default(''),
+  OLLY_VAULT_ADDR: z.url({ protocol: /^https?$/ }).optional(),
+  OLLY_VAULT_AUTH: z.enum(['approle', 'kubernetes']).default('approle'),
+  OLLY_VAULT_ROLE_ID: z.string().min(1).optional(),
+  OLLY_VAULT_SECRET_ID: z.string().min(1).optional(),
+  OLLY_VAULT_K8S_ROLE: z.string().min(1).optional(),
+  OLLY_VAULT_TRANSIT_MOUNT: z.string().min(1).default('transit'),
+  OLLY_VAULT_TRANSIT_KEY: z.string().min(1).default('olly-credentials'),
+  OLLY_VAULT_NAMESPACE: z.string().min(1).optional(),
   OLLY_HTTP_ALLOWLIST: z.string().default(''),
   OLLY_HTTP_MAX_RESPONSE_MB: z.coerce.number().positive().max(1024).default(50),
   OLLY_PG_POOL_MAX: z.coerce.number().int().min(1).max(100).default(5),
@@ -76,6 +94,15 @@ const envSchema = z.object({
   // Spec 007: teto global de iterações por laço e endereço público (link no workflow de erro).
   OLLY_MAX_LOOP_ITERATIONS: z.coerce.number().int().min(1).max(1_000_000).default(10_000),
   OLLY_PUBLIC_URL: z.url({ protocol: /^https?$/ }).default('http://localhost:5173'),
+  // Spec 009: governança e LGPD. Dias e bytes.
+  OLLY_USER_INACTIVE_DAYS: z.coerce.number().int().min(1).max(3650).default(90),
+  OLLY_INLINE_DATA_LIMIT: z.coerce.number().int().min(1024).default(262_144),
+  // Salt da ação `hash` do mascaramento, por instalação. Obrigatório em produção.
+  OLLY_MASKING_SALT: z.string().min(16).optional(),
+  OLLY_RETENTION_DATA_DAYS: z.coerce.number().int().min(1).max(36_500).default(30),
+  OLLY_RETENTION_METADATA_DAYS: z.coerce.number().int().min(1).max(36_500).default(365),
+  // Job diário de retenção, partições e inativação (cron, no fuso OLLY_TIMEZONE).
+  OLLY_MAINTENANCE_CRON: z.string().min(9).default('0 3 * * *'),
 });
 
 export interface AppConfig {
@@ -86,7 +113,14 @@ export interface AppConfig {
   trustProxy?: boolean;
   databaseUrl: string;
   redisUrl: string;
-  oidc: { issuerUrl: string; discoveryUrl?: string; audience: string; adminGroup: string };
+  oidc: {
+    issuerUrl: string;
+    discoveryUrl?: string;
+    audience: string;
+    adminGroup: string;
+    /** Claim de grupos (spec 009, FR-005); padrão `groups`. */
+    groupsClaim?: string;
+  };
   execution: {
     expressionTimeoutMs: number;
     isolateMemoryMb: number;
@@ -101,7 +135,22 @@ export interface AppConfig {
   };
   /** Endereço público do Olly Flow (links como `execution.url` do workflow de erro). */
   publicUrl: string;
-  credentials: { keyProvider: 'env'; masterKey: string };
+  credentials: {
+    keyProvider: 'env' | 'vault';
+    masterKey?: string;
+    masterKeyVersion?: number;
+    previousMasterKeys?: Record<number, string>;
+    vault?: VaultOptions;
+  };
+  /** Spec 009: governança e LGPD. */
+  governance: {
+    userInactiveDays: number;
+    /** Dados de nó acima disto (bytes de JSON) vão para o object storage (FR-013). */
+    inlineDataLimit: number;
+    maskingSalt: string;
+    retention: { dataDays: number; metadataDays: number };
+    maintenanceCron: string;
+  };
   http: { allowlist: string[]; maxResponseBytes: number };
   postgres: { poolMax: number };
   dispatcher: { maxConcurrent: number };
@@ -152,6 +201,39 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     throw new ConfigError(parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`));
   }
   const e = parsed.data;
+  const issues: string[] = [];
+  if (e.OLLY_KEY_PROVIDER === 'env' && !e.OLLY_MASTER_KEY) {
+    issues.push('OLLY_MASTER_KEY: obrigatória com OLLY_KEY_PROVIDER=env');
+  }
+  if (e.OLLY_KEY_PROVIDER === 'vault') {
+    if (!e.OLLY_VAULT_ADDR) issues.push('OLLY_VAULT_ADDR: obrigatória com OLLY_KEY_PROVIDER=vault');
+    if (e.OLLY_VAULT_AUTH === 'approle' && (!e.OLLY_VAULT_ROLE_ID || !e.OLLY_VAULT_SECRET_ID)) {
+      issues.push(
+        'OLLY_VAULT_ROLE_ID/OLLY_VAULT_SECRET_ID: obrigatórias com OLLY_VAULT_AUTH=approle',
+      );
+    }
+    if (e.OLLY_VAULT_AUTH === 'kubernetes' && !e.OLLY_VAULT_K8S_ROLE) {
+      issues.push('OLLY_VAULT_K8S_ROLE: obrigatória com OLLY_VAULT_AUTH=kubernetes');
+    }
+  }
+  if (e.NODE_ENV === 'production' && !e.OLLY_MASKING_SALT) {
+    issues.push('OLLY_MASKING_SALT: obrigatório em produção (mínimo 16 caracteres)');
+  }
+  const previousMasterKeys: Record<number, string> = {};
+  for (const entry of e.OLLY_MASTER_KEYS_PREVIOUS.split(',')
+    .map((x) => x.trim())
+    .filter(Boolean)) {
+    const [version, key] = [
+      entry.slice(0, entry.indexOf(':')),
+      entry.slice(entry.indexOf(':') + 1),
+    ];
+    if (!/^\d+$/.test(version) || !masterKey.safeParse(key).success) {
+      issues.push('OLLY_MASTER_KEYS_PREVIOUS: use versão:base64 (32 bytes), separadas por vírgula');
+      break;
+    }
+    previousMasterKeys[Number(version)] = key;
+  }
+  if (issues.length > 0) throw new ConfigError(issues);
   return {
     env: e.NODE_ENV,
     logLevel: e.LOG_LEVEL,
@@ -165,6 +247,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
       ...(e.OIDC_DISCOVERY_URL && { discoveryUrl: e.OIDC_DISCOVERY_URL.replace(/\/+$/, '') }),
       audience: e.OIDC_AUDIENCE,
       adminGroup: e.OIDC_ADMIN_GROUP,
+      groupsClaim: e.OIDC_GROUPS_CLAIM,
     },
     execution: {
       expressionTimeoutMs: e.OLLY_EXPRESSION_TIMEOUT_MS,
@@ -176,7 +259,35 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
       maxLoopIterations: e.OLLY_MAX_LOOP_ITERATIONS,
     },
     publicUrl: e.OLLY_PUBLIC_URL.replace(/\/+$/, ''),
-    credentials: { keyProvider: e.OLLY_KEY_PROVIDER, masterKey: e.OLLY_MASTER_KEY },
+    credentials: {
+      keyProvider: e.OLLY_KEY_PROVIDER,
+      ...(e.OLLY_MASTER_KEY && { masterKey: e.OLLY_MASTER_KEY }),
+      masterKeyVersion: e.OLLY_MASTER_KEY_VERSION,
+      previousMasterKeys,
+      ...(e.OLLY_VAULT_ADDR && {
+        vault: {
+          address: e.OLLY_VAULT_ADDR,
+          auth: e.OLLY_VAULT_AUTH,
+          ...(e.OLLY_VAULT_ROLE_ID && { roleId: e.OLLY_VAULT_ROLE_ID }),
+          ...(e.OLLY_VAULT_SECRET_ID && { secretId: e.OLLY_VAULT_SECRET_ID }),
+          ...(e.OLLY_VAULT_K8S_ROLE && { kubernetesRole: e.OLLY_VAULT_K8S_ROLE }),
+          transitMount: e.OLLY_VAULT_TRANSIT_MOUNT,
+          transitKey: e.OLLY_VAULT_TRANSIT_KEY,
+          ...(e.OLLY_VAULT_NAMESPACE && { namespace: e.OLLY_VAULT_NAMESPACE }),
+        },
+      }),
+    },
+    governance: {
+      userInactiveDays: e.OLLY_USER_INACTIVE_DAYS,
+      inlineDataLimit: e.OLLY_INLINE_DATA_LIMIT,
+      // Fora de produção, um salt fixo de desenvolvimento (hash reproduzível nos testes).
+      maskingSalt: e.OLLY_MASKING_SALT ?? 'olly-dev-masking-salt',
+      retention: {
+        dataDays: e.OLLY_RETENTION_DATA_DAYS,
+        metadataDays: e.OLLY_RETENTION_METADATA_DAYS,
+      },
+      maintenanceCron: e.OLLY_MAINTENANCE_CRON,
+    },
     http: {
       allowlist: e.OLLY_HTTP_ALLOWLIST.split(',')
         .map((x) => x.trim())

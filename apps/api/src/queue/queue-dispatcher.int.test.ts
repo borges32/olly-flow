@@ -48,7 +48,9 @@ const webhook = (path: string, responseMode: string): WorkflowDefinition => ({
 
 async function publish(definition: WorkflowDefinition): Promise<void> {
   const wf = await createWorkflow(editor, project.id, definition);
-  const res = await editor.call('POST', `/workflows/${wf.id}/publish`, {});
+  const res = await editor.call('POST', `/workflows/${wf.id}/publish`, {
+    message: 'Publicação de teste',
+  });
   expect(res.statusCode).toBe(200);
 }
 

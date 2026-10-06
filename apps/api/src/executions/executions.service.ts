@@ -13,7 +13,6 @@ import {
   buildExpressionData,
   collectInputs,
   validateWorkflow,
-  type SourceRef,
 } from '@olly/engine';
 import { exposedEnv, type ExpressionEvaluator } from '@olly/expressions';
 import type { NodeRegistry } from '@olly/nodes';
@@ -24,7 +23,6 @@ import type {
   ExpressionPreviewResponse,
   Item,
   NodeExecutionStatus,
-  NodeOutput,
   QueueStats,
   TestRunResponse,
   WorkflowDefinition,
@@ -43,6 +41,9 @@ import { DB } from '../core/tokens.js';
 import { EXPRESSION_EVALUATOR } from '../expressions/expressions.module.js';
 import { NODE_REGISTRY } from '../node-types/node-types.module.js';
 import { hasProjectPermission } from '../rbac/ability.factory.js';
+import { BINARY_STORAGE } from '../binary/binary.module.js';
+import type { S3BinaryStorage } from '../binary/s3-binary-store.js';
+import { readNodeData } from './node-data.js';
 import { ExecutionDispatcher } from './dispatcher.js';
 import type { ExecutionJob } from './execution-job.js';
 import type { ListExecutionsQuery, PreviewBody, TestRunBody } from './executions.schemas.js';
@@ -77,6 +78,7 @@ export class ExecutionsService implements OnModuleInit, OnModuleDestroy {
     @Inject(EXPRESSION_EVALUATOR) private readonly evaluator: ExpressionEvaluator,
     @Inject(ExecutionDispatcher) private readonly dispatcher: ExecutionDispatcher,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(BINARY_STORAGE) private readonly storage: S3BinaryStorage | null,
   ) {}
 
   onModuleInit(): void {
@@ -308,11 +310,12 @@ export class ExecutionsService implements OnModuleInit, OnModuleDestroy {
    * paginadas por cursor (`started_at`, `id`), mais recentes primeiro.
    */
   async list(user: AuthenticatedUser, query: ListExecutionsQuery): Promise<ExecutionList> {
-    const allowed = user.isAdmin
-      ? null
-      : Object.entries(user.permissions.projects)
-          .filter(([, perms]) => perms.includes('execution:read'))
-          .map(([id]) => id);
+    const allowed =
+      user.isAdmin || user.permissions.global.includes('execution:read')
+        ? null
+        : Object.entries(user.permissions.projects)
+            .filter(([, perms]) => perms.includes('execution:read'))
+            .map(([id]) => id);
     if (allowed?.length === 0) return { items: [], nextCursor: null };
     if (query.projectId && allowed && !allowed.includes(query.projectId)) {
       return { items: [], nextCursor: null };
@@ -425,23 +428,29 @@ export class ExecutionsService implements OnModuleInit, OnModuleDestroy {
       error: execution.error as ExecutionDetail['error'],
       dataRedacted: !canReadData,
       definition: (execution.definition as WorkflowDefinition | null) ?? null,
-      nodes: nodes.map((n) => ({
-        nodeId: n.node_id,
-        nodeName: n.node_name,
-        runIndex: n.run_index,
-        status: n.status as NodeExecutionStatus,
-        startedAt: n.started_at.toISOString(),
-        finishedAt: iso(n.finished_at),
-        itemsIn: n.items_in,
-        itemsOut: n.items_out,
-        pinned: n.pinned,
-        reused: n.reused,
-        dataTruncated: n.data_truncated,
-        input: canReadData ? (n.input_data as Record<string, Item[]> | null) : null,
-        output: canReadData ? (n.output_data as NodeOutput | null) : null,
-        console: canReadData ? (n.console as string[] | null) : null,
-        error: n.error as { name: string; message: string } | null,
-      })),
+      nodes: await Promise.all(
+        nodes.map(async (n) => {
+          // Spec 009, FR-013: dados no object storage são lidos de forma transparente.
+          const data = canReadData ? await readNodeData(n, this.storage) : null;
+          return {
+            nodeId: n.node_id,
+            nodeName: n.node_name,
+            runIndex: n.run_index,
+            status: n.status as NodeExecutionStatus,
+            startedAt: n.started_at.toISOString(),
+            finishedAt: iso(n.finished_at),
+            itemsIn: n.items_in,
+            itemsOut: n.items_out,
+            pinned: n.pinned,
+            reused: n.reused,
+            dataTruncated: n.data_truncated,
+            input: data?.input ?? null,
+            output: data?.output ?? null,
+            console: canReadData ? (n.console as string[] | null) : null,
+            error: n.error as { name: string; message: string } | null,
+          };
+        }),
+      ),
     };
   }
 
@@ -473,19 +482,24 @@ export class ExecutionsService implements OnModuleInit, OnModuleDestroy {
       if (execution?.workflow_id !== workflowId) throw new NotFoundError('Execução não encontrada');
       const rows = await this.db
         .selectFrom('node_executions')
-        .select(['node_id', 'status', 'input_data', 'input_sources', 'output_data'])
+        .select(['node_id', 'status', 'input_data', 'input_sources', 'output_data', 'data_ref'])
         .where('execution_id', '=', body.executionId)
         // Em laços (spec 007), vale a última iteração de cada nó.
         .orderBy('run_index')
         .execute();
       view = new RecordedRun(
-        rows.map((r) => ({
-          nodeId: r.node_id,
-          status: r.status,
-          inputs: r.input_data as Record<string, Item[]> | null,
-          inputSources: r.input_sources as Record<string, SourceRef[]> | null,
-          output: r.output_data as NodeOutput | null,
-        })),
+        await Promise.all(
+          rows.map(async (r) => {
+            const data = await readNodeData(r, this.storage);
+            return {
+              nodeId: r.node_id,
+              status: r.status,
+              inputs: data.input,
+              inputSources: data.inputSources,
+              output: data.output,
+            };
+          }),
+        ),
       );
     }
     // Nó que não rodou nessa execução: usa o que os pais produziram.

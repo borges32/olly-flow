@@ -48,7 +48,6 @@ export async function startTestContext(
     host: '127.0.0.1',
     databaseUrl: database.connectionString,
     redisUrl: redis.getConnectionUrl(),
-    oidc: { issuerUrl: issuer.issuerUrl, audience: AUDIENCE, adminGroup: 'admin' },
     execution: {
       // Folgado: com testes em paralelo, CPU disputada não pode virar timeout de expressão.
       expressionTimeoutMs: 1000,
@@ -62,6 +61,13 @@ export async function startTestContext(
     },
     publicUrl: 'http://localhost:5173',
     credentials: { keyProvider: 'env', masterKey: randomBytes(32).toString('base64') },
+    governance: {
+      userInactiveDays: 90,
+      inlineDataLimit: 262_144,
+      maskingSalt: 'salt-de-teste-0123456789',
+      retention: { dataDays: 30, metadataDays: 365 },
+      maintenanceCron: '0 3 * * *',
+    },
     http: { allowlist: [], maxResponseBytes: 50 * 1024 * 1024 },
     postgres: { poolMax: 5 },
     dispatcher: { maxConcurrent: 10 },
@@ -84,6 +90,13 @@ export async function startTestContext(
     },
     code: { timeoutMs: 30_000, memoryMb: 128 },
     ...overrides,
+    // Sobrescrita parcial do OIDC (ex.: claim de grupos, spec 009): o emissor é o do teste.
+    oidc: {
+      issuerUrl: issuer.issuerUrl,
+      audience: AUDIENCE,
+      adminGroup: 'admin',
+      ...overrides.oidc,
+    },
   };
   const app = await createApp(config, options);
   const workers: WorkerHandle[] = [];

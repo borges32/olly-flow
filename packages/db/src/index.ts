@@ -3,3 +3,5 @@ export * from './client.js';
 export * from './migrator.js';
 export * from './seed.js';
 export * from './crypto.js';
+export * from './vault.js';
+export * from './keyring.js';

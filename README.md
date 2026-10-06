@@ -34,6 +34,8 @@ As execuções passam pela fila (Redis/BullMQ) e são executadas pelo **worker**
 
 > **`.env` criado antes da spec 004?** Acrescente `OLLY_MASTER_KEY` (copie do `.env.example` ou gere com `openssl rand -base64 32`): a API não sobe sem a chave mestra das credenciais. Ver [docs/credenciais.md](docs/credenciais.md).
 
+> **Spec 009 (governança e LGPD):** o compose sobe também um **Vault** de desenvolvimento (`:8200`). Para usá-lo como cofre da chave mestra, veja [docs/governanca.md](docs/governanca.md); mascaramento, política de dados e retenção estão em [docs/lgpd.md](docs/lgpd.md). Em produção, `OLLY_MASKING_SALT` é obrigatório. A publicação passa a exigir uma mensagem e pode exigir aprovação (menu **Aprovações**).
+
 Abra <http://localhost:5173> e entre com um usuário de teste (senha `olly123`).
 
 Webhooks publicados respondem em `http://localhost:5173/webhook/<caminho>` (e `/webhook-test/<caminho>` enquanto o editor escuta), pelo proxy do frontend; direto na API, em `http://localhost:3000/webhook/<caminho>`. Ver [docs/nos/trigger.webhook.md](docs/nos/trigger.webhook.md). Só `admin@olly.local` (grupo `admin` do IdP) tem acesso global; os demais precisam ser adicionados a um projeto em **Administração** para ver e editar workflows.

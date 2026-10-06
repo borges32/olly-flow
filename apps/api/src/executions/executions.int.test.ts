@@ -27,7 +27,7 @@ const definition: WorkflowDefinition = {
       type: 'data.set',
       name: 'Montar',
       params: {
-        fields: [{ name: 'cpf', type: 'string', value: '123.456.789-00' }],
+        fields: [{ name: 'pedido', type: 'string', value: 'PED-2026-0042' }],
         includeOtherFields: true,
       },
       position: [200, 0],
@@ -153,8 +153,8 @@ describe('spec 005 — FR-014: dados de execução exigem execution:readData', (
     ).json<ExecutionDetail>();
     expect(full.dataRedacted).toBe(false);
     expect(full.definition?.nodes).toHaveLength(2);
-    expect(full.nodes.find((n) => n.nodeId === 's')?.output?.main?.[0]?.json.cpf).toBe(
-      '123.456.789-00',
+    expect(full.nodes.find((n) => n.nodeId === 's')?.output?.main?.[0]?.json.pedido).toBe(
+      'PED-2026-0042',
     );
     for (const user of [executor, viewer]) {
       const detail = (
@@ -165,20 +165,25 @@ describe('spec 005 — FR-014: dados de execução exigem execution:readData', (
       expect(
         detail.nodes.every((n) => n.input === null && n.output === null && n.console === null),
       ).toBe(true);
-      expect(JSON.stringify(detail.nodes)).not.toContain('123.456.789-00');
+      expect(JSON.stringify(detail.nodes)).not.toContain('PED-2026-0042');
     }
   });
 
   it('FR-014: o preview de expressão ignora a execução para quem não tem execution:readData', async () => {
     const [last] = (await list(editor, `?workflowId=${wfA.id}`)).items;
-    const body = { definition, nodeId: 's', expression: '={{ $json.cpf }}', executionId: last?.id };
+    const body = {
+      definition,
+      nodeId: 's',
+      expression: '={{ $json.pedido }}',
+      executionId: last?.id,
+    };
     const asEditor = await editor.call('POST', `/workflows/${wfA.id}/expressions/preview`, {
       ...body,
-      expression: "={{ $('Montar').first().json.cpf }}",
+      expression: "={{ $('Montar').first().json.pedido }}",
     });
     expect(asEditor.json<ExpressionPreviewResponse>()).toEqual({
       ok: true,
-      value: '123.456.789-00',
+      value: 'PED-2026-0042',
     });
     const asExecutor = await executor.call('POST', `/workflows/${wfA.id}/expressions/preview`, {
       ...body,
@@ -217,7 +222,7 @@ describe('spec 005 — FR-014: dados de execução exigem execution:readData', (
       });
     const [forEditor, forExecutor] = [nextNode(editorSocket), nextNode(executorSocket)];
     await testRun(editor, wfA);
-    expect((await forEditor).data.output.main?.[0]?.json.cpf).toBe('123.456.789-00');
+    expect((await forEditor).data.output.main?.[0]?.json.pedido).toBe('PED-2026-0042');
     const redacted = await forExecutor;
     expect(redacted).toMatchObject({
       dataRedacted: true,

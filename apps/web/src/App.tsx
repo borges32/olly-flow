@@ -8,7 +8,11 @@ import { AppLayout } from '@/components/layout/app-layout';
 import { ThemeProvider } from '@/components/theme/theme-provider';
 import { Toaster } from '@/components/ui/toaster';
 import { EditorPage } from '@/editor/editor-page';
+import { AdminAuditPage } from '@/pages/admin-audit-page';
+import { AdminMaskingPage } from '@/pages/admin-masking-page';
 import { AdminPage } from '@/pages/admin-page';
+import { AdminSsoPage } from '@/pages/admin-sso-page';
+import { ApprovalsPage } from '@/pages/approvals-page';
 import { AuthCallbackPage } from '@/pages/auth-callback-page';
 import { CredentialsPage } from '@/pages/credentials-page';
 import { ExecutionPage } from '@/pages/execution-page';
@@ -41,6 +45,11 @@ const router = createBrowserRouter([
           { path: 'executions/:id', element: <ExecutionPage /> },
           { path: 'credentials', element: <CredentialsPage /> },
           { path: 'admin', element: <AdminPage /> },
+          // Spec 009: SSO, mascaramento, auditoria e aprovações.
+          { path: 'admin/sso', element: <AdminSsoPage /> },
+          { path: 'admin/masking', element: <AdminMaskingPage /> },
+          { path: 'admin/audit', element: <AdminAuditPage /> },
+          { path: 'approvals', element: <ApprovalsPage /> },
           { path: '*', element: <NotFoundPage /> },
         ],
       },

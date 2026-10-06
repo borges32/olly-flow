@@ -2,9 +2,9 @@
 
 | Campo | Valor |
 |---|---|
-| **Status** | Aprovada |
+| **Status** | Implementada |
 | **Fase** | 3 — IA e governança |
-| **Depende de** | 008 |
+| **Depende de** |  |
 | **Requisitos de produto** | PR-19, PR-18, PR-08 (SSO), PR-07 (retenção) |
 | **ADRs relacionadas** | 0005, 0007 |
 
@@ -121,3 +121,7 @@ MCP, AI Agent, notificações por e-mail e Kubernetes.
 |---|---|---|
 | 03/10/2026 | Criação a partir do prompt da Sprint 8 | Migração para SDD |
 | 03/10/2026 | Permissões RBAC explicitadas no plano (seção e tarefa T089), sem mudança de requisito | Decisão humana sobre permissões por spec |
+| 05/10/2026 | Implementada antes da spec 008, por decisão do PO (dependência removida do cabeçalho) | Priorização humana |
+| 05/10/2026 | FR-012: a política de dados vale para as execuções de **produção**; execuções de teste guardam sempre os dados (mascarados) e seguem a retenção | O editor depende dos dados de teste (pré-visualização, execução parcial); como no N8N, que separa "salvar execuções manuais" |
+| 05/10/2026 | FR-011: um pedido pendente por workflow; o autor pode cancelar o próprio pedido (não aprova nem rejeita) | Evita pedidos concorrentes para a mesma publicação |
+| 05/10/2026 | FR-015: a execução parcial do editor não reaproveita dados alterados pelo mascaramento ou descartados pela política; o nó executa de novo | Garante que valores mascarados nunca entrem em outro nó |

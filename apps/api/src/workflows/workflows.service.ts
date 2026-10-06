@@ -6,7 +6,9 @@ import type {
   Paginated,
   WorkflowDefinition,
   WorkflowDetail,
+  WorkflowDiff,
   WorkflowSummary,
+  WorkflowVersionDetail,
   WorkflowVersionSummary,
 } from '@olly/shared-types';
 import { sql } from 'kysely';
@@ -23,6 +25,7 @@ import { hasProjectPermission } from '../rbac/ability.factory.js';
 import { WebhookRegistry } from '../webhooks/webhook-registry.js';
 import { DB } from '../core/tokens.js';
 import { NODE_REGISTRY } from '../node-types/node-types.module.js';
+import { diffDefinitions } from './diff.js';
 import type {
   CreateWorkflowBody,
   ListWorkflowsQuery,
@@ -295,6 +298,7 @@ export class WorkflowsService {
           workflow_id: id,
           version: updated.version,
           definition: JSON.stringify(body.definition),
+          message: body.message ?? null,
           created_by: ctx.userId,
         })
         .execute();
@@ -306,6 +310,7 @@ export class WorkflowsService {
           version: updated.version,
           name: updated.name,
           nodes: body.definition.nodes.length,
+          ...(body.message && { message: body.message }),
         },
       });
     });
@@ -356,5 +361,67 @@ export class WorkflowsService {
       createdByName: r.created_by_name,
       message: r.message,
     }));
+  }
+
+  /** Spec 009, FR-008: uma versão com a definição completa. */
+  async version(id: string, version: number): Promise<WorkflowVersionDetail> {
+    const row = await this.db
+      .selectFrom('workflow_versions')
+      .innerJoin('workflows', 'workflows.id', 'workflow_versions.workflow_id')
+      .leftJoin('users', 'users.id', 'workflow_versions.created_by')
+      .select([
+        'workflow_versions.version',
+        'workflow_versions.created_at',
+        'workflow_versions.created_by',
+        'workflow_versions.message',
+        'workflow_versions.definition',
+        'users.name as created_by_name',
+      ])
+      .where('workflow_versions.workflow_id', '=', id)
+      .where('workflow_versions.version', '=', version)
+      .where('workflows.deleted_at', 'is', null)
+      .executeTakeFirst();
+    if (!row) throw new NotFoundError(`Versão ${version} não encontrada`);
+    return {
+      version: row.version,
+      createdAt: iso(row.created_at),
+      createdBy: row.created_by,
+      createdByName: row.created_by_name,
+      message: row.message,
+      definition: row.definition as WorkflowDefinition,
+    };
+  }
+
+  /** Spec 009, FR-008: diff estruturado entre duas versões (padrão do destino: a atual). */
+  async diff(id: string, from: number, to?: number): Promise<WorkflowDiff> {
+    const target = to ?? (await this.get(id)).version;
+    const [a, b] = await Promise.all([this.version(id, from), this.version(id, target)]);
+    return diffDefinitions(a.version, a.definition, b.version, b.definition);
+  }
+
+  /**
+   * Spec 009, FR-008: restaura uma versão como **nova** versão (o histórico nunca é reescrito),
+   * com as mesmas validações de um salvamento.
+   */
+  async restore(
+    ctx: AuditContext,
+    user: AuthenticatedUser,
+    id: string,
+    version: number,
+    message?: string,
+  ): Promise<WorkflowDetail> {
+    const [current, old] = await Promise.all([this.get(id), this.version(id, version)]);
+    const restored = await this.save(ctx, user, id, {
+      definition: old.definition,
+      baseVersion: current.version,
+      message: message ?? `Restaurada da versão ${version}`,
+    });
+    await this.audit.record(this.db, ctx, {
+      action: 'workflow.restore',
+      entityType: 'workflow',
+      entityId: id,
+      details: { from: version, version: restored.version },
+    });
+    return restored;
   }
 }

@@ -114,6 +114,7 @@
 
 - Novas tabelas `group_role_mappings`, `publish_requests` e `masking_rules`.
 - Novas colunas `project_members.origin`, `users.last_login_at`, `workflow_versions.message`, `projects.require_publish_approval`, `projects.executor_can_read_data`, `projects.retention` (JSONB) e `node_executions.data_ref`.
+- Acrescentadas na implementação (ver Histórico): `projects.save_execution_data`, `node_executions.data_masked` e `credentials.key_provider`. `workflow_versions.message` e `node_executions.data_ref` já existiam desde as specs 002/003.
 
 ## Configuração
 
@@ -124,7 +125,11 @@
 | `OIDC_GROUPS_CLAIM` | `groups` | Claim de grupos |
 | `OLLY_USER_INACTIVE_DAYS` | 90 | Inativação |
 | `OLLY_INLINE_DATA_LIMIT` | 262144 | Limite inline de dados |
-| `OLLY_MASKING_SALT` | — | Salt do hash |
+| `OLLY_MASKING_SALT` | — | Salt do hash (obrigatório em produção) |
+| `OLLY_MASTER_KEY_VERSION` / `OLLY_MASTER_KEYS_PREVIOUS` | 1 / — | Rotação do provedor `env` |
+| `OLLY_VAULT_TRANSIT_MOUNT`, `OLLY_VAULT_K8S_ROLE`, `OLLY_VAULT_NAMESPACE` | `transit` / — / — | Vault |
+| `OLLY_RETENTION_DATA_DAYS` / `OLLY_RETENTION_METADATA_DAYS` | 30 / 365 | Retenção padrão (pendente do DPO) |
+| `OLLY_MAINTENANCE_CRON` | `0 3 * * *` | Job diário |
 
 ## Decisões técnicas
 
@@ -173,3 +178,14 @@ Ao concluir, produzir `docs/governanca.md` e `docs/lgpd.md` e atualizar `docs/rb
 | Data | Alteração | Motivo |
 |---|---|---|
 | 03/10/2026 | Seção "Permissões RBAC" e tarefa T089 | Decisão humana: cada spec acrescenta e garante as permissões que cria |
+| 05/10/2026 | §1: `KeyProvider` com `id`, `wrap` devolvendo a versão (Vault: lida do ciphertext) e `currentKeyVersion` assíncrono; `KeyRing` com todos os provedores configurados (migração sem parada); coluna `credentials.key_provider` como checkpoint; `rewrap` recifra só a DEK. Vault via API HTTP (sem SDK). Compose com Vault em armazenamento de arquivo e unseal automático (o modo `-dev` perderia a chave ao reiniciar) | Rotação e migração idempotentes, sem downtime |
+| 05/10/2026 | §2: o login é registrado por `POST /auth/login` (chamado pelo frontend após o IdP); a sincronização dos grupos também ocorre quando um token novo traz outros grupos. Papel global por grupo é resolvido a cada requisição a partir do token (não cria vínculos). `GroupResolver` padrão lê a claim; o resolvedor do Entra (overage) aguarda a ADR-0005 | A API é servidor de recursos OIDC: não vê o login no IdP |
+| 05/10/2026 | §3: a mensagem de publicação vira a mensagem da versão quando ela não tem uma (sempre na auditoria) | Não reescrever o histórico |
+| 05/10/2026 | §4: um pedido pendente por workflow; o autor pode cancelar; o banco também impede autor = aprovador (`CHECK`); escopo RBAC `{ publishRequest }` | FR-011 |
+| 05/10/2026 | §5: coluna `projects.save_execution_data` (padrão do projeto); a política vale só para produção | FR-012 (spec, Histórico) |
+| 05/10/2026 | §6: só detectores embutidos e globs de campo (sem regex livre, risco de ReDoS); coluna `node_executions.data_masked` impede reaproveitar dados mascarados; cache das regras invalidado pelo Redis (`olly:masking-rules-changed`) | FR-015/FR-016 |
+| 05/10/2026 | §7: a remoção de metadados roda antes da de dados; metadados removidos por projeto e partições descartadas pela maior retenção; job no worker como *job scheduler* do BullMQ (fila `maintenance`) | Evita trabalho duplicado; respeita a retenção de cada projeto |
+| 05/10/2026 | §8: exportação por paginação por chave em lotes (sem `pg-query-stream`) | Mesma garantia de memória sem dependência nova |
+| 05/10/2026 | §9: a concessão condicional de `execution:readData` fica no `ProjectPermissionResolver` (e não na `AbilityFactory`) | `/me`, rotas e WebSocket veem a mesma permissão |
+| 05/10/2026 | `audit:read`, `user:manage` e as regras globais de mascaramento valem só no escopo da plataforma | A auditoria e os usuários são da plataforma, não de um projeto |
+| 05/10/2026 | §6: o mascarador percorre só objetos simples (de qualquer realm) e arrays, ignora referências cíclicas e oculta (`***`) um campo sensível cujo valor não vira JSON. Instâncias de classe ficam como estão | Correção: o pino entrega `{ res }` do pino-http cru ao `formatters.log`; percorrer o `ServerResponse` deixava a API em 100% de CPU, sem ficar saudável |

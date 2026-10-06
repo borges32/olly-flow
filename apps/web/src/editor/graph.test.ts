@@ -69,7 +69,8 @@ describe('spec 002 — FR-008: nomes únicos ao colar', () => {
 });
 
 describe('ícones do catálogo de nós', () => {
-  it('todo nó da plataforma tem ícone próprio no editor', async () => {
+  // Carrega o catálogo inteiro de nós: sob a suíte em paralelo (turbo), passa dos 5 s padrão.
+  it('todo nó da plataforma tem ícone próprio no editor', { timeout: 30_000 }, async () => {
     const { builtinNodes } = await import('@olly/nodes');
     const { KNOWN_ICONS } = await import('./node-icons');
     expect(builtinNodes.map((n) => n.icon).filter((icon) => !KNOWN_ICONS.includes(icon))).toEqual(

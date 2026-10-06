@@ -74,20 +74,29 @@ describe('spec 006 — FR-012: cota de execuções simultâneas por projeto', ()
       await startTestRun(editor, wf),
       await startTestRun(editor, wf),
     ];
-    await waitForStatus(editor, ids[0] ?? '', (s) => s === 'running');
-    await waitForStatus(editor, ids[1] ?? '', (s) => s === 'running');
-    await new Promise((r) => setTimeout(r, 500));
-    expect(await stats()).toEqual({ running: 2, queued: 1, limit: 2, customLimit: true });
-    expect((await waitForStatus(editor, ids[2] ?? '', () => true)).status).toBe('queued');
+    // Quaisquer duas rodam e a outra espera (a ordem entre jobs simultâneos não é garantida:
+    // quem não conseguiu vaga tenta de novo em instantes).
+    const deadline = Date.now() + 5000;
+    let current = await stats();
+    while (!(current.running === 2 && current.queued === 1) && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 50));
+      current = await stats();
+    }
+    expect(current).toEqual({ running: 2, queued: 1, limit: 2, customLimit: true });
+    await new Promise((r) => setTimeout(r, 300));
+    expect(await stats()).toMatchObject({ running: 2, queued: 1 });
     expect(server.peak()).toBe(2);
 
     const done = await Promise.all(ids.map((id) => waitForStatus(editor, id)));
     expect(done.map((d) => d.status)).toEqual(['success', 'success', 'success']);
-    // A 3ª só começou depois que uma das duas primeiras terminou.
-    const firstEnd = Math.min(
-      ...done.slice(0, 2).map((d) => Date.parse(d.nodes[1]?.finishedAt ?? '')),
+    // A que esperou só começou depois que uma das outras duas terminou.
+    const byStart = [...done].sort(
+      (a, b) => Date.parse(a.nodes[1]?.startedAt ?? '') - Date.parse(b.nodes[1]?.startedAt ?? ''),
     );
-    expect(Date.parse(done[2]?.nodes[1]?.startedAt ?? '')).toBeGreaterThanOrEqual(firstEnd - 50);
+    const firstEnd = Math.min(
+      ...byStart.slice(0, 2).map((d) => Date.parse(d.nodes[1]?.finishedAt ?? '')),
+    );
+    expect(Date.parse(byStart[2]?.nodes[1]?.startedAt ?? '')).toBeGreaterThanOrEqual(firstEnd - 50);
     expect(server.peak()).toBe(2);
     expect(await stats()).toMatchObject({ running: 0, queued: 0 });
   });

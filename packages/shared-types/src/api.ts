@@ -1,4 +1,5 @@
 import type { Permission, RoleName } from './rbac.js';
+import type { PublishApproval } from './governance.js';
 import type {
   ExecutionStatus,
   Item,
@@ -75,6 +76,8 @@ export interface ProjectMember {
   name: string | null;
   role: RoleName;
   createdAt: string;
+  /** `idp`: herdado de grupo do IdP, sincronizado no login (spec 009, FR-005). */
+  origin: 'manual' | 'idp';
 }
 
 export interface UserSummary {
@@ -129,6 +132,8 @@ export interface SaveWorkflowRequest {
   name?: string;
   definition: WorkflowDefinition;
   baseVersion: number;
+  /** Mensagem da versão (spec 009, FR-009): opcional ao salvar. */
+  message?: string;
 }
 
 /** `POST /workflows/:id/test-run` (spec 003, FR-011). Aceita a definição ainda não salva. */
@@ -289,6 +294,8 @@ export interface ExecutionEvents {
 export interface PublishRequest {
   /** Versão a publicar; padrão: a última salva. */
   version?: number;
+  /** Mensagem da publicação: obrigatória (spec 009, FR-009). */
+  message: string;
 }
 
 export interface PublishResponse {
@@ -296,6 +303,8 @@ export interface PublishResponse {
   active: boolean;
   webhooks: { method: string; path: string }[];
   warnings: WorkflowIssue[];
+  /** Projeto com aprovação (spec 009, FR-011): a publicação virou um pedido pendente. */
+  pendingApproval?: PublishApproval;
 }
 
 /** `POST /workflows/:id/listen-test-webhook` (spec 005, FR-007). */

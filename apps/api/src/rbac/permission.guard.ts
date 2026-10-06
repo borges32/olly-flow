@@ -2,7 +2,13 @@ import { Inject, Injectable, type CanActivate, type ExecutionContext } from '@ne
 import { Reflector } from '@nestjs/core';
 import { NotFoundError, PermissionDeniedError, UnauthenticatedError } from '../common/errors.js';
 import type { RequestWithUser } from '../auth/current-user.decorator.js';
-import { AbilityFactory, canGlobally, canInAnyProject, canInProject } from './ability.factory.js';
+import {
+  AbilityFactory,
+  canGlobally,
+  canInAnyProject,
+  canInProject,
+  seesAllProjects,
+} from './ability.factory.js';
 import {
   REQUIRED_PERMISSION,
   resourceOf,
@@ -47,7 +53,8 @@ export class PermissionGuard implements CanActivate {
       kind,
       typeof value === 'string' ? value : '',
     );
-    const isMember = projectId !== null && (user.isAdmin || projectId in user.permissions.projects);
+    const isMember =
+      projectId !== null && (seesAllProjects(user) || projectId in user.permissions.projects);
     if (!projectId || !isMember) throw new NotFoundError('Recurso não encontrado');
 
     request.projectId = projectId;

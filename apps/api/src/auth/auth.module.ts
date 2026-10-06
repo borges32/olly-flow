@@ -8,11 +8,13 @@ import { ResourceResolver } from '../rbac/resource-resolver.js';
 import { PERMISSION_RESOLVER, ProjectPermissionResolver } from './permission-resolver.js';
 import { OidcTokenVerifier } from './token-verifier.js';
 import { UserSyncService } from './user-sync.service.js';
+import { IdpGroupSync } from './idp-group-sync.js';
 
 @Module({
   providers: [
     OidcTokenVerifier,
     UserSyncService,
+    IdpGroupSync,
     Authenticator,
     AbilityFactory,
     ResourceResolver,
@@ -21,6 +23,13 @@ import { UserSyncService } from './user-sync.service.js';
     { provide: APP_GUARD, useClass: AuthGuard },
     { provide: APP_GUARD, useClass: PermissionGuard },
   ],
-  exports: [OidcTokenVerifier, Authenticator, AbilityFactory, ResourceResolver],
+  exports: [
+    OidcTokenVerifier,
+    Authenticator,
+    AbilityFactory,
+    ResourceResolver,
+    UserSyncService,
+    IdpGroupSync,
+  ],
 })
 export class AuthModule {}

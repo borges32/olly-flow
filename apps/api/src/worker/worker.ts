@@ -5,6 +5,7 @@ import { NestFactory } from '@nestjs/core';
 import { Logger } from 'nestjs-pino';
 import type { AppOptions } from '../app.module.js';
 import type { AppConfig } from '../config/config.js';
+import { MaintenanceScheduler } from '../maintenance/maintenance.scheduler.js';
 import { ExecutionProcessor, type WorkerStats } from './execution-processor.js';
 import { WorkerModule } from './worker.module.js';
 
@@ -67,6 +68,8 @@ export async function startWorker(
   app.useLogger(app.get(Logger));
   const processor = app.get(ExecutionProcessor);
   await processor.start();
+  const maintenance = app.get(MaintenanceScheduler);
+  await maintenance.start();
 
   const server = createServer((req, res) => {
     const stats = processor.stats;
@@ -91,6 +94,7 @@ export async function startWorker(
     close: (timeoutMs) =>
       (closing ??= (async () => {
         await processor.close(timeoutMs);
+        await maintenance.close();
         await new Promise((resolve) => server.close(resolve));
         await app.close();
       })()),

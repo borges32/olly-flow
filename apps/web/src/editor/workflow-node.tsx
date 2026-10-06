@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { useNodeActions } from './node-actions';
 import { NodeIcon } from './node-icon';
 import type { NodeRunView } from './store';
+import type { DiffStatus } from './version-diff';
 
 export type OllyNodeData = {
   node: WorkflowNode;
@@ -15,6 +16,14 @@ export type OllyNodeData = {
   /** Estado na última execução de teste (FR-012). */
   run?: NodeRunView;
   pinned: boolean;
+  /** Comparação de versões (spec 009, FR-010). */
+  diffStatus?: DiffStatus;
+};
+
+const DIFF_LABEL: Record<DiffStatus, string> = {
+  added: 'novo',
+  removed: 'removido',
+  changed: 'alterado',
 };
 
 function RunStatus({ run }: { run: NodeRunView }) {
@@ -90,7 +99,7 @@ export const WorkflowNodeView = memo(function WorkflowNodeView({
   data,
   selected,
 }: NodeProps<OllyFlowNode>) {
-  const { node, description, errors, run, pinned } = data;
+  const { node, description, errors, run, pinned, diffStatus } = data;
   const actions = useNodeActions();
   // Portas efetivas: dinâmicas (Merge, Switch) e de erro (spec 007).
   const { inputs, outputs } = description
@@ -102,6 +111,7 @@ export const WorkflowNodeView = memo(function WorkflowNodeView({
       data-testid={`node-${node.name}`}
       data-x={node.position[0]}
       data-y={node.position[1]}
+      data-diff={diffStatus}
       title={hasError ? errors.join('\n') : undefined}
       className={cn(
         'group relative flex min-w-44 items-center gap-2 rounded-lg border-2 bg-card px-3 py-2 text-card-foreground shadow-sm',
@@ -110,8 +120,23 @@ export const WorkflowNodeView = memo(function WorkflowNodeView({
         node.disabled && 'opacity-50',
         run?.status === 'error' && 'border-destructive',
         run?.status === 'running' && 'border-primary ring-2 ring-primary/30',
+        diffStatus === 'added' && 'border-emerald-500 ring-2 ring-emerald-500/30',
+        diffStatus === 'changed' && 'border-amber-500 ring-2 ring-amber-500/30',
+        diffStatus === 'removed' && 'border-dashed border-destructive opacity-60',
       )}
     >
+      {diffStatus && (
+        <span
+          className={cn(
+            'absolute -top-2.5 left-2 rounded-full border bg-card px-1.5 text-[10px] font-medium',
+            diffStatus === 'added' && 'border-emerald-500 text-emerald-700 dark:text-emerald-400',
+            diffStatus === 'changed' && 'border-amber-500 text-amber-700 dark:text-amber-400',
+            diffStatus === 'removed' && 'border-destructive text-destructive',
+          )}
+        >
+          {DIFF_LABEL[diffStatus]}
+        </span>
+      )}
       {inputs.map((port, i) => (
         <Handle
           key={port.name}

@@ -77,7 +77,9 @@ async function createPublished(
       definition,
     })
   ).json<WorkflowDetail>();
-  const res = await user.call('POST', `/workflows/${wf.id}/publish`, {});
+  const res = await user.call('POST', `/workflows/${wf.id}/publish`, {
+    message: 'Publicação de teste',
+  });
   return { wf, res };
 }
 
@@ -170,11 +172,17 @@ describe('spec 005 — HU-1: publicar e acionar por webhook', () => {
     expect((await call('versoes/1', signed({ q: 1, p: 1 }))).json()).toMatchObject({
       versao: 'publicada',
     });
-    await editor.call('POST', `/workflows/${wf.id}/publish`, { version: 2 });
+    await editor.call('POST', `/workflows/${wf.id}/publish`, {
+      version: 2,
+      message: 'Publicação de teste',
+    });
     expect((await call('versoes/1', signed({ q: 1, p: 1 }))).json()).toMatchObject({
       versao: 'rascunho',
     });
-    await editor.call('POST', `/workflows/${wf.id}/publish`, { version: 1 });
+    await editor.call('POST', `/workflows/${wf.id}/publish`, {
+      version: 1,
+      message: 'Publicação de teste',
+    });
     expect((await call('versoes/1', signed({ q: 1, p: 1 }))).json()).toMatchObject({
       versao: 'publicada',
     });
@@ -321,25 +329,47 @@ describe('spec 005 — HU-1: publicar e acionar por webhook', () => {
     ]);
 
     const invalid = await make(def([hook({ path: 'com espaço' })]));
-    const r1 = await editor.call('POST', `/workflows/${invalid.id}/publish`, {});
+    const r1 = await editor.call('POST', `/workflows/${invalid.id}/publish`, {
+      message: 'Publicação de teste',
+    });
     expect(r1.statusCode).toBe(422);
     expect(r1.body).toContain('WEBHOOK_PATH_INVALID');
 
     const noResponder = await make(def([hook({ path: 'x1', responseMode: 'responseNode' })]));
-    expect((await editor.call('POST', `/workflows/${noResponder.id}/publish`, {})).body).toContain(
-      'WEBHOOK_NO_RESPONSE_NODE',
-    );
+    expect(
+      (
+        await editor.call('POST', `/workflows/${noResponder.id}/publish`, {
+          message: 'Publicação de teste',
+        })
+      ).body,
+    ).toContain('WEBHOOK_NO_RESPONSE_NODE');
 
     const noCredential = await make(def([hook({ path: 'x2', authentication: 'hmac' })]));
-    expect((await editor.call('POST', `/workflows/${noCredential.id}/publish`, {})).body).toContain(
-      'WEBHOOK_CREDENTIAL_INVALID',
-    );
+    expect(
+      (
+        await editor.call('POST', `/workflows/${noCredential.id}/publish`, {
+          message: 'Publicação de teste',
+        })
+      ).body,
+    ).toContain('WEBHOOK_CREDENTIAL_INVALID');
 
     const clash = await make(def([hook({ path: 'sem-auth' })]));
-    expect((await editor.call('POST', `/workflows/${clash.id}/publish`, {})).statusCode).toBe(409);
+    expect(
+      (
+        await editor.call('POST', `/workflows/${clash.id}/publish`, {
+          message: 'Publicação de teste',
+        })
+      ).statusCode,
+    ).toBe(409);
 
     for (const user of [executor, viewer]) {
-      expect((await user.call('POST', `/workflows/${clash.id}/publish`, {})).statusCode).toBe(403);
+      expect(
+        (
+          await user.call('POST', `/workflows/${clash.id}/publish`, {
+            message: 'Publicação de teste',
+          })
+        ).statusCode,
+      ).toBe(403);
       expect((await user.call('POST', `/workflows/${clash.id}/unpublish`)).statusCode).toBe(403);
     }
   });

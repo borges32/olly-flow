@@ -1,5 +1,6 @@
 import {
   AlertTriangle,
+  BadgeCheck,
   History,
   KeyRound,
   LogOut,
@@ -8,6 +9,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { NavLink, Outlet } from 'react-router';
+import { usePublishRequests } from '@/api/queries';
 import { useCanAnywhere } from '@/api/use-can';
 import { useMe } from '@/api/use-me';
 import { useAuth } from '@/auth/auth-provider';
@@ -15,10 +17,20 @@ import { ThemeToggle } from '@/components/theme/theme-toggle';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
-const NAV: { to: string; label: string; icon: LucideIcon; adminOnly?: boolean }[] = [
+type NavItem = {
+  to: string;
+  label: string;
+  icon: LucideIcon;
+  adminOnly?: boolean;
+  /** Spec 009: aprovações só para quem pode publicar em algum projeto. */
+  publishersOnly?: boolean;
+};
+
+const NAV: NavItem[] = [
   { to: '/workflows', label: 'Workflows', icon: Workflow },
   { to: '/executions', label: 'Execuções', icon: History },
   { to: '/credentials', label: 'Credenciais', icon: KeyRound },
+  { to: '/approvals', label: 'Aprovações', icon: BadgeCheck, publishersOnly: true },
   { to: '/admin', label: 'Administração', icon: Settings, adminOnly: true },
 ];
 
@@ -28,6 +40,10 @@ export function AppLayout() {
   const me = meQuery.data;
   const displayName = me?.name ?? me?.email ?? user?.profile.name ?? '';
   const canAdmin = useCanAnywhere('project:manage');
+  const canPublish = useCanAnywhere('workflow:publish');
+  // Spec 009, FR-011: notificação na aplicação dos pedidos que aguardam a decisão do usuário.
+  const pending = usePublishRequests({ status: 'pending' }, canPublish).data ?? [];
+  const toDecide = pending.filter((r) => r.requestedBy.id !== me?.id).length;
 
   return (
     <div className="flex min-h-svh">
@@ -39,7 +55,9 @@ export function AppLayout() {
           Olly Flow
         </NavLink>
         <nav aria-label="Menu principal" className="grid gap-1 p-2">
-          {NAV.filter((item) => !item.adminOnly || canAdmin).map(({ to, label, icon: Icon }) => (
+          {NAV.filter(
+            (item) => (!item.adminOnly || canAdmin) && (!item.publishersOnly || canPublish),
+          ).map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}
               to={to}
@@ -52,6 +70,15 @@ export function AppLayout() {
             >
               <Icon className="size-4" />
               {label}
+              {to === '/approvals' && toDecide > 0 && (
+                <span
+                  className="ml-auto rounded-full bg-primary px-1.5 text-xs text-primary-foreground"
+                  data-testid="approvals-count"
+                  aria-label={`${toDecide} pedidos aguardando aprovação`}
+                >
+                  {toDecide}
+                </span>
+              )}
             </NavLink>
           ))}
         </nav>

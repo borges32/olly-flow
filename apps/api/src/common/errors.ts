@@ -50,3 +50,8 @@ export class DependencyUnavailableError extends DomainError {
   readonly code = 'dependency_unavailable';
   readonly httpStatus = 503;
 }
+
+export class TooManyRequestsError extends DomainError {
+  readonly code = 'too_many_requests';
+  readonly httpStatus = 429;
+}

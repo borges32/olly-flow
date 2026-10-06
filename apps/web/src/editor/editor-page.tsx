@@ -18,6 +18,7 @@ import {
   ChartGantt,
   ClipboardCopy,
   Eye,
+  History,
   Loader2,
   Play,
   Save,
@@ -55,6 +56,8 @@ import { WorkflowEdgeView, type OllyFlowEdge } from './workflow-edge';
 import { WorkflowNodeView, type OllyFlowNode } from './workflow-node';
 import { edgeLoopInfo, invalidConnectionReason } from './loops';
 import { WorkflowSettingsButton } from './workflow-settings';
+import { VersionHistoryPanel, type DiffView } from './version-history';
+import { diffCanvas } from './version-diff';
 
 const nodeTypes = { olly: WorkflowNodeView };
 const edgeTypes = { olly: WorkflowEdgeView };
@@ -164,6 +167,10 @@ export function Editor({
   const [ndvNodeId, setNdvNodeId] = useState<string | null>(null);
   const [showTimeline, setShowTimeline] = useState(false);
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
+  // Spec 009 (FR-008 a FR-010): histórico e comparação visual (canvas somente leitura).
+  const [showHistory, setShowHistory] = useState(false);
+  const [diffView, setDiffView] = useState<DiffView | null>(null);
+  const locked = readOnly || diffView !== null;
 
   const state = useEditorStore();
   const { nodes, edges, selection, errors, warnings, dirty, name, run, pinData } = state;
@@ -180,46 +187,81 @@ export function Editor({
     return map;
   }, [errors]);
 
+  const canvasDiff = useMemo(
+    () => (diffView ? diffCanvas(diffView.diff, diffView.from, diffView.to) : null),
+    [diffView],
+  );
   const flowNodes = useMemo<OllyFlowNode[]>(
     () =>
-      nodes.map((node) => ({
-        id: node.id,
-        type: 'olly',
-        position: { x: node.position[0], y: node.position[1] },
-        data: {
-          node,
-          description: typesByName.get(node.type),
-          errors: errorsByNode.get(node.id) ?? [],
-          run: run.nodes[node.id],
-          pinned: node.id in pinData,
-        },
-        selected: selection.nodeIds.includes(node.id),
-        ...(measured[node.id] && { measured: measured[node.id] }),
-      })),
-    [nodes, typesByName, errorsByNode, selection.nodeIds, measured, run.nodes, pinData],
+      canvasDiff
+        ? canvasDiff.nodes.map(({ node, status }) => ({
+            id: node.id,
+            type: 'olly',
+            position: { x: node.position[0], y: node.position[1] },
+            data: {
+              node,
+              description: typesByName.get(node.type),
+              errors: [],
+              pinned: false,
+              ...(status && { diffStatus: status }),
+            },
+            selectable: false,
+            ...(measured[node.id] && { measured: measured[node.id] }),
+          }))
+        : nodes.map((node) => ({
+            id: node.id,
+            type: 'olly',
+            position: { x: node.position[0], y: node.position[1] },
+            data: {
+              node,
+              description: typesByName.get(node.type),
+              errors: errorsByNode.get(node.id) ?? [],
+              run: run.nodes[node.id],
+              pinned: node.id in pinData,
+            },
+            selected: selection.nodeIds.includes(node.id),
+            ...(measured[node.id] && { measured: measured[node.id] }),
+          })),
+    [nodes, typesByName, errorsByNode, selection.nodeIds, measured, run.nodes, pinData, canvasDiff],
   );
   const loopEdges = useMemo(() => edgeLoopInfo(nodes, edges), [nodes, edges]);
   const flowEdges = useMemo<OllyFlowEdge[]>(
     () =>
-      edges.map((e) => ({
-        id: e.id,
-        type: 'olly',
-        source: e.from,
-        sourceHandle: e.fromPort,
-        target: e.to,
-        targetHandle: e.toPort,
-        selected: selection.edgeIds.includes(e.id),
-        // Spec 006, FR-013: aresta animada enquanto o nó de destino executa.
-        animated: run.nodes[e.to]?.status === 'running',
-        data: {
-          hovered: hoveredEdgeId === e.id,
-          readOnly,
-          onHover: setHoveredEdgeId,
-          back: loopEdges.back.has(e.id),
-          ...(loopEdges.invalid.has(e.id) && { invalidReason: loopEdges.invalid.get(e.id) }),
-        },
-      })),
-    [edges, selection.edgeIds, hoveredEdgeId, readOnly, run.nodes, loopEdges],
+      canvasDiff
+        ? canvasDiff.edges.map(({ edge: e, status }) => ({
+            id: e.id,
+            type: 'olly',
+            source: e.from,
+            sourceHandle: e.fromPort,
+            target: e.to,
+            targetHandle: e.toPort,
+            selectable: false,
+            data: {
+              hovered: false,
+              readOnly: true,
+              onHover: setHoveredEdgeId,
+              ...(status && { diffStatus: status }),
+            },
+          }))
+        : edges.map((e) => ({
+            id: e.id,
+            type: 'olly',
+            source: e.from,
+            sourceHandle: e.fromPort,
+            target: e.to,
+            targetHandle: e.toPort,
+            selected: selection.edgeIds.includes(e.id),
+            // Spec 006, FR-013: aresta animada enquanto o nó de destino executa.
+            animated: run.nodes[e.to]?.status === 'running',
+            data: {
+              hovered: hoveredEdgeId === e.id,
+              readOnly,
+              onHover: setHoveredEdgeId,
+              back: loopEdges.back.has(e.id),
+              ...(loopEdges.invalid.has(e.id) && { invalidReason: loopEdges.invalid.get(e.id) }),
+            },
+          })),
+    [edges, selection.edgeIds, hoveredEdgeId, readOnly, run.nodes, loopEdges, canvasDiff],
   );
   const timeline = useMemo(
     () => timelineRows(run.nodes, Object.fromEntries(nodes.map((n) => [n.id, n.name]))),
@@ -323,43 +365,49 @@ export function Editor({
     [flow, typesByName, addNode, readOnly],
   );
 
-  const save = useCallback(async () => {
-    const s = useEditorStore.getState();
-    if (readOnly || saving || !s.workflowId) return;
-    setSaving(true);
-    try {
-      const saved = await api.put<WorkflowDetail>(`/api/v1/workflows/${s.workflowId}`, {
-        name: s.name,
-        definition: s.definition(),
-        baseVersion: s.baseVersion,
-      });
-      s.markSaved(saved);
-      queryClient.setQueryData(queryKeys.workflow(saved.id), saved);
-      void queryClient.invalidateQueries({ queryKey: queryKeys.workflows(saved.projectId) });
-      toast.success('Workflow salvo');
-    } catch (error) {
-      if (error instanceof ApiError && error.status === 409) {
-        setConflict(true);
-      } else if (error instanceof ApiError && error.status === 422) {
-        s.setIssues(
-          error.issues.map((i) => ({
-            code: i.code ?? 'invalid',
-            message: i.message,
-            nodeIds: i.nodeIds ?? [],
-          })),
-        );
-        toast.error('O workflow tem erros', {
-          description: 'Corrija os nós destacados e salve de novo.',
+  const save = useCallback(
+    async (message?: string) => {
+      const s = useEditorStore.getState();
+      if (readOnly || saving || !s.workflowId) return;
+      setSaving(true);
+      try {
+        const saved = await api.put<WorkflowDetail>(`/api/v1/workflows/${s.workflowId}`, {
+          name: s.name,
+          definition: s.definition(),
+          baseVersion: s.baseVersion,
+          // Spec 009, FR-009: mensagem opcional da versão.
+          ...(message && { message }),
         });
-      } else {
-        toast.error('Não foi possível salvar', {
-          description: error instanceof Error ? error.message : undefined,
-        });
+        s.markSaved(saved);
+        queryClient.setQueryData(queryKeys.workflow(saved.id), saved);
+        void queryClient.invalidateQueries({ queryKey: queryKeys.workflows(saved.projectId) });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.versions(saved.id) });
+        toast.success('Workflow salvo');
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 409) {
+          setConflict(true);
+        } else if (error instanceof ApiError && error.status === 422) {
+          s.setIssues(
+            error.issues.map((i) => ({
+              code: i.code ?? 'invalid',
+              message: i.message,
+              nodeIds: i.nodeIds ?? [],
+            })),
+          );
+          toast.error('O workflow tem erros', {
+            description: 'Corrija os nós destacados e salve de novo.',
+          });
+        } else {
+          toast.error('Não foi possível salvar', {
+            description: error instanceof Error ? error.message : undefined,
+          });
+        }
+      } finally {
+        setSaving(false);
       }
-    } finally {
-      setSaving(false);
-    }
-  }, [api, queryClient, readOnly, saving]);
+    },
+    [api, queryClient, readOnly, saving],
+  );
 
   const reloadLatest = useCallback(async () => {
     const latest = await api.get<WorkflowDetail>(`/api/v1/workflows/${workflow.id}`);
@@ -376,7 +424,7 @@ export function Editor({
       const key = e.key.toLowerCase();
       if (mod && key === 's') {
         e.preventDefault();
-        void save();
+        if (!locked) void save();
         return;
       }
       const target = e.target as HTMLElement | null;
@@ -388,7 +436,7 @@ export function Editor({
         setNdvNodeId(store.selection.nodeIds[0] ?? null);
         return;
       }
-      if (readOnly) return;
+      if (locked) return;
       if (mod && key === 'z') {
         e.preventDefault();
         if (e.shiftKey) store.redo();
@@ -414,7 +462,7 @@ export function Editor({
     return () => {
       window.removeEventListener('keydown', onKeyDown);
     };
-  }, [save, readOnly, ensureVisible]);
+  }, [save, locked, ensureVisible]);
 
   // Alterações não salvas: confirma antes de sair (FR-008).
   useEffect(() => {
@@ -522,6 +570,20 @@ export function Editor({
         {!execution && (
           <PublishControls workflow={workflow} dirty={dirty} canPublish={canPublish} />
         )}
+        {!execution && (
+          <Button
+            size="sm"
+            variant={showHistory ? 'secondary' : 'ghost'}
+            aria-pressed={showHistory}
+            onClick={() => {
+              setShowHistory((v) => !v);
+              setDiffView(null);
+            }}
+            title="Versões, comparação e restauração"
+          >
+            <History /> Histórico
+          </Button>
+        )}
         <Button
           size="sm"
           variant={showTimeline ? 'secondary' : 'ghost'}
@@ -564,7 +626,7 @@ export function Editor({
           <Button
             size="sm"
             onClick={() => void save()}
-            disabled={saving || !name.trim()}
+            disabled={saving || !name.trim() || diffView !== null}
             title="Salvar (Ctrl+S)"
           >
             {saving ? <Loader2 className="animate-spin" /> : <Save />}
@@ -573,7 +635,7 @@ export function Editor({
         )}
       </div>
       <div className="flex min-h-0 flex-1">
-        {!readOnly && (
+        {!locked && (
           <NodePalette
             types={types}
             onAdd={(t) => {
@@ -586,7 +648,7 @@ export function Editor({
           className="relative min-w-0 flex-1"
           data-testid="canvas"
           onDragOver={(e) => {
-            if (!readOnly) e.preventDefault();
+            if (!locked) e.preventDefault();
           }}
           onDrop={onDrop}
         >
@@ -609,11 +671,11 @@ export function Editor({
                 state.checkpoint();
               }}
               onNodeDoubleClick={(_e, n) => {
-                setNdvNodeId(n.id);
+                if (!diffView) setNdvNodeId(n.id);
               }}
               isValidConnection={(c) => c.source !== c.target}
-              nodesDraggable={!readOnly}
-              nodesConnectable={!readOnly}
+              nodesDraggable={!locked}
+              nodesConnectable={!locked}
               deleteKeyCode={null}
               // Clique duplo abre o painel do nó (como no N8N), não dá zoom.
               zoomOnDoubleClick={false}
@@ -643,6 +705,14 @@ export function Editor({
               <ExecutionTimeline rows={timeline} />
             </div>
           )}
+          {diffView && (
+            <div
+              className="pointer-events-none absolute top-2 left-1/2 z-10 -translate-x-1/2 rounded-full border bg-card px-3 py-1 text-xs shadow"
+              data-testid="diff-banner"
+            >
+              Comparando v{diffView.diff.from} com v{diffView.diff.to} · somente leitura
+            </div>
+          )}
           <IssuesPanel
             errors={errors}
             warnings={warnings}
@@ -652,6 +722,27 @@ export function Editor({
             }}
           />
         </div>
+        {showHistory && !execution && (
+          <VersionHistoryPanel
+            workflow={workflow}
+            canUpdate={canUpdate}
+            dirty={dirty}
+            view={diffView}
+            onView={(v) => {
+              setDiffView(v);
+              if (v) void flow.fitView({ padding: 0.3, maxZoom: 1 });
+            }}
+            onSave={(message) => save(message)}
+            onRestored={(restored) => {
+              queryClient.setQueryData(queryKeys.workflow(restored.id), restored);
+              useEditorStore.getState().load(restored);
+            }}
+            onClose={() => {
+              setShowHistory(false);
+              setDiffView(null);
+            }}
+          />
+        )}
       </div>
       {ndvNode && (
         <NodeDetailsView

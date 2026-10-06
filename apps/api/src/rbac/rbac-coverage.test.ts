@@ -46,6 +46,13 @@ beforeAll(async () => {
     },
     publicUrl: 'http://localhost:5173',
     credentials: { keyProvider: 'env', masterKey: randomBytes(32).toString('base64') },
+    governance: {
+      userInactiveDays: 90,
+      inlineDataLimit: 262_144,
+      maskingSalt: 'salt-de-teste-0123456789',
+      retention: { dataDays: 30, metadataDays: 365 },
+      maintenanceCron: '0 3 * * *',
+    },
     http: { allowlist: [], maxResponseBytes: 50 * 1024 * 1024 },
     postgres: { poolMax: 5 },
     dispatcher: { maxConcurrent: 10 },

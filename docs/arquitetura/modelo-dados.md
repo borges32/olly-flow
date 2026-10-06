@@ -6,25 +6,25 @@
 
 | Tabela | Finalidade | Spec | Observações |
 |---|---|---|---|
-| `users` | Usuários vindos do IdP (`external_id` = `sub`) | 001 | Inativação na spec 009 |
+| `users` | Usuários vindos do IdP (`external_id` = `sub`) | 001 | `last_login_at` e inativação por falta de login (009) |
 | `roles` | Papéis e lista de permissões | 001 | Seed: admin, editor, executor, viewer |
-| `projects` | Agrupamento de workflows e credenciais | 001 | `max_concurrent_executions` (006), `require_publish_approval` (009) |
-| `project_members` | Usuário + projeto + papel | 001 | Coluna `origin` (`manual` \| `idp`) na spec 009 |
+| `projects` | Agrupamento de workflows e credenciais | 001 | `max_concurrent_executions` (006); `require_publish_approval`, `executor_can_read_data`, `save_execution_data` (`all` \| `errorsOnly` \| `none`) e `retention` JSONB `{ dataDays?, metadataDays? }` (009) |
+| `project_members` | Usuário + projeto + papel | 001 | `origin` (`manual` \| `idp`, 009): vínculos `idp` são sincronizados no login pelos grupos do IdP |
 | `audit_log` | Ações de usuários (*append-only*) | 001 | Trigger impede `UPDATE`/`DELETE` |
 | `workflows` | Cabeçalho do workflow; `version` = última versão salva | 002 | `published_version`, `active` (005); `error_workflow_id` (007) |
 | `workflow_versions` | Definição completa (JSONB) por versão | 002 | Mensagem de versão (009) |
 | `webhooks` | Rotas `path` + método → workflow/nó | 002 / 005 | Ativadas na publicação |
 | `executions` | Execução de workflow | 003 | **Particionada por mês** (`olly_ensure_partitions`). `project_id` copiado do workflow. `definition` (definição executada, spec 005). `heartbeat_at` (batimento do worker, spec 006). `trace_id` (012), `parent_execution_id` (008) |
-| `node_executions` | Execução de cada nó (por `run_index`) | 003 | **Particionada por mês**. `input_sources` (origem dos itens, para *paired items*), `pinned`, `reused` (saída reaproveitada de execução anterior, FR-020), `data_truncated`, `console` (saída do nó de código, spec 005). Dados mascarados na spec 009 |
+| `node_executions` | Execução de cada nó (por `run_index`) | 003 | **Particionada por mês**. `input_sources` (origem dos itens, para *paired items*), `pinned`, `reused` (saída reaproveitada de execução anterior, FR-020), `data_truncated`, `console` (saída do nó de código, spec 005). Spec 009: dados mascarados; `data_ref` (dados acima de `OLLY_INLINE_DATA_LIMIT` no object storage); `data_masked` (alterados pelo mascaramento: não são reaproveitados) |
 | `workflows.published_version`, `workflows.active` | Versão em produção e se as rotas estão ativas (spec 005, `0006_publish_console`) | 005 | |
 | `execution_payloads` | Dados do disparo de uma execução enfileirada (itens do gatilho, nó inicial, pinData, reaproveitamento): a fila leva só o id (spec 006, `0007_queue`). Acima de 1 MB, conteúdo no object storage (`data_ref`) | 006 | Sem FK (executions é particionada) |
 | `projects.max_concurrent_executions` | Cota de execuções simultâneas do projeto; `NULL` usa `OLLY_PROJECT_MAX_CONCURRENT` (spec 006, `0007_queue`) | 006 | |
-| `credentials` | Credenciais cifradas por projeto (`data_encrypted` = envelope AES-256-GCM, `key_version` da chave mestra); nome único no projeto | 004 | Ver [docs/credenciais.md](../credenciais.md) |
+| `credentials` | Credenciais cifradas por projeto (`data_encrypted` = envelope AES-256-GCM, `key_version` da chave mestra); nome único no projeto | 004 | `key_provider` (`env` \| `vault`, 009): checkpoint da rotação e da migração. Ver [docs/credenciais.md](../credenciais.md) |
 | `execution_payloads` | Payload do gatilho para o worker | 006 | Ou object storage se grande |
 | `execution_state` | Estado serializado para retomada (`waiting`) | 008 | Usado por Wait e aprovação humana |
-| `group_role_mappings` | Grupo do IdP → papel (global ou por projeto) | 009 | |
-| `publish_requests` | Pedidos de aprovação de publicação | 009 | |
-| `masking_rules` | Regras de mascaramento LGPD | 009 | |
+| `group_role_mappings` | Grupo do IdP → papel (`project_id` nulo = global) | 009 | Único por (grupo, projeto) |
+| `publish_requests` | Pedidos de aprovação de publicação (versão, mensagem, autor, decisão, comentário) | 009 | `CHECK decided_by <> requested_by`; um pendente por workflow |
+| `masking_rules` | Regras de mascaramento LGPD (`field` \| `pattern`; `redact` \| `partial` \| `hash`) globais ou por projeto | 009 | Regras padrão (`builtin`) semeadas na migration `0009_governanca` |
 | `mcp_servers` | Catálogo de servidores MCP | 010 | Snapshot de tools |
 | `mcp_tool_policies` | Allowlist de tools por servidor e projeto | 010 | `destructive` |
 | `mcp_calls` | Log de chamadas MCP | 010 | Argumentos mascarados |
@@ -89,6 +89,9 @@ CREATE TABLE node_executions (
 CREATE TABLE execution_payloads (            -- 0007_queue (spec 006)
   execution_id UUID PRIMARY KEY, data JSONB, data_ref TEXT, created_at TIMESTAMPTZ DEFAULT now()
 );
+-- 0009_governanca (spec 009): users.last_login_at; project_members.origin; projects.require_publish_approval,
+-- executor_can_read_data, save_execution_data, retention; node_executions.data_masked; credentials.key_provider;
+-- tabelas group_role_mappings, publish_requests, masking_rules (ver docs/governanca.md e docs/lgpd.md)
 CREATE TABLE audit_log (                      -- sem FK em user_id: o registro sobrevive a users
   id BIGSERIAL PRIMARY KEY, user_id UUID, action TEXT NOT NULL, entity_type TEXT,
   entity_id TEXT, details JSONB, ip INET, created_at TIMESTAMPTZ DEFAULT now()

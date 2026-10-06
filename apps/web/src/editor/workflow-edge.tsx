@@ -19,6 +19,8 @@ export type OllyEdgeData = {
   invalidReason?: string;
   readOnly: boolean;
   onHover: (edgeId: string | null) => void;
+  /** Comparação de versões (spec 009, FR-010). */
+  diffStatus?: 'added' | 'removed';
 };
 export type OllyFlowEdge = Edge<OllyEdgeData, 'olly'>;
 
@@ -64,17 +66,25 @@ export const WorkflowEdgeView = memo(function WorkflowEdgeView({
         path={path}
         markerEnd={markerEnd}
         interactionWidth={24}
-        className={cn(data?.back && 'olly-back-edge', data?.invalidReason && 'olly-invalid-edge')}
+        className={cn(
+          data?.back && 'olly-back-edge',
+          data?.invalidReason && 'olly-invalid-edge',
+          data?.diffStatus && `olly-diff-edge-${data.diffStatus}`,
+        )}
         style={{
           stroke: selected
             ? 'var(--primary)'
-            : data?.invalidReason
+            : data?.invalidReason || data?.diffStatus === 'removed'
               ? 'var(--destructive)'
-              : data?.back
-                ? 'rgb(245 158 11)'
-                : undefined,
-          strokeWidth: selected || data?.hovered ? 2.5 : 1.5,
-          ...((data?.back || data?.invalidReason) && { strokeDasharray: '6 4' }),
+              : data?.diffStatus === 'added'
+                ? 'rgb(16 185 129)'
+                : data?.back
+                  ? 'rgb(245 158 11)'
+                  : undefined,
+          strokeWidth: selected || data?.hovered || data?.diffStatus ? 2.5 : 1.5,
+          ...((data?.back || data?.invalidReason || data?.diffStatus === 'removed') && {
+            strokeDasharray: '6 4',
+          }),
         }}
       />
       {data?.invalidReason && (

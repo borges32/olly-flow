@@ -16,6 +16,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
+import { AdminNav } from '@/components/layout/admin-nav';
+import { Badge } from '@/components/ui/badge';
+import { ProjectGovernance } from '@/governance/project-governance';
 import { ROLE_LABELS } from '@/lib/roles';
 import { cn } from '@/lib/utils';
 
@@ -58,6 +61,7 @@ export function AdminPage() {
   return (
     <div className="grid gap-6">
       <h1 className="text-2xl font-semibold tracking-tight">Administração</h1>
+      <AdminNav />
       <div className="grid gap-6 lg:grid-cols-[18rem_1fr]">
         <Card className="gap-4 py-4">
           <CardHeader className="px-4">
@@ -247,7 +251,17 @@ function ProjectDetail({ project, onDeleted }: { project: ProjectSummary; onDele
               {members?.map((m) => (
                 <tr key={m.userId} className="border-t">
                   <td className="py-2">
-                    <div className="font-medium">{m.name ?? m.email}</div>
+                    <div className="flex items-center gap-2 font-medium">
+                      {m.name ?? m.email}
+                      {m.origin === 'idp' && (
+                        <Badge
+                          variant="outline"
+                          title="Herdado de grupo do IdP (sincronizado no login)"
+                        >
+                          IdP
+                        </Badge>
+                      )}
+                    </div>
                     <div className="text-xs text-muted-foreground">{m.email}</div>
                   </td>
                   <td className="py-2">
@@ -290,6 +304,7 @@ function ProjectDetail({ project, onDeleted }: { project: ProjectSummary; onDele
             </tbody>
           </table>
         </section>
+        <ProjectGovernance projectId={projectId} />
       </CardContent>
     </Card>
   );

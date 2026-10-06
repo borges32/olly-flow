@@ -215,10 +215,11 @@ describe('spec 004 — SC-002/FR-002/FR-003: varredura de segredos', () => {
       await new Promise((r) => setTimeout(r, 50));
       detail = (await editor.call('GET', `/executions/${executionId}`)).json<ExecutionDetail>();
     }
-    // A execução usou de fato as credenciais (as respostas ecoaram, mascaradas).
+    // A execução usou de fato as credenciais (as respostas ecoaram, mascaradas). Desde a spec 009
+    // o cabeçalho inteiro é ocultado pela regra padrão `*authorization*` (FR-016).
     expect(detail?.status).toBe('error');
     const byId = Object.fromEntries((detail?.nodes ?? []).map((n) => [n.nodeId, n]));
-    expect(JSON.stringify(byId.h1?.output)).toContain('Bearer ***');
+    expect(JSON.stringify(byId.h1?.output)).toContain('"authorization":"***"');
     expect(byId.p?.output?.main?.[0]?.json).toEqual({ usuario: 'leak_user' });
     expect(detail?.error?.message).toBe('A requisição falhou com status 500');
 

@@ -12,7 +12,10 @@ import type { AppConfig } from './config/config.js';
 import { CoreModule } from './core/core.module.js';
 import { ExecutionsModule } from './executions/executions.module.js';
 import { ExpressionsModule } from './expressions/expressions.module.js';
+import { GovernanceModule } from './governance/governance.module.js';
 import { HealthModule } from './health/health.module.js';
+import { maskingLogOptions } from './masking/log-masking.js';
+import { MaskingModule } from './masking/masking.module.js';
 import { NodeTypesModule } from './node-types/node-types.module.js';
 import { ProjectsModule } from './projects/projects.module.js';
 import { UsersModule } from './users/users.module.js';
@@ -47,6 +50,8 @@ export class AppModule {
       // O id já foi definido pelo Fastify (ver app.ts) e copiado para o cabeçalho.
       genReqId: (req) => String(req.headers['x-request-id']),
       redact: LOG_REDACT,
+      // Spec 009, FR-014: dados sensíveis mascarados também nos logs.
+      ...maskingLogOptions,
       autoLogging: { ignore: (req) => req.url === '/health' },
     };
     return {
@@ -59,6 +64,7 @@ export class AppModule {
           forRoutes: [{ path: '{*path}', method: RequestMethod.ALL }],
         }),
         AuditModule,
+        MaskingModule,
         AuthModule,
         HealthModule,
         UsersModule,
@@ -70,6 +76,7 @@ export class AppModule {
         ExpressionsModule,
         ExecutionsModule,
         WebhooksModule,
+        GovernanceModule,
       ],
       providers: [{ provide: APP_FILTER, useClass: DomainExceptionFilter }],
     };

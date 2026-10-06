@@ -5,3 +5,4 @@ export * from './expressions.js';
 export * from './run.js';
 export * from './recorded.js';
 export * from './redact.js';
+export * from './masking.js';

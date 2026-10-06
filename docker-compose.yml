@@ -1,4 +1,4 @@
-# Ambiente local (FR-002): PostgreSQL, Redis, IdP de desenvolvimento e object storage.
+# Ambiente local (FR-002): PostgreSQL, Redis, IdP de desenvolvimento, object storage e Vault (spec 009).
 # Uso: docker compose up -d --wait
 #
 # Profile `app`: também sobe a API, o worker e o frontend em containers, para testes de UX sem
@@ -97,6 +97,25 @@ services:
       timeout: 5s
       retries: 30
 
+  vault:
+    # Spec 009 (T002): Vault de desenvolvimento com Transit e AppRole (ADR-0007 pendente: o cofre
+    # institucional é configurado pela infraestrutura). Dados persistidos no volume `vault-data`.
+    image: hashicorp/vault:1.20
+    entrypoint: ['sh', '/vault/dev/start-dev.sh']
+    environment:
+      OLLY_VAULT_ROLE_ID: ${OLLY_VAULT_ROLE_ID:-olly-api-dev-role}
+      OLLY_VAULT_SECRET_ID: ${OLLY_VAULT_SECRET_ID:-olly-api-dev-secret}
+    ports:
+      - '8200:8200'
+    volumes:
+      - ./infra/vault:/vault/dev:ro
+      - vault-data:/vault/file
+    healthcheck:
+      test: ['CMD', 'test', '-f', '/tmp/vault-ready']
+      interval: 3s
+      timeout: 3s
+      retries: 40
+
   db-init:
     # Aplica migrations e seed e continua vigiando: se o banco for recriado com a API no
     # ar (ex.: `docker compose down -v` sem o profile), o schema volta em segundos.
@@ -133,8 +152,17 @@ services:
       OIDC_DISCOVERY_URL: http://keycloak:8080/realms/olly
       OIDC_AUDIENCE: ${OIDC_AUDIENCE:-olly-api}
       OIDC_ADMIN_GROUP: ${OIDC_ADMIN_GROUP:-admin}
-      # Spec 004: chave mestra das credenciais (obrigatória) e destinos internos liberados.
+      # Spec 004: chave mestra das credenciais e destinos internos liberados. Spec 009: com
+      # OLLY_KEY_PROVIDER=vault a chave vem do Vault (OLLY_MASTER_KEY só enquanto houver o que
+      # migrar: `pnpm credentials:migrate --from env --to vault`).
+      OLLY_KEY_PROVIDER: ${OLLY_KEY_PROVIDER:-env}
       OLLY_MASTER_KEY: ${OLLY_MASTER_KEY:?defina OLLY_MASTER_KEY no .env (ver .env.example)}
+      OLLY_VAULT_ADDR: http://vault:8200
+      OLLY_VAULT_AUTH: approle
+      OLLY_VAULT_ROLE_ID: ${OLLY_VAULT_ROLE_ID:-olly-api-dev-role}
+      OLLY_VAULT_SECRET_ID: ${OLLY_VAULT_SECRET_ID:-olly-api-dev-secret}
+      # Spec 009: salt do hash do mascaramento (valor fictício de desenvolvimento).
+      OLLY_MASKING_SALT: ${OLLY_MASKING_SALT:-olly-dev-masking-salt-0001}
       OLLY_HTTP_ALLOWLIST: ${OLLY_HTTP_ALLOWLIST:-}
       # Spec 005: a API fica atrás do nginx do serviço `web` (IP real para a allowlist do webhook).
       OLLY_TRUST_PROXY: 'true'
@@ -157,6 +185,8 @@ services:
       redis:
         condition: service_healthy
       keycloak:
+        condition: service_healthy
+      vault:
         condition: service_healthy
     healthcheck:
       test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:3000/health']
@@ -183,6 +213,8 @@ services:
       minio:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      vault:
         condition: service_healthy
     healthcheck:
       test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:3101/health']
@@ -224,3 +256,4 @@ services:
 volumes:
   postgres-data:
   minio-data:
+  vault-data:

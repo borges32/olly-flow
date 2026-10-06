@@ -16,7 +16,7 @@
 | 006 | [fila-workers-paralelismo](../specs/006-fila-workers-paralelismo/spec.md) | 2 — Execução avançada | Fila, workers, DAG paralelo, cancelamento, cotas | 005 + Go | Implementada ([relatório](../specs/006-fila-workers-paralelismo/report.md)) | |
 | 007 | [controle-de-fluxo](../specs/007-controle-de-fluxo/spec.md) | 2 — Execução avançada | Merge, While, Loop, Switch, porta de erro, error workflow | 006 | Implementada ([relatório](../specs/007-controle-de-fluxo/report.md)) | |
 | 008 | [python-agendamento-subworkflow](../specs/008-python-agendamento-subworkflow/spec.md) | 2 — Execução avançada | Python isolado, cron, sub-workflow, Wait, reexecução, paginação | 007 | Aprovada | 🏁 Motor completo |
-| 009 | [governanca-lgpd-sso](../specs/009-governanca-lgpd-sso/spec.md) | 3 — IA e governança | Vault/KMS, SSO, versionamento, aprovação, mascaramento, retenção | 008 | Aprovada | |
+| 009 | [governanca-lgpd-sso](../specs/009-governanca-lgpd-sso/spec.md) | 3 — IA e governança | Vault/KMS, SSO, versionamento, aprovação, mascaramento, retenção | 007 (antecipada à 008 por decisão do PO, 05/10/2026) | Implementada ([relatório](../specs/009-governanca-lgpd-sso/report.md)) — ADR-0005/0007 pendentes | |
 | 010 | [cliente-mcp](../specs/010-cliente-mcp/spec.md) | 3 — IA e governança | Catálogo, cliente MCP, OAuth, políticas, auditoria | 009 | Aprovada | |
 | 011 | [ai-agent](../specs/011-ai-agent/spec.md) | 3 — IA e governança | Chat model, Agent, tools, memória, aprovação humana, custo | 010 | Aprovada | 🏁 Agents em homologação |
 | 012 | [observabilidade-importador-homologacao](../specs/012-observabilidade-importador-homologacao/spec.md) | 4 — Hardening | OTel, Grafana, importador N8N, Helm, carga | 011 | Aprovada | |

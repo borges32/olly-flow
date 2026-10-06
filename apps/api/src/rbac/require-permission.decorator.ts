@@ -5,7 +5,11 @@ export const REQUIRED_PERMISSION = 'olly:requiredPermission';
 
 /** Recurso de projeto indicado por um parâmetro de rota: `{ workflow: 'id' }`. */
 export type ResourceScope =
-  { project: string } | { workflow: string } | { execution: string } | { credential: string };
+  | { project: string }
+  | { workflow: string }
+  | { execution: string }
+  | { credential: string }
+  | { publishRequest: string };
 
 /**
  * Onde a permissão vale:
@@ -17,9 +21,10 @@ export type ResourceScope =
 export type PermissionScope = ResourceScope | 'global' | 'anyProject';
 
 export function resourceOf(scope: ResourceScope): {
-  kind: 'project' | 'workflow' | 'execution' | 'credential';
+  kind: 'project' | 'workflow' | 'execution' | 'credential' | 'publishRequest';
   param: string;
 } {
+  if ('publishRequest' in scope) return { kind: 'publishRequest', param: scope.publishRequest };
   if ('project' in scope) return { kind: 'project', param: scope.project };
   if ('workflow' in scope) return { kind: 'workflow', param: scope.workflow };
   if ('credential' in scope) return { kind: 'credential', param: scope.credential };

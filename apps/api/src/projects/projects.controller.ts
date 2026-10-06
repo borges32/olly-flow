@@ -15,6 +15,8 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type {
   ProjectMember,
   ProjectQuotaRequest,
+  ProjectSettings,
+  ProjectSettingsUpdate,
   ProjectSummary,
   RoleName,
   UserSummary,
@@ -30,6 +32,7 @@ import { RequirePermission, RequireProjectMember } from '../rbac/require-permiss
 import {
   memberBodySchema,
   projectBodySchema,
+  projectSettingsSchema,
   quotaBodySchema,
   userSearchQuerySchema,
 } from './projects.schemas.js';
@@ -90,6 +93,24 @@ export class ProjectsController {
     @Body(new ZodPipe(quotaBodySchema)) body: ProjectQuotaRequest,
   ): Promise<void> {
     await this.projects.setQuota(audit, id, body.maxConcurrentExecutions);
+  }
+
+  /** Spec 009: governança do projeto, visível a todos os membros (o editor mostra a política). */
+  @RequireProjectMember('id')
+  @Get('projects/:id/settings')
+  settings(@Param('id') id: string): Promise<ProjectSettings> {
+    return this.projects.settings(id);
+  }
+
+  /** Spec 009 (FR-011, FR-012, FR-017, FR-019): só quem administra o projeto. */
+  @RequirePermission('project:manage', { project: 'id' })
+  @Put('projects/:id/settings')
+  updateSettings(
+    @Audit() audit: AuditContext,
+    @Param('id') id: string,
+    @Body(new ZodPipe(projectSettingsSchema)) body: ProjectSettingsUpdate,
+  ): Promise<ProjectSettings> {
+    return this.projects.updateSettings(audit, id, body);
   }
 
   @RequirePermission('project:manage', { project: 'id' })

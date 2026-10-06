@@ -5,7 +5,7 @@ import {
   encryptCredentialData,
   type Credential,
   type Db,
-  type KeyProvider,
+  type KeyRing,
 } from '@olly/db';
 import { redactSecrets, type CredentialAccess } from '@olly/engine';
 import {
@@ -30,6 +30,7 @@ import type {
   UpdateCredentialBody,
 } from './credentials.schemas.js';
 
+/** Chaveiro da chave mestra (`KeyRing` do `@olly/db`; spec 009, FR-001). */
 export const KEY_PROVIDER = Symbol('KEY_PROVIDER');
 
 const UNIQUE_VIOLATION = '23505';
@@ -43,7 +44,7 @@ const iso = (d: Date) => d.toISOString();
 export class CredentialsService {
   constructor(
     @Inject(DB) private readonly db: Db,
-    @Inject(KEY_PROVIDER) private readonly keys: KeyProvider,
+    @Inject(KEY_PROVIDER) private readonly keys: KeyRing,
     @Inject(CREDENTIAL_TYPES) private readonly types: CredentialTypeRegistry,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(HTTP_GUARD) private readonly guard: HttpGuard,
@@ -130,7 +131,7 @@ export class CredentialsService {
   ): Promise<CredentialSummary> {
     const data = this.validate(body.type, body.data);
     const id = randomUUID();
-    const { blob, keyVersion } = await encryptCredentialData(data, this.keys, id);
+    const { blob, keyVersion, keyProvider } = await encryptCredentialData(data, this.keys, id);
     const row = await this.db
       .transaction()
       .execute(async (trx) => {
@@ -143,6 +144,7 @@ export class CredentialsService {
             type: body.type,
             data_encrypted: blob,
             key_version: keyVersion,
+            key_provider: keyProvider,
             created_by: ctx.userId,
           })
           .returningAll()
@@ -168,7 +170,7 @@ export class CredentialsService {
     const row = await this.load(id);
     const current = await this.decrypt(row);
     const data = this.validate(row.type, this.types.merge(row.type, current, body.data ?? {}));
-    const { blob, keyVersion } = await encryptCredentialData(data, this.keys, id);
+    const { blob, keyVersion, keyProvider } = await encryptCredentialData(data, this.keys, id);
     const changedFields = Object.keys(body.data ?? {}).filter((f) => body.data?.[f] !== '');
     const updated = await this.db
       .transaction()
@@ -179,6 +181,7 @@ export class CredentialsService {
             name: body.name ?? row.name,
             data_encrypted: blob,
             key_version: keyVersion,
+            key_provider: keyProvider,
             updated_at: new Date(),
           })
           .where('id', '=', id)

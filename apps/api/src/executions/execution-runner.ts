@@ -1,24 +1,21 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { Db } from '@olly/db';
-import {
-  ExecutionCancelledError,
-  runWorkflow,
-  type ReusedNodeRun,
-  type SourceRef,
-} from '@olly/engine';
+import { ExecutionCancelledError, runWorkflow, type ReusedNodeRun } from '@olly/engine';
 import { exposedEnv, type CodeRunner, type ExpressionEvaluator } from '@olly/expressions';
 import type { NodeLogger, NodeRegistry } from '@olly/nodes';
-import type { Item, NodeOutput } from '@olly/shared-types';
+import type { Item, NodeOutput, SaveExecutionDataPolicy } from '@olly/shared-types';
 import { BINARY_STORAGE } from '../binary/binary.module.js';
 import type { S3BinaryStorage } from '../binary/s3-binary-store.js';
 import { APP_CONFIG, type AppConfig } from '../config/config.js';
 import { DB } from '../core/tokens.js';
 import { CredentialsService } from '../credentials/credentials.service.js';
 import { CODE_RUNNER, EXPRESSION_EVALUATOR } from '../expressions/expressions.module.js';
+import { MaskingService } from '../masking/masking.service.js';
 import { NODE_REGISTRY } from '../node-types/node-types.module.js';
 import { ExecutionEventSink } from './execution-events.service.js';
 import type { ExecutionJob, ExecutionOutcome, WebhookResponse } from './execution-job.js';
 import { ExecutionRecorder } from './execution-recorder.js';
+import { readNodeData } from './node-data.js';
 
 export interface ExecutionHooks {
   onWebhookResponse?: (response: WebhookResponse) => void;
@@ -44,16 +41,41 @@ export class ExecutionRunner {
     @Inject(ExecutionEventSink) private readonly events: ExecutionEventSink,
     @Inject(CredentialsService) private readonly credentials: CredentialsService,
     @Inject(BINARY_STORAGE) private readonly binaries: S3BinaryStorage | null,
+    @Inject(MaskingService) private readonly masking: MaskingService,
   ) {}
+
+  /**
+   * Spec 009, FR-012: política de dados das execuções de produção (a do workflow ou o padrão do
+   * projeto). Execuções de teste guardam sempre (o editor depende delas), mascaradas.
+   */
+  private async savePolicy(job: ExecutionJob): Promise<SaveExecutionDataPolicy> {
+    if (job.mode !== 'production') return 'all';
+    if (job.definition.settings.saveExecutionData) return job.definition.settings.saveExecutionData;
+    const project = await this.db
+      .selectFrom('projects')
+      .select('save_execution_data')
+      .where('id', '=', job.workflow.projectId)
+      .executeTakeFirst();
+    return project?.save_execution_data ?? 'all';
+  }
 
   async execute(job: ExecutionJob, hooks: ExecutionHooks = {}): Promise<ExecutionOutcome> {
     const { executionId, workflow } = job;
+    // Em sequência: uma conexão do pool por vez no início da execução.
+    const masker = await this.masking.forProject(workflow.projectId);
+    const savePolicy = await this.savePolicy(job);
     const recorder = new ExecutionRecorder(
       this.db,
       this.events,
       executionId,
       workflow.id,
-      this.config.execution.nodeDataMaxBytes,
+      {
+        maxBytes: this.config.execution.nodeDataMaxBytes,
+        masker,
+        savePolicy,
+        inlineLimit: this.config.governance.inlineDataLimit,
+        storage: this.binaries,
+      },
       this.logger,
     );
     const callbacks = recorder.callbacks();
@@ -178,10 +200,15 @@ export class ExecutionRunner {
     const rows = await this.db
       .selectFrom('node_executions as ne')
       .innerJoin('executions as e', 'e.id', 'ne.execution_id')
-      .select(['ne.node_id', 'ne.input_data', 'ne.input_sources', 'ne.output_data'])
+      .select(['ne.node_id', 'ne.input_data', 'ne.input_sources', 'ne.output_data', 'ne.data_ref'])
       .where('e.workflow_id', '=', workflowId)
       .where('ne.status', '=', 'success')
       .where('ne.data_truncated', '=', false)
+      // Spec 009, FR-015: dados mascarados ou descartados pela política não voltam aos nós.
+      .where('ne.data_masked', '=', false)
+      .where((eb) =>
+        eb.or([eb('ne.output_data', 'is not', null), eb('ne.data_ref', 'is not', null)]),
+      )
       // Nó em laço (spec 007) tem várias execuções; nunca é reaproveitado, mas fica a última.
       .orderBy('ne.run_index')
       .where((eb) =>
@@ -192,15 +219,23 @@ export class ExecutionRunner {
         ),
       )
       .execute();
+    const loaded = await Promise.all(
+      rows.map(async (r) => {
+        const data = await readNodeData(r, this.binaries);
+        return [r.node_id, data] as const;
+      }),
+    );
     return Object.fromEntries(
-      rows.map((r) => [
-        r.node_id,
-        {
-          inputs: (r.input_data ?? {}) as Record<string, Item[]>,
-          inputSources: (r.input_sources ?? {}) as Record<string, SourceRef[]>,
-          output: (r.output_data ?? {}) as NodeOutput,
-        },
-      ]),
+      loaded
+        .filter(([, data]) => data.output !== null)
+        .map(([nodeId, data]) => [
+          nodeId,
+          {
+            inputs: data.input ?? {},
+            inputSources: data.inputSources ?? {},
+            output: data.output ?? {},
+          },
+        ]),
     );
   }
 }

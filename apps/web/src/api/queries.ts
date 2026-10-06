@@ -1,6 +1,13 @@
 import type { CredentialTypeDescription, NodeDescription } from '@olly/nodes';
 import type {
+  AuditList,
   CredentialSummary,
+  GroupRoleMapping,
+  MaskingRule,
+  ProjectSettings,
+  PublishApproval,
+  UserAdminSummary,
+  WorkflowVersionSummary,
   ExecutionDetail,
   ExecutionList,
   Paginated,
@@ -26,6 +33,14 @@ export const queryKeys = {
   executions: (filters: Record<string, string>) => ['executions', filters] as const,
   execution: (id: string) => ['executions', id] as const,
   queueStats: (projectId: string) => ['projects', projectId, 'queue-stats'] as const,
+  // Spec 009.
+  projectSettings: (projectId: string) => ['projects', projectId, 'settings'] as const,
+  versions: (workflowId: string) => ['workflows', workflowId, 'versions'] as const,
+  publishRequests: (filters: Record<string, string>) => ['publish-requests', filters] as const,
+  groupMappings: ['sso', 'group-mappings'] as const,
+  adminUsers: ['admin', 'users'] as const,
+  maskingRules: (projectId: string | null) => ['masking-rules', projectId ?? 'global'] as const,
+  audit: (filters: Record<string, string>) => ['audit', filters] as const,
   postgresOptions: (credentialId: string, source: string, schema = '', table = '') =>
     ['credentials', credentialId, 'postgres', source, schema, table] as const,
 };
@@ -151,5 +166,82 @@ export function useQueueStats(projectId: string | undefined) {
     queryFn: () => api.get<QueueStats>(`/api/v1/projects/${projectId ?? ''}/queue-stats`),
     enabled: projectId !== undefined,
     refetchInterval: 3000,
+  });
+}
+
+/** Spec 009: governança do projeto (aprovação, dados, retenção). */
+export function useProjectSettings(projectId: string | undefined) {
+  const api = useApi();
+  return useQuery({
+    queryKey: queryKeys.projectSettings(projectId ?? ''),
+    queryFn: () => api.get<ProjectSettings>(`/api/v1/projects/${projectId ?? ''}/settings`),
+    enabled: projectId !== undefined,
+  });
+}
+
+/** Spec 009, FR-008: histórico de versões do workflow. */
+export function useVersions(workflowId: string, enabled = true) {
+  const api = useApi();
+  return useQuery({
+    queryKey: queryKeys.versions(workflowId),
+    queryFn: () => api.get<WorkflowVersionSummary[]>(`/api/v1/workflows/${workflowId}/versions`),
+    enabled,
+  });
+}
+
+/** Spec 009, FR-011: pedidos de publicação (o menu consulta os pendentes). */
+export function usePublishRequests(filters: Record<string, string>, enabled = true) {
+  const api = useApi();
+  return useQuery({
+    queryKey: queryKeys.publishRequests(filters),
+    queryFn: () =>
+      api.get<PublishApproval[]>(
+        `/api/v1/publish-requests?${new URLSearchParams(filters).toString()}`,
+      ),
+    enabled,
+    refetchInterval: 30_000,
+  });
+}
+
+export function useGroupMappings() {
+  const api = useApi();
+  return useQuery({
+    queryKey: queryKeys.groupMappings,
+    queryFn: () => api.get<GroupRoleMapping[]>('/api/v1/sso/group-mappings'),
+  });
+}
+
+export function useAdminUsers() {
+  const api = useApi();
+  return useQuery({
+    queryKey: queryKeys.adminUsers,
+    queryFn: () => api.get<UserAdminSummary[]>('/api/v1/admin/users'),
+  });
+}
+
+/** Regras globais (`null`) ou as que valem no projeto. */
+export function useMaskingRules(projectId: string | null, enabled = true) {
+  const api = useApi();
+  return useQuery({
+    queryKey: queryKeys.maskingRules(projectId),
+    queryFn: () =>
+      api.get<MaskingRule[]>(
+        projectId ? `/api/v1/projects/${projectId}/masking-rules` : '/api/v1/masking-rules',
+      ),
+    enabled,
+  });
+}
+
+/** Spec 009, FR-018: auditoria paginada por cursor. */
+export function useAudit(filters: Record<string, string>) {
+  const api = useApi();
+  return useInfiniteQuery({
+    queryKey: queryKeys.audit(filters),
+    queryFn: ({ pageParam }) => {
+      const params = new URLSearchParams({ ...filters, ...(pageParam && { cursor: pageParam }) });
+      return api.get<AuditList>(`/api/v1/audit?${params.toString()}`);
+    },
+    initialPageParam: '',
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
   });
 }

@@ -8,12 +8,36 @@ import { Button } from '@/components/ui/button';
 // O StrictMode executa efeitos duas vezes; o código de autorização só pode ser trocado uma.
 let pendingCallback: Promise<User> | undefined;
 
+class LoginRejected extends Error {}
+
+/**
+ * Spec 009 (FR-005, FR-007): registra o login na plataforma, que audita e sincroniza os papéis
+ * vindos dos grupos do IdP. Recusa (usuário inativo) interrompe o login; falha de rede não.
+ */
+async function registerLogin(user: User): Promise<void> {
+  const res = await fetch('/api/v1/auth/login', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${user.access_token}` },
+  }).catch(() => undefined);
+  if (res && (res.status === 401 || res.status === 403)) {
+    const body = (await res.json().catch(() => undefined)) as
+      { error?: { message?: string } } | undefined;
+    throw new LoginRejected(body?.error?.message ?? 'Acesso negado pela plataforma');
+  }
+}
+
 export function AuthCallbackPage() {
   const navigate = useNavigate();
   const [failed, setFailed] = useState(false);
+  const [reason, setReason] = useState<string>();
 
   useEffect(() => {
-    pendingCallback ??= getUserManager().signinRedirectCallback();
+    pendingCallback ??= getUserManager()
+      .signinRedirectCallback()
+      .then(async (user) => {
+        await registerLogin(user);
+        return user;
+      });
     pendingCallback
       .then((user) => {
         const { returnTo } = (user.state ?? {}) as LoginState;
@@ -21,7 +45,11 @@ export function AuthCallbackPage() {
         const target = returnTo?.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/';
         void navigate(target, { replace: true });
       })
-      .catch(() => {
+      .catch((error: unknown) => {
+        if (error instanceof LoginRejected) {
+          setReason(error.message);
+          void getUserManager().removeUser();
+        }
         setFailed(true);
       })
       .finally(() => {
@@ -34,7 +62,7 @@ export function AuthCallbackPage() {
   }
   return (
     <main className="flex min-h-svh flex-col items-center justify-center gap-4 p-6">
-      <p role="alert">Não foi possível concluir o login.</p>
+      <p role="alert">Não foi possível concluir o login{reason ? `: ${reason}` : '.'}</p>
       <Button onClick={() => void navigate('/', { replace: true })}>Tentar novamente</Button>
     </main>
   );

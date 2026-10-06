@@ -4,6 +4,7 @@ import { sql } from 'kysely';
 import { ConflictError, UnauthenticatedError } from '../common/errors.js';
 import { DB } from '../core/tokens.js';
 import type { AccessTokenClaims } from './auth.types.js';
+import { IdpGroupSync } from './idp-group-sync.js';
 
 const CACHE_TTL_MS = 30_000;
 const CACHE_MAX = 10_000;
@@ -17,26 +18,40 @@ function isUniqueViolation(error: unknown, constraint: string): boolean {
  * Espelha o usuário do IdP na tabela `users` (FR-005): cria no primeiro acesso e atualiza
  * nome e e-mail quando mudam. Um cache curto, chaveado pelas próprias claims, evita uma
  * escrita por requisição; qualquer mudança nas claims ignora o cache.
+ *
+ * Spec 009 (FR-005): na mesma passagem, sincroniza os vínculos herdados dos grupos do IdP. Como
+ * os grupos fazem parte da chave do cache, um token novo com outros grupos (novo login)
+ * sincroniza na hora.
  */
 @Injectable()
 export class UserSyncService {
   private readonly cache = new Map<string, { user: User; expiresAt: number }>();
 
-  constructor(@Inject(DB) private readonly db: Db) {}
+  constructor(
+    @Inject(DB) private readonly db: Db,
+    @Inject(IdpGroupSync) private readonly groups: IdpGroupSync,
+  ) {}
 
   async sync(claims: AccessTokenClaims): Promise<User> {
     const email = claims.email?.trim().toLowerCase();
     if (!email) throw new UnauthenticatedError('Token sem a claim email');
     const name = claims.name ?? claims.preferred_username ?? null;
 
-    const key = JSON.stringify([claims.sub, email, name]);
+    const groups = [...(claims.groups ?? [])].sort();
+    const key = JSON.stringify([claims.sub, email, name, groups]);
     const cached = this.cache.get(key);
     if (cached && cached.expiresAt > Date.now()) return cached.user;
 
     const user = await this.upsert(claims.sub, email, name);
+    if (user.is_active) await this.groups.sync(user.id, groups);
     if (this.cache.size >= CACHE_MAX) this.cache.clear();
     this.cache.set(key, { user, expiresAt: Date.now() + CACHE_TTL_MS });
     return user;
+  }
+
+  /** Esquece o usuário em cache (ex.: desativado pela administração). */
+  forget(userId: string): void {
+    for (const [key, entry] of this.cache) if (entry.user.id === userId) this.cache.delete(key);
   }
 
   private async upsert(externalId: string, email: string, name: string | null): Promise<User> {

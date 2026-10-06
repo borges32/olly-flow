@@ -6,9 +6,12 @@ export const accessTokenClaimsSchema = z.object({
   email: z.string().optional(),
   name: z.string().optional(),
   preferred_username: z.string().optional(),
-  groups: z.array(z.string()).optional(),
+  // Lida de fato pelo `GroupResolver` (claim configurável, spec 009).
+  groups: z.unknown().optional(),
 });
-export type AccessTokenClaims = z.infer<typeof accessTokenClaimsSchema>;
+export type AccessTokenClaims = Omit<z.infer<typeof accessTokenClaimsSchema>, 'groups'> & {
+  groups?: string[];
+};
 
 export interface AuthenticatedUser {
   id: string;

@@ -2,20 +2,28 @@
 
 > **Gerado** por `apps/api/src/rbac/rbac-matrix.int.test.ts` (spec 005, FR-017), executando cada ação contra a API real com os papéis padrão do seed (`packages/shared-types/src/rbac.ts`). Não edite à mão: regenere com `OLLY_UPDATE_RBAC_MATRIX=1 pnpm --filter @olly/api test:integration`.
 
-Papéis por projeto. O grupo de administração do IdP (`OIDC_ADMIN_GROUP`) tem todas as permissões em todos os projetos. "Não membro" recebe 404 nos recursos do projeto.
+Papéis por projeto. "Admin da plataforma" é o grupo de administração do IdP (`OIDC_ADMIN_GROUP`), com todas as permissões em todos os projetos; um grupo do IdP mapeado para um papel global (spec 009) tem as permissões desse papel em todos os projetos. "Não membro" recebe 404 nos recursos do projeto. As ações marcadas com (global) só existem no escopo da plataforma: o papel admin de um projeto não as tem.
 
-| Ação | Permissão | admin | editor | executor | viewer | não membro |
-|---|---|:---:|:---:|:---:|:---:|:---:|
-| Ver workflows do projeto | `workflow:read` | ✅ | ✅ | ✅ | ✅ | — |
-| Criar workflow | `workflow:create` | ✅ | ✅ | — | — | — |
-| Editar workflow | `workflow:update` | ✅ | ✅ | — | — | — |
-| Excluir workflow | `workflow:delete` | ✅ | ✅ | — | — | — |
-| Executar (teste) | `workflow:execute` | ✅ | ✅ | ✅ | — | — |
-| Publicar e despublicar | `workflow:publish` | ✅ | ✅ | — | — | — |
-| Ver execuções | `execution:read` | ✅ | ✅ | ✅ | ✅ | — |
-| Ver dados das execuções | `execution:readData` | ✅ | ✅ | — | — | — |
-| Listar e usar credenciais | `credential:use` | ✅ | ✅ | — | — | — |
-| Gerenciar credenciais | `credential:manage` | ✅ | ✅ | — | — | — |
-| Gerenciar membros do projeto | `project:manage` | ✅ | — | — | — | — |
+| Ação | Permissão | admin da plataforma | admin | editor | executor | viewer | não membro |
+|---|---|:---:|:---:|:---:|:---:|:---:|:---:|
+| Ver workflows do projeto | `workflow:read` | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| Criar workflow | `workflow:create` | ✅ | ✅ | ✅ | — | — | — |
+| Editar workflow | `workflow:update` | ✅ | ✅ | ✅ | — | — | — |
+| Excluir workflow | `workflow:delete` | ✅ | ✅ | ✅ | — | — | — |
+| Executar (teste) | `workflow:execute` | ✅ | ✅ | ✅ | ✅ | — | — |
+| Publicar e despublicar | `workflow:publish` | ✅ | ✅ | ✅ | — | — | — |
+| Ver execuções | `execution:read` | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| Ver dados das execuções | `execution:readData` | ✅ | ✅ | ✅ | — | — | — |
+| Listar e usar credenciais | `credential:use` | ✅ | ✅ | ✅ | — | — | — |
+| Gerenciar credenciais | `credential:manage` | ✅ | ✅ | ✅ | — | — | — |
+| Gerenciar membros do projeto | `project:manage` | ✅ | ✅ | — | — | — | — |
+| Ver histórico, versões e diff | `workflow:read` | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| Restaurar versão | `workflow:update` | ✅ | ✅ | ✅ | — | — | — |
+| Aprovar pedido de publicação de outra pessoa | `workflow:publish` | ✅ | ✅ | ✅ | — | — | — |
+| Ver dados das execuções (projeto com "Executor vê os dados") | `execution:readData` | ✅ | ✅ | ✅ | ✅ | — | — |
+| Configurar governança e mascaramento do projeto | `project:manage` | ✅ | ✅ | — | — | — | — |
+| Mapear grupos do IdP e gerenciar usuários (global) | `user:manage` | ✅ | — | — | — | — | — |
+| Regras globais de mascaramento (global) | `project:manage` | ✅ | — | — | — | — | — |
+| Consultar e exportar a auditoria (global) | `audit:read` | ✅ | — | — | — | — | — |
 
-Permissões sem rota até agora: `user:manage` (administração de usuários pelo IdP) e `audit:read` (consulta de auditoria, spec 009).
+Spec 009: com a opção "Executor vê os dados das execuções" do projeto (`executor_can_read_data`), o papel Executor ganha `execution:readData` naquele projeto (FR-019). Com a aprovação de publicação ativa, publicar abre um pedido; o autor do pedido nunca o aprova (FR-011).

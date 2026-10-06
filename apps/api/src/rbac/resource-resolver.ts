@@ -4,7 +4,7 @@ import { DB } from '../core/tokens.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export type ResourceKind = 'project' | 'workflow' | 'execution' | 'credential';
+export type ResourceKind = 'project' | 'workflow' | 'execution' | 'credential' | 'publishRequest';
 
 /** Resolve o projeto dono de um recurso. Novos tipos (credencial...) entram aqui. */
 @Injectable()
@@ -25,6 +25,14 @@ export class ResourceResolver {
     if (kind === 'credential') {
       const row = await this.db
         .selectFrom('credentials')
+        .select('project_id')
+        .where('id', '=', id)
+        .executeTakeFirst();
+      return row?.project_id ?? null;
+    }
+    if (kind === 'publishRequest') {
+      const row = await this.db
+        .selectFrom('publish_requests')
         .select('project_id')
         .where('id', '=', id)
         .executeTakeFirst();

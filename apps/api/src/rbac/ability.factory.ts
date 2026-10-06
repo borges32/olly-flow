@@ -20,6 +20,8 @@ export class AbilityFactory {
     if (user.isAdmin) {
       can('manage', 'all');
     } else {
+      // Spec 009, FR-005: papel global herdado de grupo do IdP vale em todos os projetos.
+      for (const permission of user.permissions.global) can(permission, 'Project');
       for (const [projectId, permissions] of Object.entries(user.permissions.projects)) {
         for (const permission of permissions) can(permission, 'Project', { id: projectId });
       }
@@ -43,7 +45,16 @@ export function hasProjectPermission(
   permission: Permission,
   projectId: string,
 ): boolean {
-  return user.isAdmin || (user.permissions.projects[projectId] ?? []).includes(permission);
+  return (
+    user.isAdmin ||
+    user.permissions.global.includes(permission) ||
+    (user.permissions.projects[projectId] ?? []).includes(permission)
+  );
+}
+
+/** Enxerga todos os projetos: administrador ou papel global herdado de grupo (spec 009). */
+export function seesAllProjects(user: AuthenticatedUser): boolean {
+  return user.isAdmin || user.permissions.global.length > 0;
 }
 
 /** Pode em algum projeto (há ao menos uma regra para a permissão). */

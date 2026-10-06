@@ -5,6 +5,7 @@ import {
   type ExecutionDetail,
   type Permission,
   type ProjectSummary,
+  type PublishResponse,
   type RoleName,
   type TestRunResponse,
   type WorkflowDefinition,
@@ -20,9 +21,10 @@ import { loginAs, startTestContext, type TestContext, type TestUser } from '../t
  */
 const MATRIX_FILE = fileURLToPath(new URL('../../../../docs/rbac-matriz.md', import.meta.url));
 
-type Subject = RoleName | 'outsider';
-const SUBJECTS: Subject[] = ['admin', 'editor', 'executor', 'viewer', 'outsider'];
+type Subject = 'platform' | RoleName | 'outsider';
+const SUBJECTS: Subject[] = ['platform', 'admin', 'editor', 'executor', 'viewer', 'outsider'];
 const LABEL: Record<Subject, string> = {
+  platform: 'admin da plataforma',
   admin: 'admin',
   editor: 'editor',
   executor: 'executor',
@@ -33,6 +35,9 @@ const LABEL: Record<Subject, string> = {
 let ctx: TestContext;
 let root: TestUser;
 let project: ProjectSummary;
+/** Spec 009: projeto com aprovação de publicação e com o Executor vendo os dados. */
+let governed: ProjectSummary;
+let governedExecutionId: string;
 const users = {} as Record<Subject, TestUser>;
 let executionId: string;
 
@@ -63,9 +68,21 @@ const ok = (status: number) => status >= 200 && status < 300;
 interface Action {
   name: string;
   permission: Permission;
+  /** Só no escopo global (spec 009): papéis de projeto não têm, mesmo que o papel liste. */
+  global?: boolean;
+  /** Expectativa diferente do seed (ex.: concessão condicional, FR-019 da spec 009). */
+  expect?: (subject: Subject) => boolean;
   /** `true` quando o usuário conseguiu fazer a ação. */
   run(user: TestUser): Promise<boolean>;
 }
+
+const newGovernedWorkflow = async () =>
+  (
+    await root.call('POST', `/projects/${governed.id}/workflows`, {
+      name: `wf ${Math.random()}`,
+      definition,
+    })
+  ).json<WorkflowDetail>();
 
 const ACTIONS: Action[] = [
   {
@@ -109,7 +126,10 @@ const ACTIONS: Action[] = [
     permission: 'workflow:publish',
     run: async (u) => {
       const wf = await newWorkflow();
-      const published = ok((await u.call('POST', `/workflows/${wf.id}/publish`, {})).statusCode);
+      const published = ok(
+        (await u.call('POST', `/workflows/${wf.id}/publish`, { message: 'Publicação de teste' }))
+          .statusCode,
+      );
       const unpublished = ok((await u.call('POST', `/workflows/${wf.id}/unpublish`)).statusCode);
       return published && unpublished;
     },
@@ -151,28 +171,101 @@ const ACTIONS: Action[] = [
     permission: 'project:manage',
     run: async (u) => ok((await u.call('GET', `/projects/${project.id}/members`)).statusCode),
   },
+  // Spec 009.
+  {
+    name: 'Ver histórico, versões e diff',
+    permission: 'workflow:read',
+    run: async (u) => {
+      const wf = await newWorkflow();
+      return ok((await u.call('GET', `/workflows/${wf.id}/diff?from=1`)).statusCode);
+    },
+  },
+  {
+    name: 'Restaurar versão',
+    permission: 'workflow:update',
+    run: async (u) => {
+      const wf = await newWorkflow();
+      return ok((await u.call('POST', `/workflows/${wf.id}/versions/1/restore`)).statusCode);
+    },
+  },
+  {
+    name: 'Aprovar pedido de publicação de outra pessoa',
+    permission: 'workflow:publish',
+    run: async (u) => {
+      const wf = await newGovernedWorkflow();
+      const request = (
+        await root.call('POST', `/workflows/${wf.id}/publish`, { message: 'Pedido' })
+      ).json<PublishResponse>().pendingApproval;
+      if (!request) throw new Error('pedido não criado');
+      return ok((await u.call('POST', `/publish-requests/${request.id}/approve`)).statusCode);
+    },
+  },
+  {
+    name: 'Ver dados das execuções (projeto com "Executor vê os dados")',
+    permission: 'execution:readData',
+    expect: (s) => s === 'platform' || s === 'admin' || s === 'editor' || s === 'executor',
+    run: async (u) => {
+      const res = await u.call('GET', `/executions/${governedExecutionId}`);
+      return ok(res.statusCode) && !res.json<ExecutionDetail>().dataRedacted;
+    },
+  },
+  {
+    name: 'Configurar governança e mascaramento do projeto',
+    permission: 'project:manage',
+    run: async (u) =>
+      ok(
+        (await u.call('PUT', `/projects/${project.id}/settings`, { saveExecutionData: 'all' }))
+          .statusCode,
+      ) && ok((await u.call('GET', `/projects/${project.id}/masking-rules`)).statusCode),
+  },
+  {
+    name: 'Mapear grupos do IdP e gerenciar usuários',
+    permission: 'user:manage',
+    global: true,
+    run: async (u) =>
+      ok((await u.call('GET', '/sso/group-mappings')).statusCode) &&
+      ok((await u.call('GET', '/admin/users')).statusCode),
+  },
+  {
+    name: 'Regras globais de mascaramento',
+    permission: 'project:manage',
+    global: true,
+    run: async (u) => ok((await u.call('GET', '/masking-rules')).statusCode),
+  },
+  {
+    name: 'Consultar e exportar a auditoria',
+    permission: 'audit:read',
+    global: true,
+    run: async (u) =>
+      ok((await u.call('GET', '/audit')).statusCode) &&
+      ok((await u.call('GET', '/audit/export.csv')).statusCode),
+  },
 ];
 
-const expected = (subject: Subject, permission: Permission) =>
-  subject !== 'outsider' && DEFAULT_ROLE_PERMISSIONS[subject].includes(permission);
+const expected = (subject: Subject, action: Action) => {
+  if (action.expect) return action.expect(subject);
+  if (subject === 'platform') return true;
+  if (subject === 'outsider' || action.global) return false;
+  return DEFAULT_ROLE_PERMISSIONS[subject].includes(action.permission);
+};
 
 function render(results: Record<string, Record<Subject, boolean>>): string {
   const mark = (v: boolean) => (v ? '✅' : '—');
   const rows = ACTIONS.map(
     (a) =>
-      `| ${a.name} | \`${a.permission}\` | ${SUBJECTS.map((s) => mark(results[a.name]?.[s] ?? false)).join(' | ')} |`,
+      `| ${a.name}${a.global ? ' (global)' : ''} | \`${a.permission}\` | ${SUBJECTS.map((s) => mark(results[a.name]?.[s] ?? false)).join(' | ')} |`,
   );
   return `# Matriz RBAC
 
 > **Gerado** por \`apps/api/src/rbac/rbac-matrix.int.test.ts\` (spec 005, FR-017), executando cada ação contra a API real com os papéis padrão do seed (\`packages/shared-types/src/rbac.ts\`). Não edite à mão: regenere com \`OLLY_UPDATE_RBAC_MATRIX=1 pnpm --filter @olly/api test:integration\`.
 
-Papéis por projeto. O grupo de administração do IdP (\`OIDC_ADMIN_GROUP\`) tem todas as permissões em todos os projetos. "Não membro" recebe 404 nos recursos do projeto.
+Papéis por projeto. "Admin da plataforma" é o grupo de administração do IdP (\`OIDC_ADMIN_GROUP\`), com todas as permissões em todos os projetos; um grupo do IdP mapeado para um papel global (spec 009) tem as permissões desse papel em todos os projetos. "Não membro" recebe 404 nos recursos do projeto. As ações marcadas com (global) só existem no escopo da plataforma: o papel admin de um projeto não as tem.
 
 | Ação | Permissão | ${SUBJECTS.map((s) => LABEL[s]).join(' | ')} |
 |---|---|${SUBJECTS.map(() => ':---:').join('|')}|
 ${rows.join('\n')}
 
-Permissões sem rota até agora: \`user:manage\` (administração de usuários pelo IdP) e \`audit:read\` (consulta de auditoria, spec 009).
+Spec 009: com a opção "Executor vê os dados das execuções" do projeto (\`executor_can_read_data\`), o papel Executor ganha \`execution:readData\` naquele projeto (FR-019). Com a aprovação de publicação ativa, publicar abre um pedido; o autor do pedido nunca o aprova (FR-011).
 `;
 }
 
@@ -180,30 +273,49 @@ beforeAll(async () => {
   ctx = await startTestContext();
   root = await loginAs(ctx, { sub: 'root', email: 'root@t.local', groups: ['admin'] });
   project = (await root.call('POST', '/projects', { name: 'Matriz' })).json<ProjectSummary>();
+  governed = (await root.call('POST', '/projects', { name: 'Governado' })).json<ProjectSummary>();
+  await root.call('PUT', `/projects/${governed.id}/settings`, {
+    requirePublishApproval: true,
+    executorCanReadData: true,
+  });
   for (const subject of SUBJECTS) {
+    if (subject === 'platform') {
+      users[subject] = await loginAs(ctx, {
+        sub: 'platform',
+        email: 'platform@t.local',
+        groups: ['admin'],
+      });
+      continue;
+    }
     users[subject] = await loginAs(ctx, { sub: subject, email: `${subject}@t.local` });
     if (subject !== 'outsider') {
-      await root.call('PUT', `/projects/${project.id}/members/${users[subject].id}`, {
-        role: subject,
-      });
+      for (const p of [project, governed]) {
+        await root.call('PUT', `/projects/${p.id}/members/${users[subject].id}`, {
+          role: subject,
+        });
+      }
     }
   }
-  const wf = await newWorkflow();
-  executionId = (
-    await root.call('POST', `/workflows/${wf.id}/test-run`, { definition })
-  ).json<TestRunResponse>().executionId;
-  for (let i = 0; i < 100; i++) {
-    const d = (await root.call('GET', `/executions/${executionId}`)).json<ExecutionDetail>();
-    if (!['queued', 'running'].includes(d.status)) break;
-    await new Promise((r) => setTimeout(r, 50));
-  }
+  const run = async (wf: WorkflowDetail) => {
+    const id = (
+      await root.call('POST', `/workflows/${wf.id}/test-run`, { definition })
+    ).json<TestRunResponse>().executionId;
+    for (let i = 0; i < 100; i++) {
+      const d = (await root.call('GET', `/executions/${id}`)).json<ExecutionDetail>();
+      if (!['queued', 'running'].includes(d.status)) break;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    return id;
+  };
+  executionId = await run(await newWorkflow());
+  governedExecutionId = await run(await newGovernedWorkflow());
 });
 afterAll(async () => {
   await ctx.close();
 });
 
 describe('spec 005 — FR-017/SC-004: matriz papel × ação', () => {
-  it('FR-017/SC-004: cada papel faz exatamente o que o seed concede e a matriz é documentada', async () => {
+  it('FR-017/SC-004 e spec 009 FR-018/FR-019: cada papel faz exatamente o que o seed concede e a matriz é documentada', async () => {
     const results: Record<string, Record<Subject, boolean>> = {};
     const divergences: string[] = [];
     for (const action of ACTIONS) {
@@ -211,7 +323,7 @@ describe('spec 005 — FR-017/SC-004: matriz papel × ação', () => {
       for (const subject of SUBJECTS) {
         const allowed = await action.run(users[subject]);
         (results[action.name] as Record<Subject, boolean>)[subject] = allowed;
-        if (allowed !== expected(subject, action.permission)) {
+        if (allowed !== expected(subject, action)) {
           divergences.push(`${LABEL[subject]} × ${action.name}: obtido ${String(allowed)}`);
         }
       }

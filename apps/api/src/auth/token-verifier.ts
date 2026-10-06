@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { DependencyUnavailableError, UnauthenticatedError } from '../common/errors.js';
 import { APP_CONFIG, type AppConfig } from '../config/config.js';
 import { accessTokenClaimsSchema, type AccessTokenClaims } from './auth.types.js';
+import { ClaimGroupResolver, type GroupResolver } from './group-resolver.js';
 
 const ALLOWED_ALGORITHMS = [
   'RS256',
@@ -29,8 +30,11 @@ const discoverySchema = z.object({ issuer: z.string(), jwks_uri: z.url() });
 export class OidcTokenVerifier {
   private readonly logger = new Logger(OidcTokenVerifier.name);
   private jwks?: Promise<JWTVerifyGetKey>;
+  private readonly groups: GroupResolver;
 
-  constructor(@Inject(APP_CONFIG) private readonly config: AppConfig) {}
+  constructor(@Inject(APP_CONFIG) private readonly config: AppConfig) {
+    this.groups = new ClaimGroupResolver(config.oidc.groupsClaim ?? 'groups');
+  }
 
   private get discoveryUrl(): string {
     const base = this.config.oidc.discoveryUrl ?? this.config.oidc.issuerUrl;
@@ -59,7 +63,16 @@ export class OidcTokenVerifier {
     }
     const claims = accessTokenClaimsSchema.safeParse(payload);
     if (!claims.success) throw new UnauthenticatedError('Token com claims inválidas');
-    return claims.data;
+    // Spec 009, FR-005: grupos da claim configurada (OIDC_GROUPS_CLAIM).
+    const groups = this.groups.resolve(payload as Record<string, unknown>);
+    const { sub, email, name, preferred_username } = claims.data;
+    return {
+      sub,
+      ...(email !== undefined && { email }),
+      ...(name !== undefined && { name }),
+      ...(preferred_username !== undefined && { preferred_username }),
+      ...(groups && { groups }),
+    };
   }
 
   /** Usado pelo `/health`: o emissor responde ao documento de descoberta? */

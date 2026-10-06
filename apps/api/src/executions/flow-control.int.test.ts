@@ -109,7 +109,7 @@ describe('spec 007 — FR-014/FR-015/SC-006: workflow de erro', () => {
       ]),
     );
     const main = await createWorkflow(editor, project.id, failingHook('pedido-falha', handler.id));
-    await editor.call('POST', `/workflows/${main.id}/publish`, {});
+    await editor.call('POST', `/workflows/${main.id}/publish`, { message: 'Publicação de teste' });
     const failedId = await callHook('pedido-falha');
     expect((await waitForStatus(editor, failedId)).status).toBe('error');
 
@@ -139,7 +139,7 @@ describe('spec 007 — FR-014/FR-015/SC-006: workflow de erro', () => {
       settings: { errorWorkflowId: last.id },
     });
     const main = await createWorkflow(editor, project.id, failingHook('cadeia', failingHandler.id));
-    await editor.call('POST', `/workflows/${main.id}/publish`, {});
+    await editor.call('POST', `/workflows/${main.id}/publish`, { message: 'Publicação de teste' });
     await callHook('cadeia');
     const handlerRun = await until(async () => (await executionsOf(failingHandler.id))[0]);
     expect((await waitForStatus(editor, handlerRun.id)).status).toBe('error');

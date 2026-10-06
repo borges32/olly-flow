@@ -17,6 +17,7 @@ import {
   webhookIssues,
   webhookNodes,
 } from './publishing.service.js';
+import { PublishApprovalsService } from './publish-approvals.service.js';
 import { TestListeners } from './test-listeners.js';
 import {
   listenSchema,
@@ -31,21 +32,27 @@ import {
 export class WebhooksController {
   constructor(
     @Inject(PublishingService) private readonly publishing: PublishingService,
+    @Inject(PublishApprovalsService) private readonly approvals: PublishApprovalsService,
     @Inject(TestListeners) private readonly listeners: TestListeners,
     @Inject(ExecutionsService) private readonly executions: ExecutionsService,
     @Inject(CredentialsService) private readonly credentials: CredentialsService,
   ) {}
 
-  /** FR-001/FR-002: publica uma versão (padrão: a última salva) e ativa as rotas de webhook. */
+  /**
+   * FR-001/FR-002: publica uma versão (padrão: a última salva) e ativa as rotas de webhook.
+   * Spec 009: mensagem obrigatória (FR-009); com aprovação ativa no projeto, abre um pedido
+   * (FR-011) e responde com `pendingApproval`.
+   */
   @RequirePermission('workflow:publish', { workflow: 'id' })
   @HttpCode(200)
   @Post('workflows/:id/publish')
   publish(
     @Audit() audit: AuditContext,
+    @CurrentUser() user: AuthenticatedUser,
     @Param('id') id: string,
     @Body(new ZodPipe(publishSchema)) body: PublishBody,
   ): Promise<PublishResponse> {
-    return this.publishing.publish(audit, id, body.version);
+    return this.approvals.requestOrPublish(audit, user, id, body);
   }
 
   @RequirePermission('workflow:publish', { workflow: 'id' })

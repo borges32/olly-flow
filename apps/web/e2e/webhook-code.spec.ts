@@ -87,7 +87,11 @@ test.describe('spec 005 — webhook, publicação, execuções e código pelo ed
     expect(
       (await outside.post(`http://localhost:5173/webhook/${path}`, { data: {} })).status(),
     ).toBe(404);
+    // Spec 009, FR-009: a publicação pede uma mensagem.
     await page.getByRole('button', { name: 'Publicar' }).click();
+    const dialog = page.getByTestId('publish-dialog');
+    await dialog.getByLabel('Mensagem da publicação').fill('Primeira versão');
+    await dialog.getByRole('button', { name: 'Publicar' }).click();
     await expect(page.getByTestId('publish-badge')).toHaveText('Publicada v1');
     const prod = await outside.post(`http://localhost:5173/webhook/${path}`, {
       data: { nome: 'Bruno' },
