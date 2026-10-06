@@ -1,3 +1,4 @@
+import { ollyMetrics } from '@olly/telemetry';
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ipInList, verifyWebhookAuth, type WebhookResponse } from '@olly/nodes';
@@ -81,6 +82,11 @@ export class WebhookGateway {
           next(null, body);
         },
       );
+      // Spec 012, FR-002: requisições recebidas pelos webhooks, por status de resposta.
+      scope.addHook('onResponse', (_req, reply, hookDone) => {
+        ollyMetrics.webhookRequest(reply.statusCode);
+        hookDone();
+      });
       const route = (test: boolean) => (req: FastifyRequest, reply: FastifyReply) =>
         this.handle(req, reply, test);
       scope.all('/webhook/*', { bodyLimit: this.config.webhook.maxBodyBytes }, route(false));

@@ -12,7 +12,8 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@olly/api": "workspace:*"
+    "@olly/api": "workspace:*",
+    "@olly/telemetry": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",

@@ -1,8 +1,9 @@
+import { ollyMetrics, telemetryEnabled } from '@olly/telemetry';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { Db } from '@olly/db';
 import { ExecutionCancelledError } from '@olly/engine';
 import type { WorkflowDefinition } from '@olly/shared-types';
-import { DelayedError, Worker, type Job } from 'bullmq';
+import { DelayedError, Queue, Worker, type Job } from 'bullmq';
 import type { Redis } from 'ioredis';
 import { BINARY_STORAGE } from '../binary/binary.module.js';
 import type { S3BinaryStorage } from '../binary/s3-binary-store.js';
@@ -63,6 +64,8 @@ export class ExecutionProcessor {
   private readonly logger = new Logger('Worker');
   private worker?: Worker<ExecutionJobData>;
   private connection?: Redis;
+  /** Spec 012: leitura do tamanho da fila para as métricas. */
+  private metricsQueue?: Queue;
   private subscriber?: Redis;
   private heartbeat?: NodeJS.Timeout;
   private resumeSweep?: NodeJS.Timeout;
@@ -133,6 +136,15 @@ export class ExecutionProcessor {
     });
     this.heartbeat = setInterval(() => void this.refreshLeases(), this.config.queue.heartbeatMs);
     this.heartbeat.unref();
+    // Spec 012, FR-002: tamanho da fila, lido a cada coleta das métricas (só com telemetria).
+    if (telemetryEnabled()) {
+      const counts = new Queue(EXECUTIONS_QUEUE, { connection: this.connection });
+      this.metricsQueue = counts;
+      ollyMetrics.observeQueue(async () => {
+        const c = await counts.getJobCounts('waiting', 'active');
+        return { waiting: c.waiting ?? 0, active: c.active ?? 0 };
+      });
+    }
     this.resumeSweep = setInterval(() => {
       this.waits.sweepDue().catch((e: unknown) => {
         this.logger.warn(`Varredura de retomadas falhou: ${String(e)}`);
@@ -199,6 +211,7 @@ export class ExecutionProcessor {
         definition: execution.definition as WorkflowDefinition,
         mode: execution.mode,
         ...payload,
+        ...(job.data.trace && { traceContext: job.data.trace }),
       });
     } finally {
       this.active.delete(executionId);
@@ -391,6 +404,7 @@ export class ExecutionProcessor {
       }
     }
     this.subscriber?.disconnect();
+    await this.metricsQueue?.close().catch(() => undefined);
     this.connection?.disconnect();
   }
 }

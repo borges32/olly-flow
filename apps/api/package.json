@@ -37,6 +37,8 @@
     "@olly/nodes": "workspace:*",
     "@olly/shared-types": "workspace:*",
     "@olly/task-runner": "workspace:*",
+    "@olly/telemetry": "workspace:*",
+    "@opentelemetry/api": "^1.9.1",
     "bullmq": "^6.3.11",
     "fast-json-patch": "^3.1.1",
     "fastify": "^5.12.5",

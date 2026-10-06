@@ -3,6 +3,7 @@ import { LoggerModule } from 'nestjs-pino';
 import { LOG_REDACT, type AppOptions } from '../app.module.js';
 import { AuditModule } from '../audit/audit.module.js';
 import { maskingLogOptions } from '../masking/log-masking.js';
+import { pinoHttpWithTelemetry } from '../telemetry/log-options.js';
 import { MaskingModule } from '../masking/masking.module.js';
 import { BinaryModule } from '../binary/binary.module.js';
 import type { AppConfig } from '../config/config.js';
@@ -35,7 +36,8 @@ export class WorkerModule {
       module: WorkerModule,
       imports: [
         CoreModule.forRoot(config),
-        LoggerModule.forRoot({ pinoHttp: options.logStream ? [pino, options.logStream] : pino }),
+        // Spec 012: ids do trace nos logs e envio ao coletor OTel (se configurado).
+        LoggerModule.forRoot({ pinoHttp: pinoHttpWithTelemetry(pino, options.logStream) }),
         AuditModule,
         MaskingModule,
         NodeTypesModule,

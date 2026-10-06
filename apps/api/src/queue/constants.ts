@@ -9,6 +9,8 @@ export const RESUME_JOB = 'resume';
 
 export interface ExecutionJobData {
   executionId: string;
+  /** Spec 012, FR-001: contexto do trace (W3C `traceparent`/`tracestate`). */
+  trace?: Record<string, string>;
 }
 
 /** Mensagem do erro `worker_lost` (FR-005). */

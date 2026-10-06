@@ -326,6 +326,8 @@ export interface ExecutionsTable {
   depth: Generated<number>;
   /** Spec 008, FR-014: execução reexecutada (reexecução ainda não implementada). */
   retry_of: ColumnType<string | null, string | null | undefined, string | null>;
+  /** Spec 012, FR-001: id do trace OpenTelemetry (só com a telemetria ligada). */
+  trace_id: ColumnType<string | null, string | null | undefined, string | null>;
 }
 
 /** Estado serializado do motor de uma execução em `waiting` (spec 008, FR-012). */

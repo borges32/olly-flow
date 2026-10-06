@@ -18,6 +18,8 @@ import { ExecutionDispatcher, cancelQueued, cancelWaiting } from '../executions/
 import { ExecutionEventSink } from '../executions/execution-events.service.js';
 import type { CancelMessage, ExecutionJob, WaitResult } from '../executions/execution-job.js';
 import { ResultPublisher, ResultSubscriber } from '../executions/result-bus.js';
+import { context, SpanKind, trace } from '@opentelemetry/api';
+import { injectTraceContext } from '@olly/telemetry';
 import { CANCEL_CHANNEL, EXECUTIONS_QUEUE, type ExecutionJobData } from './constants.js';
 import { savePayload } from './payloads.js';
 
@@ -83,9 +85,23 @@ export class QueueDispatcher
       ...(destinationNodeId && { destinationNodeId }),
       ...(reuse && { reuse }),
     });
+    // Spec 012, FR-001: o trace de quem disparou (ex.: a requisição do webhook) continua no worker.
+    const span = trace.getTracer('olly-flow').startSpan('execution.enqueue', {
+      kind: SpanKind.PRODUCER,
+      attributes: {
+        'olly.execution.id': job.executionId,
+        'olly.workflow.id': job.workflow.id,
+        'olly.project.id': job.workflow.projectId,
+      },
+    });
+    const traceCarrier = injectTraceContext(trace.setSpan(context.active(), span));
+    span.end();
     await this.queue.add(
       'execution',
-      { executionId: job.executionId },
+      {
+        executionId: job.executionId,
+        ...(Object.keys(traceCarrier).length > 0 && { trace: traceCarrier }),
+      },
       {
         jobId: job.executionId,
         // FR-005: nunca reexecutar automaticamente (efeitos colaterais duplicados).

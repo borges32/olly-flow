@@ -2,6 +2,7 @@ import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { Writable } from 'node:stream';
 import pino from 'pino';
+import { pinoHttp } from 'pino-http';
 import { describe, expect, it } from 'vitest';
 import { maskingLogOptions } from './log-masking.js';
 
@@ -46,5 +47,34 @@ describe('spec 009 — FR-014: mascaramento dos logs', () => {
     const line = JSON.parse(lines[0] ?? '{}') as { dados: unknown; msg: string };
     expect(line.dados).toEqual({ password: '***', doc: '***.***.247-**' });
     expect(line.msg).toBe('CPF ***.***.247-**');
+  });
+
+  it('FR-014 (bug): URL, query e erro serializados pelo pino-http também saem mascarados', async () => {
+    const lines: string[] = [];
+    const stream = new Writable({
+      write(chunk: Buffer, _enc, done) {
+        lines.push(chunk.toString());
+        done();
+      },
+    });
+    const http = pinoHttp({ level: 'info', ...maskingLogOptions }, stream);
+    const server = createServer((req, res) => {
+      http(req, res);
+      req.log.error(new Error('Falhou para o CPF 529.982.247-25'), 'erro');
+      res.end('ok');
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+    try {
+      const { port } = server.address() as AddressInfo;
+      await fetch(`http://127.0.0.1:${String(port)}/busca?cpf=529.982.247-25`);
+      await new Promise((r) => setTimeout(r, 50));
+    } finally {
+      server.closeAllConnections();
+      await new Promise((r) => server.close(r));
+    }
+    const all = lines.join('\n');
+    expect(all).toContain('request completed');
+    expect(all).not.toContain('529.982.247-25');
+    expect(all).toContain('/busca?cpf=***.***.247-**');
   });
 });

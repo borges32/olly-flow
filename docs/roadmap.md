@@ -19,7 +19,7 @@
 | 009 | [governanca-lgpd-sso](../specs/009-governanca-lgpd-sso/spec.md) | 3 — IA e governança | Vault/KMS, SSO, versionamento, aprovação, mascaramento, retenção | 007 (antecipada à 008 por decisão do PO, 05/10/2026) | Implementada ([relatório](../specs/009-governanca-lgpd-sso/report.md)) — ADR-0005/0007 pendentes | |
 | 010 | [cliente-mcp](../specs/010-cliente-mcp/spec.md) | 3 — IA e governança | Catálogo, cliente MCP (somente HTTP), OAuth, políticas, auditoria | 009 | Implementada ([relatório](../specs/010-cliente-mcp/report.md)) — somente HTTP (stdio fora do escopo) | |
 | 011 | [ai-agent](../specs/011-ai-agent/spec.md) | 3 — IA e governança | Chat model, Agent, tools, memória, aprovação humana, custo | 010 + 008 (parcial) | Implementada ([relatório](../specs/011-ai-agent/report.md)) — SC-002 manual e ADR-0008 pendentes | 🏁 Agents em homologação |
-| 012 | [observabilidade-importador-homologacao](../specs/012-observabilidade-importador-homologacao/spec.md) | 4 — Hardening | OTel, Grafana, importador N8N, Helm, carga | 011 | Aprovada | |
+| 012 | [observabilidade-importador-homologacao](../specs/012-observabilidade-importador-homologacao/spec.md) | 4 — Hardening | Telemetria OpenTelemetry (OTLP para o coletor), importador N8N, escopo do pentest | 011 | Em implementação (HU-1; importador e pentest pendentes) | |
 | 013 | [hardening-go-live](../specs/013-hardening-go-live/spec.md) | 4 — Hardening | Pentest, documentação, execução paralela ao N8N, go-live | 012 | Aprovada | 🚀 Go-live |
 | 014 | [primeiro-usuario](../specs/014-primeiro-usuario/spec.md) | 1 — MVP (apoio à UX) | Cadastro do primeiro usuário numa instalação nova | 002 | Rascunho | |
 
@@ -43,7 +43,7 @@ Entre cada spec, antes de iniciar a próxima:
 | 006 | ~~**Go/No-Go** (TCO vs. N8N Enterprise) registrado em ADR; ADR-0006 (infraestrutura)~~ (Go na [ADR-0009](adr/0009-go-no-go.md), 05/10/2026; ADR-0006 aceita em 04/10/2026) | Gestão + PO |
 | 009 | ADR-0005 (IdP) e ADR-0007 (Vault/KMS) decididas, com acessos de homologação | Infra + Segurança |
 | 011 | ADR-0008 (provedores e modelos de LLM aprovados) e chaves de homologação | Gestão + Segurança + Jurídico/LGPD |
-| 012 | Exportar **todos** os workflows da POC; agendar pentest; ambiente de homologação; metas de carga (NFR-G08) | PO + Segurança + Infra |
+| 012 | Exportar **todos** os workflows da POC; agendar pentest; endereço e autenticação do coletor OTel institucional | PO + Segurança + Infra |
 | 013 | Relatório do pentest; data e janela do go-live; aprovação de riscos aceitos | Segurança + Gestão |
 | 014 | Decidir a relação com a NFR-G03 (credencial no IdP ou local) e resolver os pontos em aberto da spec | PO + Segurança |
 | Pós 013 | Deploy em produção, treinamento, reteste do pentest, hypercare, desligamento do N8N | Infra + PO + Segurança |

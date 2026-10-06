@@ -21,6 +21,8 @@ export interface ExecutionJob {
   reuse?: Record<string, string>;
   /** Retomada de uma execução em espera (spec 008, FR-012). */
   resume?: { snapshot: EngineSnapshot; values: Record<string, unknown> };
+  /** Spec 012, FR-001: contexto do trace de quem disparou (W3C `traceparent`), vindo da fila. */
+  traceContext?: Record<string, string>;
 }
 
 /** Dados do disparo guardados fora da fila (`execution_payloads`, spec 006 FR-001). */

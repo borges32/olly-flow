@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| **Status** | Rascunho |
+| **Status** | Aprovado |
 | **Fase** | 1 — MVP (apoio à validação de UX) |
 | **Depende de** | 002 |
 | **Requisitos de produto** | PR-08 (parcial), PR-20 (parcial); afeta NFR-G03 |

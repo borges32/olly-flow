@@ -1,3 +1,4 @@
+import { context } from '@opentelemetry/api';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { Db } from '@olly/db';
 import { ExecutionCancelledError, runWorkflow, type ReusedNodeRun } from '@olly/engine';
@@ -17,6 +18,7 @@ import { ApprovalsService } from '../ai/approvals.service.js';
 import { NODE_REGISTRY } from '../node-types/node-types.module.js';
 import { ExecutionEventSink } from './execution-events.service.js';
 import type { ExecutionJob, ExecutionOutcome, WebhookResponse } from './execution-job.js';
+import { ExecutionTelemetry } from '../telemetry/execution-telemetry.js';
 import { ExecutionRecorder } from './execution-recorder.js';
 import { readNodeData } from './node-data.js';
 import { SubWorkflowService } from './sub-workflows.js';
@@ -70,6 +72,24 @@ export class ExecutionRunner {
   }
 
   async execute(job: ExecutionJob, hooks: ExecutionHooks = {}): Promise<ExecutionOutcome> {
+    // Spec 012, FR-001: a execução roda no contexto do span raiz (logs e runners correlacionados).
+    const telemetry = await ExecutionTelemetry.start(this.db, job);
+    let outcome: ExecutionOutcome = { status: 'error' };
+    try {
+      outcome = await context.with(telemetry.context, () =>
+        this.executeTraced(job, hooks, telemetry),
+      );
+      return outcome;
+    } finally {
+      telemetry.finish(outcome);
+    }
+  }
+
+  private async executeTraced(
+    job: ExecutionJob,
+    hooks: ExecutionHooks,
+    telemetry: ExecutionTelemetry,
+  ): Promise<ExecutionOutcome> {
     const { executionId, workflow } = job;
     // Em sequência: uma conexão do pool por vez no início da execução.
     const masker = await this.masking.forProject(workflow.projectId);
@@ -89,7 +109,7 @@ export class ExecutionRunner {
       this.logger,
     );
     const recorded = recorder.callbacks();
-    const callbacks: typeof recorded = {
+    const callbacks: typeof recorded = telemetry.wrap({
       ...recorded,
       onExecutionFinish: async (result) => {
         // Spec 008/011: o estado e os pedidos de aprovação são gravados antes de a execução
@@ -112,7 +132,7 @@ export class ExecutionRunner {
         }
         await recorded.onExecutionFinish?.(result);
       },
-    };
+    });
     const controller = new AbortController();
     const timeoutMs = job.definition.settings.timeoutSec
       ? job.definition.settings.timeoutSec * 1000

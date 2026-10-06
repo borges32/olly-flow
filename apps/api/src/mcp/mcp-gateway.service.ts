@@ -1,3 +1,4 @@
+import { ollyMetrics } from '@olly/telemetry';
 import { Inject, Injectable } from '@nestjs/common';
 import type { Db, McpServerRow } from '@olly/db';
 import type { Masker } from '@olly/engine';
@@ -107,6 +108,8 @@ export class McpGatewayFactory {
     ) => {
       const error =
         outcome.error === undefined ? null : ctx.masker.maskText(errorMessage(outcome.error));
+      // Spec 012, FR-002: chamadas MCP por servidor e resultado.
+      ollyMetrics.mcpCall(server.name, outcome.status);
       await this.db
         .insertInto('mcp_calls')
         .values({

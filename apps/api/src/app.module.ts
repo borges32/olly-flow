@@ -15,6 +15,7 @@ import { ExpressionsModule } from './expressions/expressions.module.js';
 import { GovernanceModule } from './governance/governance.module.js';
 import { HealthModule } from './health/health.module.js';
 import { maskingLogOptions } from './masking/log-masking.js';
+import { pinoHttpWithTelemetry } from './telemetry/log-options.js';
 import { MaskingModule } from './masking/masking.module.js';
 import { McpModule } from './mcp/mcp.module.js';
 import { AiModule } from './ai/ai.module.js';
@@ -61,7 +62,8 @@ export class AppModule {
       imports: [
         CoreModule.forRoot(config),
         LoggerModule.forRoot({
-          pinoHttp: options.logStream ? [pinoOptions, options.logStream] : pinoOptions,
+          // Spec 012: ids do trace nos logs e envio ao coletor OTel (se configurado).
+          pinoHttp: pinoHttpWithTelemetry(pinoOptions, options.logStream),
           // O padrão do nestjs-pino ('*') usa a sintaxe antiga do path-to-regexp.
           forRoutes: [{ path: '{*path}', method: RequestMethod.ALL }],
         }),

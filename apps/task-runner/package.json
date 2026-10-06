@@ -21,6 +21,8 @@
   },
   "dependencies": {
     "@olly/expressions": "workspace:*",
+    "@olly/telemetry": "workspace:*",
+    "@opentelemetry/api": "^1.9.1",
     "zod": "^4.6.5"
   },
   "devDependencies": {

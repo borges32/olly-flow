@@ -176,6 +176,13 @@ services:
       OLLY_PROJECT_MAX_CONCURRENT: ${OLLY_PROJECT_MAX_CONCURRENT:-20}
       OLLY_WEBHOOK_RATE_LIMIT_PER_MIN: ${OLLY_WEBHOOK_RATE_LIMIT_PER_MIN:-120}
       OLLY_DEFAULT_WORKFLOW_TIMEOUT: ${OLLY_DEFAULT_WORKFLOW_TIMEOUT:-300}
+      # Spec 012: telemetria OpenTelemetry (vazio = desligada). Para o coletor de desenvolvimento:
+      # `docker compose --profile otel up -d otel-collector` e
+      # OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318 no .env.
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL:-http/protobuf}
+      OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+      OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES:-deployment.environment=desenvolvimento}
       # Spec 011: prazo da aprovação humana. Os modelos permitidos são cadastrados em
       # Administração › IA (sem reiniciar).
       OLLY_APPROVAL_TIMEOUT_HOURS: ${OLLY_APPROVAL_TIMEOUT_HOURS:-24}
@@ -273,6 +280,17 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+
+  # Spec 012: coletor OpenTelemetry de desenvolvimento (opcional): imprime o que recebe.
+  otel-collector:
+    image: otel/opentelemetry-collector:0.145.0
+    profiles: [otel]
+    command: ['--config=/etc/otelcol/config.yaml']
+    volumes:
+      - ./infra/otel/collector.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      - '4317:4317'
+      - '4318:4318'
 
 volumes:
   postgres-data:

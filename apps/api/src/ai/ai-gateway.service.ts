@@ -1,3 +1,4 @@
+import { ollyMetrics } from '@olly/telemetry';
 import { Inject, Injectable } from '@nestjs/common';
 import type { Db } from '@olly/db';
 import type { Masker } from '@olly/engine';
@@ -183,6 +184,8 @@ export class AiGatewayFactory {
         }
       },
       recordUsage: async (usage) => {
+        // Spec 012, FR-002: tokens por modelo e direção.
+        ollyMetrics.llmTokens(usage.model, usage.inputTokens, usage.outputTokens);
         const price = await this.price(usage.model);
         const cost = price
           ? (usage.inputTokens * price.input + usage.outputTokens * price.output) / 1_000_000

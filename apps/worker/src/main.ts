@@ -1,9 +1,5 @@
-import { existsSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { telemetry } from './instrument.js';
 import { ConfigError, loadConfig, startWorker } from '@olly/api/worker';
-
-const rootEnv = fileURLToPath(new URL('../../../.env', import.meta.url));
-if (existsSync(rootEnv)) process.loadEnvFile(rootEnv);
 
 try {
   const config = loadConfig(process.env);
@@ -16,13 +12,17 @@ try {
     console.info(
       `${signal} recebido: encerrando o worker (até ${String(config.queue.workerShutdownTimeoutMs)} ms)`,
     );
-    worker.close().then(
-      () => process.exit(0),
-      (error: unknown) => {
-        console.error(error);
-        process.exit(1);
-      },
-    );
+    // Spec 012: envia a telemetria pendente ao coletor antes de sair.
+    worker
+      .close()
+      .then(() => telemetry.shutdown())
+      .then(
+        () => process.exit(0),
+        (error: unknown) => {
+          console.error(error);
+          process.exit(1);
+        },
+      );
   };
   process.on('SIGTERM', () => {
     stop('SIGTERM');

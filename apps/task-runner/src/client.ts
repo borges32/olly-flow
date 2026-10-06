@@ -9,7 +9,33 @@ import type {
   RunCodeRequest,
   RunCodeResult,
 } from '@olly/expressions';
+import { SpanStatusCode, trace, type Span } from '@opentelemetry/api';
+import { ollyMetrics } from '@olly/telemetry';
 import { responseSchema, type RunnerRequest } from './protocol.js';
+
+/** Falhas do sandbox (não erros do código do usuário): métrica `olly.sandbox.errors`. */
+const SANDBOX_FAILURES = new Set(['timeout', 'memory', 'crashed']);
+
+/**
+ * Spec 012, FR-001: span em volta da chamada ao processo filho, no processo de quem chama. O
+ * filho não recebe as variáveis OTEL (ambiente mínimo, sem segredos), por isso o span nasce aqui.
+ */
+function traced<T>(
+  name: string,
+  attributes: Record<string, string | number>,
+  fn: (span: Span) => Promise<T>,
+) {
+  return trace.getTracer('olly-flow').startActiveSpan(name, { attributes }, async (span) => {
+    try {
+      return await fn(span);
+    } catch (error) {
+      span.setStatus({ code: SpanStatusCode.ERROR, message: 'task-runner' });
+      throw error;
+    } finally {
+      span.end();
+    }
+  });
+}
 
 export interface TaskRunnerLogger {
   info(message: string): void;
@@ -78,36 +104,60 @@ export class TaskRunnerClient implements ExpressionEvaluator, CodeRunner {
     return this.ready;
   }
 
-  async evaluateBatch(batch: EvaluateBatch): Promise<EvaluateResult[]> {
+  evaluateBatch(batch: EvaluateBatch): Promise<EvaluateResult[]> {
     // Margem generosa: cada expressão já tem timeout próprio dentro do runner.
     const deadline = Math.min(120_000, 5000 + batch.requests.length * this.timeoutMs);
-    return (await this.request(
-      { type: 'evaluateBatch', id: randomUUID(), ...batch },
-      deadline,
-    )) as EvaluateResult[];
+    return traced(
+      'taskrunner.evaluate',
+      { 'olly.expressions.count': batch.requests.length },
+      async (span) => {
+        const results = (await this.request(
+          { type: 'evaluateBatch', id: randomUUID(), ...batch },
+          deadline,
+        )) as EvaluateResult[];
+        const failed = results.filter((r) => !r.ok);
+        if (failed.length > 0) span.setAttribute('olly.expressions.failed', failed.length);
+        for (const r of failed) {
+          if (SANDBOX_FAILURES.has(r.error.kind))
+            ollyMetrics.sandboxError('expression', r.error.kind);
+        }
+        return results;
+      },
+    );
   }
 
   /**
    * Spec 005, FR-009/FR-010: código de usuário num isolate novo. Se o processo do runner cair
    * (ex.: falta de memória do processo), o nó falha com mensagem clara e o runner reinicia.
    */
-  async runCode(request: RunCodeRequest): Promise<RunCodeResult> {
+  runCode(request: RunCodeRequest): Promise<RunCodeResult> {
     const deadline = (this.options.codeTimeoutMs ?? 30_000) + 10_000;
-    try {
-      return (await this.request(
-        { type: 'runCode', id: randomUUID(), ...request },
-        deadline,
-      )) as RunCodeResult;
-    } catch (error) {
-      return {
-        ok: false,
-        error: {
-          kind: 'crashed',
-          message: `O sandbox de código foi interrompido e reiniciado: ${error instanceof Error ? error.message : String(error)}`,
-        },
-        console: [],
-      };
-    }
+    return traced('taskrunner.code', { 'olly.code.mode': request.mode }, async (span) => {
+      let result: RunCodeResult;
+      try {
+        result = (await this.request(
+          { type: 'runCode', id: randomUUID(), ...request },
+          deadline,
+        )) as RunCodeResult;
+      } catch (error) {
+        result = {
+          ok: false,
+          error: {
+            kind: 'crashed',
+            message: `O sandbox de código foi interrompido e reiniciado: ${error instanceof Error ? error.message : String(error)}`,
+          },
+          console: [],
+        };
+      }
+      if (!result.ok) {
+        // Só o tipo do erro: a mensagem pode conter dados (VIII.2).
+        span.setStatus({ code: SpanStatusCode.ERROR, message: result.error.kind });
+        if (SANDBOX_FAILURES.has(result.error.kind)) {
+          ollyMetrics.sandboxError('javascript', result.error.kind);
+        }
+      }
+      return result;
+    });
   }
 
   async disposeExecution(executionId: string): Promise<void> {
