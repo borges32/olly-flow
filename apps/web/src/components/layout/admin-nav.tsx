@@ -11,7 +11,7 @@ export function AdminNav() {
   const mcp = useCan('mcp:manage');
   const tabs = [
     projects && { to: '/admin', label: 'Projetos', end: true },
-    users && { to: '/admin/sso', label: 'SSO e usuários' },
+    users && { to: '/admin/sso', label: 'Usuários' },
     masking && { to: '/admin/masking', label: 'Mascaramento' },
     audit && { to: '/admin/audit', label: 'Auditoria' },
     mcp && { to: '/admin/mcp', label: 'MCP' },

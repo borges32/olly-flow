@@ -58,6 +58,8 @@ Em produção, o comando de rotação deve rodar com uma identidade que tenha a 
 
 ## Login institucional e papéis por grupo (FR-004 a FR-007)
 
+> **Spec 014:** o login pelo IdP passou a ser opcional (`OLLY_IDP_ENABLED`, desligado por padrão), ao lado dos usuários locais. O que segue vale com o IdP ativado. Usuários locais, primeiro usuário e recuperação de acesso: [autenticacao.md](autenticacao.md).
+
 - **OIDC genérico:**
   - a API valida o access token de qualquer IdP OIDC (descoberta + JWKS);
   - os grupos vêm da claim `OIDC_GROUPS_CLAIM` (padrão `groups`);

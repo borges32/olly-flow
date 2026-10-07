@@ -89,38 +89,66 @@ async function main(): Promise<void> {
   });
   ok(`FR-012: GET /health = 200 ${JSON.stringify(health)}`);
 
-  const tokenRes = await fetch(`${issuer}/protocol/openid-connect/token`, {
-    method: 'POST',
-    body: new URLSearchParams({
-      grant_type: 'password',
-      client_id: env.OIDC_CLIENT_ID ?? 'olly-web',
-      username: 'admin@olly.local',
-      password: 'olly123',
-      scope: 'openid',
-    }),
-  });
-  if (!tokenRes.ok) throw new Error(`Password grant falhou: HTTP ${tokenRes.status}`);
-  const { access_token: token } = (await tokenRes.json()) as { access_token: string };
-  ok('FR-003: token obtido para admin@olly.local (password grant, somente dev)');
+  // Spec 014: a instalação oferece o login local; o IdP é opcional (OLLY_IDP_ENABLED).
+  const authConfig = (await (await fetch(`${apiUrl}/api/v1/auth/config`)).json()) as {
+    setupRequired: boolean;
+    idpEnabled: boolean;
+  };
+  ok(
+    `spec 014: GET /api/v1/auth/config (IdP ${authConfig.idpEnabled ? 'ativado' : 'desativado'}${authConfig.setupRequired ? ', primeiro usuário pendente' : ''})`,
+  );
 
   const anonymous = await fetchStatus(`${apiUrl}/api/v1/me`);
   if (anonymous !== 401)
     throw new Error(`/api/v1/me sem token devolveu ${anonymous}, esperado 401`);
   ok('FR-004: GET /api/v1/me sem token = 401');
 
-  const meRes = await fetch(`${apiUrl}/api/v1/me`, {
-    headers: { authorization: `Bearer ${token}` },
-  });
-  const me = (await meRes.json()) as { email?: string; permissions?: { global?: string[] } };
-  const globalPermissions = me.permissions?.global ?? [];
-  if (
-    meRes.status !== 200 ||
-    me.email !== 'admin@olly.local' ||
-    !globalPermissions.includes('user:manage')
-  ) {
-    throw new Error(`GET /api/v1/me inesperado: ${meRes.status} ${JSON.stringify(me)}`);
+  let token: string | undefined;
+  let expectedEmail: string | undefined;
+  if (authConfig.idpEnabled) {
+    const tokenRes = await fetch(`${issuer}/protocol/openid-connect/token`, {
+      method: 'POST',
+      body: new URLSearchParams({
+        grant_type: 'password',
+        client_id: env.OIDC_CLIENT_ID ?? 'olly-web',
+        username: 'admin@olly.local',
+        password: 'olly123',
+        scope: 'openid',
+      }),
+    });
+    if (!tokenRes.ok) throw new Error(`Password grant falhou: HTTP ${tokenRes.status}`);
+    token = ((await tokenRes.json()) as { access_token: string }).access_token;
+    expectedEmail = 'admin@olly.local';
+    ok('FR-003: token obtido para admin@olly.local (password grant, somente dev)');
+  } else if (env.OLLY_SMOKE_EMAIL && env.OLLY_SMOKE_PASSWORD) {
+    const login = await fetch(`${apiUrl}/api/v1/auth/local/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: env.OLLY_SMOKE_EMAIL, password: env.OLLY_SMOKE_PASSWORD }),
+    });
+    if (!login.ok) throw new Error(`Login local falhou: HTTP ${login.status}`);
+    token = ((await login.json()) as { token: string }).token;
+    expectedEmail = env.OLLY_SMOKE_EMAIL.trim().toLowerCase();
+    ok(`spec 014: login local de ${expectedEmail}`);
+  } else {
+    console.log(
+      '  (IdP desativado e sem OLLY_SMOKE_EMAIL/OLLY_SMOKE_PASSWORD: o /api/v1/me autenticado não é testado)',
+    );
   }
-  ok(`FR-006: GET /api/v1/me = 200 (${me.email}, ${globalPermissions.length} permissões globais)`);
+
+  if (token) {
+    const meRes = await fetch(`${apiUrl}/api/v1/me`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const me = (await meRes.json()) as { email?: string; permissions?: { global?: string[] } };
+    const globalPermissions = me.permissions?.global ?? [];
+    if (meRes.status !== 200 || me.email !== expectedEmail) {
+      throw new Error(`GET /api/v1/me inesperado: ${meRes.status} ${JSON.stringify(me)}`);
+    }
+    ok(
+      `FR-006: GET /api/v1/me = 200 (${me.email}, ${globalPermissions.length} permissões globais)`,
+    );
+  }
 
   console.log('\nFR-017: smoke test do ambiente passou.');
 }

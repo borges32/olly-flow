@@ -14,7 +14,11 @@ const isCI = Boolean(process.env.CI);
 // Spec 011: o modelo simulado (credencial `fakeLlm`) só existe com NODE_ENV=test; nada mais
 // muda entre `development` e `test` além da documentação Swagger. Os modelos permitidos são
 // cadastrados pelos testes (Administração › IA).
-const aiEnv = { NODE_ENV: 'test' };
+const aiEnv = {
+  NODE_ENV: 'test',
+  // Spec 014: os cenários atuais entram pelo Keycloak; o login local tem cenário próprio.
+  OLLY_IDP_ENABLED: 'true',
+};
 
 export default defineConfig({
   testDir: './e2e',

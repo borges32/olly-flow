@@ -4,6 +4,7 @@ import type { DependencyStatus, HealthResponse } from '@olly/shared-types';
 import type { Redis } from 'ioredis';
 import { sql } from 'kysely';
 import { OidcTokenVerifier } from '../auth/token-verifier.js';
+import { APP_CONFIG, type AppConfig } from '../config/config.js';
 import { DB, REDIS } from '../core/tokens.js';
 
 const CHECK_TIMEOUT_MS = 2000;
@@ -31,6 +32,7 @@ export class HealthService {
     @Inject(DB) private readonly db: Db,
     @Inject(REDIS) private readonly redis: Redis,
     @Inject(OidcTokenVerifier) private readonly verifier: OidcTokenVerifier,
+    @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
 
   /**
@@ -41,9 +43,12 @@ export class HealthService {
     const [db, redis, idp] = await Promise.all([
       probe(() => sql`SELECT 1`.execute(this.db)),
       probe(() => this.redis.ping()),
-      probe(async () => {
-        if (!(await this.verifier.isIssuerReachable())) throw new Error('idp down');
-      }),
+      // Spec 014: sem login pelo IdP, ele não é dependência.
+      this.config.auth.idpEnabled
+        ? probe(async () => {
+            if (!(await this.verifier.isIssuerReachable())) throw new Error('idp down');
+          })
+        : Promise.resolve('disabled' as const),
     ]);
     const status = db === 'down' || redis === 'down' ? 'error' : idp === 'down' ? 'degraded' : 'ok';
     return { status, db, redis, idp };

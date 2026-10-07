@@ -6,7 +6,8 @@
 
 | Tabela | Finalidade | Spec | Observações |
 |---|---|---|---|
-| `users` | Usuários vindos do IdP (`external_id` = `sub`) | 001 | `last_login_at` e inativação por falta de login (009) |
+| `users` | Usuários locais (014) e do IdP (`external_id` = `sub`) | 001 | `last_login_at` e inativação por falta de login (009); `password_hash` (scrypt), `must_change_password`, `is_admin`, `failed_logins`, `locked_until` (014). Origem: senha local, IdP ou os dois (vinculado) |
+| `user_sessions` | Sessões locais (token opaco guardado como hash), com expiração por inatividade e por tempo máximo e revogação | 014 | Migration `0015_local_users`; apagadas pela manutenção 7 dias após expirar ou ser revogadas |
 | `roles` | Papéis e lista de permissões | 001 | Seed: admin, editor, executor, viewer |
 | `projects` | Agrupamento de workflows e credenciais | 001 | `max_concurrent_executions` (006); `require_publish_approval`, `executor_can_read_data`, `save_execution_data` (`all` \| `errorsOnly` \| `none`) e `retention` JSONB `{ dataDays?, metadataDays?, memoryDays? }` (009; `memoryDays`: 011); `allowed_models`, `monthly_token_limit` (011) |
 | `project_members` | Usuário + projeto + papel | 001 | `origin` (`manual` \| `idp`, 009): vínculos `idp` são sincronizados no login pelos grupos do IdP |

@@ -180,6 +180,9 @@ describe('FR-006: GET /api/v1/me', () => {
       email: 'editor@olly.local',
       name: 'Eduardo Editor',
       permissions: { global: [], projects: {} },
+      // Spec 014: sessão pelo IdP, sem troca de senha pendente.
+      authMethod: 'idp',
+      mustChangePassword: false,
     });
   });
 

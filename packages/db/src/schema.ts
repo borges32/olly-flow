@@ -16,6 +16,24 @@ export interface UsersTable {
   updated_at: Timestamp | null;
   /** Último login (spec 009, FR-006): base da inativação por falta de uso. */
   last_login_at: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
+  /** Spec 014: hash scrypt da senha local (nulo: usuário só do IdP). */
+  password_hash: ColumnType<string | null, string | null | undefined, string | null>;
+  must_change_password: Generated<boolean>;
+  /** Spec 014, FR-003: administração global vinda da plataforma (não do grupo do IdP). */
+  is_admin: Generated<boolean>;
+  failed_logins: Generated<number>;
+  locked_until: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
+}
+
+/** Spec 014: sessão local (token opaco, guardado só como hash). */
+export interface UserSessionsTable {
+  id: Generated<string>;
+  user_id: string;
+  token_hash: string;
+  created_at: GeneratedTimestamp;
+  last_used_at: ColumnType<Date, Date | string | undefined, Date | string>;
+  expires_at: ColumnType<Date, Date | string, Date | string>;
+  revoked_at: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
 }
 
 export interface RolesTable {
@@ -394,6 +412,7 @@ export interface CredentialsTable {
 
 export interface Database {
   users: UsersTable;
+  user_sessions: UserSessionsTable;
   roles: RolesTable;
   projects: ProjectsTable;
   project_members: ProjectMembersTable;
@@ -421,6 +440,7 @@ export interface Database {
 }
 
 export type User = Selectable<UsersTable>;
+export type UserSession = Selectable<UserSessionsTable>;
 export type NewUser = Insertable<UsersTable>;
 export type UserUpdate = Updateable<UsersTable>;
 export type Role = Selectable<RolesTable>;

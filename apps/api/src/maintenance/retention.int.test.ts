@@ -256,6 +256,59 @@ describe('spec 009 — FR-017/SC-007: retenção por projeto, partições e audi
     expect(again.dataPurged.executions + again.metadataDeleted.executions).toBe(0);
   });
 
+  it('spec 014 — FR-009: a inativação por falta de uso preserva o último administrador; sessões antigas saem', async () => {
+    const old = new Date(Date.now() - 200 * DAY);
+    const ids = await ctx.database.db
+      .insertInto('users')
+      .values([
+        { email: 'adm-antigo@t.local', is_admin: true, last_login_at: old },
+        {
+          email: 'adm-mais-antigo@t.local',
+          is_admin: true,
+          last_login_at: new Date(old.getTime() - DAY),
+        },
+        { email: 'comum-antigo@t.local', last_login_at: old },
+      ])
+      .returning(['id', 'email'])
+      .execute();
+    const id = (email: string) => ids.find((r) => r.email === email)?.id ?? '';
+    // Sessões: uma expirada há 10 dias (sai) e uma válida (fica).
+    await ctx.database.db
+      .insertInto('user_sessions')
+      .values([
+        {
+          user_id: id('comum-antigo@t.local'),
+          token_hash: 'expirada',
+          expires_at: new Date(Date.now() - 10 * DAY),
+        },
+        {
+          user_id: id('comum-antigo@t.local'),
+          token_hash: 'valida',
+          expires_at: new Date(Date.now() + DAY),
+        },
+      ])
+      .execute();
+    // Outros administradores ativos (o admin do teste vem do IdP, sem is_admin) não existem:
+    // inativar os dois antigos deixaria a plataforma sem administrador.
+    await maintenance.run();
+    const active = async (email: string) =>
+      (
+        await ctx.database.db
+          .selectFrom('users')
+          .select('is_active')
+          .where('email', '=', email)
+          .executeTakeFirstOrThrow()
+      ).is_active;
+    expect(await active('adm-antigo@t.local')).toBe(true);
+    expect(await active('adm-mais-antigo@t.local')).toBe(false);
+    expect(await active('comum-antigo@t.local')).toBe(false);
+    const sessions = await ctx.database.db
+      .selectFrom('user_sessions')
+      .select('token_hash')
+      .execute();
+    expect(sessions.map((r) => r.token_hash)).toEqual(['valida']);
+  });
+
   it('FR-017: lock no Redis impede duas execuções simultâneas do job', async () => {
     const [a, b] = await Promise.all([maintenance.run(), maintenance.run()]);
     expect([a.ran, b.ran].sort()).toEqual([false, true]);

@@ -21,7 +21,7 @@
 | 011 | [ai-agent](../specs/011-ai-agent/spec.md) | 3 — IA e governança | Chat model, Agent, tools, memória, aprovação humana, custo | 010 + 008 (parcial) | Implementada ([relatório](../specs/011-ai-agent/report.md)) — SC-002 manual e ADR-0008 pendentes | 🏁 Agents em homologação |
 | 012 | [observabilidade-importador-homologacao](../specs/012-observabilidade-importador-homologacao/spec.md) | 4 — Hardening | Telemetria OpenTelemetry (OTLP para o coletor), importador N8N, escopo do pentest | 011 | Em implementação (HU-1; importador e pentest pendentes) | |
 | 013 | [hardening-go-live](../specs/013-hardening-go-live/spec.md) | 4 — Hardening | Pentest, documentação, execução paralela ao N8N, go-live | 012 | Aprovada | 🚀 Go-live |
-| 014 | [primeiro-usuario](../specs/014-primeiro-usuario/spec.md) | 1 — MVP (apoio à UX) | Primeiro usuário, usuários locais e login pelo IdP opcional (desativado por padrão) | 002, 009 | Planejada (plano e tarefas aguardando revisão) | |
+| 014 | [primeiro-usuario](../specs/014-primeiro-usuario/spec.md) | 1 — MVP (apoio à UX) | Primeiro usuário, usuários locais e login pelo IdP opcional (desativado por padrão) | 002, 009 | Implementada ([relatório](../specs/014-primeiro-usuario/report.md)) — validação da Segurança pendente | |
 
 As specs estão organizadas por escopo, não por calendário. A referência original era de 13 sprints de 2 semanas com uma equipe de 4 pessoas. Com implementação por agente de IA, o ritmo depende principalmente das revisões humanas entre specs.
 

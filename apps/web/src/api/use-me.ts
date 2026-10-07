@@ -5,11 +5,11 @@ import { useApi } from './api-provider';
 
 export function useMe() {
   const api = useApi();
-  const { user } = useAuth();
+  const { sessionKey, status } = useAuth();
   return useQuery({
-    queryKey: ['me', user?.profile.sub],
+    queryKey: ['me', sessionKey],
     queryFn: () => api.get<MeResponse>('/api/v1/me'),
-    enabled: Boolean(user),
+    enabled: status === 'authenticated',
     staleTime: 60_000,
   });
 }

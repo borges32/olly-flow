@@ -152,6 +152,9 @@ services:
       OIDC_DISCOVERY_URL: http://keycloak:8080/realms/olly
       OIDC_AUDIENCE: ${OIDC_AUDIENCE:-olly-api}
       OIDC_ADMIN_GROUP: ${OIDC_ADMIN_GROUP:-admin}
+      # Spec 014: login pelo IdP opcional (padrão: desligado, só usuários locais). Com `true`, os
+      # OIDC_* acima valem e o Keycloak do compose passa a ser usado.
+      OLLY_IDP_ENABLED: ${OLLY_IDP_ENABLED:-false}
       # Spec 004: chave mestra das credenciais e destinos internos liberados. Spec 009: com
       # OLLY_KEY_PROVIDER=vault a chave vem do Vault (OLLY_MASTER_KEY só enquanto houver o que
       # migrar: `pnpm credentials:migrate --from env --to vault`).

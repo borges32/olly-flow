@@ -38,10 +38,10 @@ const NAV: NavItem[] = [
 ];
 
 export function AppLayout() {
-  const { user, logout } = useAuth();
+  const { method, logout, profileName } = useAuth();
   const meQuery = useMe();
   const me = meQuery.data;
-  const displayName = me?.name ?? me?.email ?? user?.profile.name ?? '';
+  const displayName = me?.name ?? me?.email ?? profileName ?? '';
   const canAdmin = useCanAnywhere('project:manage');
   const canPublish = useCanAnywhere('workflow:publish');
   const canExecute = useCanAnywhere('workflow:execute');
@@ -96,6 +96,15 @@ export function AppLayout() {
             {displayName}
           </span>
           <ThemeToggle />
+          {/* Spec 014 (FR-007): troca voluntária da senha local. */}
+          {method === 'local' && (
+            <Button variant="ghost" size="sm" asChild>
+              <NavLink to="/change-password" data-testid="change-password-link">
+                <KeyRound />
+                Trocar senha
+              </NavLink>
+            </Button>
+          )}
           <Button variant="ghost" size="sm" onClick={() => void logout()}>
             <LogOut />
             Sair

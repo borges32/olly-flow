@@ -9,12 +9,14 @@ import { PERMISSION_RESOLVER, ProjectPermissionResolver } from './permission-res
 import { OidcTokenVerifier } from './token-verifier.js';
 import { UserSyncService } from './user-sync.service.js';
 import { IdpGroupSync } from './idp-group-sync.js';
+import { LocalSessionService } from './local-session.service.js';
 
 @Module({
   providers: [
     OidcTokenVerifier,
     UserSyncService,
     IdpGroupSync,
+    LocalSessionService,
     Authenticator,
     AbilityFactory,
     ResourceResolver,
@@ -30,6 +32,7 @@ import { IdpGroupSync } from './idp-group-sync.js';
     ResourceResolver,
     UserSyncService,
     IdpGroupSync,
+    LocalSessionService,
   ],
 })
 export class AuthModule {}

@@ -37,7 +37,7 @@ function toQuery(f: Filters): Record<string, string> {
 /** Auditoria (spec 009, FR-018): filtros, detalhe e exportação CSV. */
 export function AdminAuditPage() {
   const allowed = useCan('audit:read');
-  const { user } = useAuth();
+  const { getAccessToken } = useAuth();
   const [draft, setDraft] = useState<Filters>(EMPTY);
   const [filters, setFilters] = useState<Record<string, string>>({});
   const [detail, setDetail] = useState<AuditRecord | null>(null);
@@ -62,7 +62,7 @@ export function AdminAuditPage() {
     try {
       const params = new URLSearchParams(filters).toString();
       const res = await fetch(`/api/v1/audit/export.csv${params ? `?${params}` : ''}`, {
-        headers: { authorization: `Bearer ${user?.access_token ?? ''}` },
+        headers: { authorization: `Bearer ${getAccessToken() ?? ''}` },
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const url = URL.createObjectURL(await res.blob());

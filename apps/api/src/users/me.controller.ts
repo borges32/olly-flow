@@ -14,6 +14,14 @@ export class MeController {
   @Authenticated()
   @Get('me')
   me(@CurrentUser() user: AuthenticatedUser): MeResponse {
-    return { id: user.id, email: user.email, name: user.name, permissions: user.permissions };
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      permissions: user.permissions,
+      // Spec 014: sessão local ou IdP; troca de senha pendente (FR-007).
+      authMethod: user.authMethod,
+      mustChangePassword: user.mustChangePassword,
+    };
   }
 }

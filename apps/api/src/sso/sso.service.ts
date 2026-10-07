@@ -113,9 +113,22 @@ export class SsoService {
   async listUsers(): Promise<UserAdminSummary[]> {
     const rows = await this.db
       .selectFrom('users')
-      .select(['id', 'email', 'name', 'is_active', 'last_login_at', 'created_at'])
+      .select([
+        'id',
+        'email',
+        'name',
+        'is_active',
+        'last_login_at',
+        'created_at',
+        'external_id',
+        'password_hash',
+        'is_admin',
+        'locked_until',
+        'must_change_password',
+      ])
       .orderBy('email')
       .execute();
+    const now = new Date();
     return rows.map((r) => ({
       id: r.id,
       email: r.email,
@@ -123,31 +136,12 @@ export class SsoService {
       isActive: r.is_active,
       lastLoginAt: r.last_login_at ? iso(r.last_login_at) : null,
       createdAt: iso(r.created_at),
+      // Spec 014 (FR-014): origem, administração, bloqueio e troca pendente.
+      origin: r.password_hash ? (r.external_id ? 'linked' : 'local') : 'idp',
+      isAdmin: r.is_admin,
+      locked: r.locked_until !== null && r.locked_until > now,
+      mustChangePassword: r.must_change_password,
     }));
-  }
-
-  /** FR-006: reativa (ex.: após inativação por falta de uso) ou desativa um usuário. */
-  async setActive(ctx: AuditContext, userId: string, active: boolean): Promise<void> {
-    await this.db.transaction().execute(async (trx) => {
-      const updated = await trx
-        .updateTable('users')
-        .set({
-          is_active: active,
-          // Reativado: conta a partir de agora para a inativação por falta de uso.
-          ...(active && { last_login_at: sql<Date>`now()` }),
-        })
-        .where('id', '=', userId)
-        .returning('email')
-        .executeTakeFirst();
-      if (!updated) throw new NotFoundError('Usuário não encontrado');
-      await this.audit.record(trx, ctx, {
-        action: active ? 'user.activate' : 'user.deactivate',
-        entityType: 'user',
-        entityId: userId,
-        details: { email: updated.email },
-      });
-    });
-    this.users.forget(userId);
   }
 
   async listMappings(): Promise<GroupRoleMapping[]> {

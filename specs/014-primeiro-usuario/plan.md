@@ -58,7 +58,7 @@
   - recusa sessão revogada, expirada ou de usuário inativo;
   - desativar um usuário revoga as sessões dele no banco e limpa o cache local. SC-004 (até 1 min, inclusive em outros processos) vale pelo TTL do cache.
 - **Sair:** revoga a sessão atual. Trocar ou redefinir a senha revoga as outras sessões do usuário.
-- **Primeiro acesso:** com `must_change_password`, a sessão só acessa `GET /me`, `GET /auth/config`, `PUT /auth/password` e `POST /auth/logout`. As demais rotas respondem `403 PASSWORD_CHANGE_REQUIRED`.
+- **Primeiro acesso:** com `must_change_password`, a sessão só acessa `GET /me`, `GET /auth/config`, `PUT /auth/password` e `POST /auth/logout`. As demais rotas respondem `403 password_change_required`.
 
 ### §3 Login local, bloqueio e primeiro usuário (FR-001 a FR-005)
 - **`POST /auth/local/login`:**
@@ -100,11 +100,11 @@ Rotas em `admin/users`, todas com `user:manage` global e auditadas:
 - **Web:** com `idpEnabled`, a tela mostra o botão institucional, com a configuração OIDC do próprio web (como hoje). Com o IdP desligado, o web não inicializa o cliente OIDC.
 
 ### §6 Comando do operador (FR-016)
-- `node dist/scripts/users-admin.js --email <e-mail> [--name <nome>]`, ou `pnpm --filter @olly/api users:admin -- …` no desenvolvimento:
+- `node apps/api/dist/cli/users-admin.js --email <e-mail> [--name <nome>]` (na raiz do repositório e no container), ou `pnpm --filter @olly/api users:admin -- …` no desenvolvimento:
   - cria o administrador local ou, se o e-mail já existir, dá a ele administração global e senha local;
   - gera uma senha temporária forte, impressa uma única vez no terminal, com troca obrigatória;
   - desbloqueia, ativa e audita `auth.admin_recovery` (sem usuário, origem `cli`).
-- **Docker:** `docker compose exec api node dist/scripts/users-admin.js --email …`.
+- **Docker:** `docker compose exec api node apps/api/dist/cli/users-admin.js --email …`.
 
 ### §7 Web
 - **`AuthProvider`:** dois modos.
@@ -170,7 +170,7 @@ CREATE INDEX user_sessions_user ON user_sessions (user_id) WHERE revoked_at IS N
 | `PUT /admin/users/:id/password` | `user:manage` global | `{ password }` | `204` |
 
 - **`GET /me`:** passa a trazer `authMethod` (`local` | `idp`) e `mustChangePassword`.
-- **Erros:** `PASSWORD_CHANGE_REQUIRED` (403) e `PASSWORD_POLICY` (422, com os motivos).
+- **Erros:** `password_change_required` (403) e `password_policy` (422, nos `issues`).
 - **Auditoria:**
   - `auth.setup`, `auth.local_login`, `auth.local_login_failed`, `auth.local_locked`, `auth.logout`;
   - `auth.password_change`, `auth.password_reset`, `auth.idp_linked`, `auth.idp_link_refused`, `auth.admin_recovery`, `auth.idp_config`;
@@ -240,3 +240,5 @@ Nenhuma permissão nova. A administração global passa a vir também de `users.
 | Data | Alteração | Motivo |
 |---|---|---|
 | 06/10/2026 | Criação do plano | Spec esclarecida pelo PO |
+| 06/10/2026 | Implementação: códigos de erro no padrão da API (`password_change_required`, `issues[].code = password_policy`); comando em `dist/cli/users-admin.js` (como o `credentials` da spec 009); rotas de usuário no `GovernanceModule` (`LocalAuthController`, `UsersAdminService`); `IdpConfigAudit` não impede a subida se o banco falhar (só avisa); custo do scrypt configurável apenas para os testes de lógica (o padrão segue o da OWASP) | Ajustes de implementação |
+| 06/10/2026 | FR-009 e a inativação por falta de uso (spec 009): se ela fosse inativar todos os administradores ativos, o de acesso mais recente fica ativo; a limpeza das sessões locais roda no mesmo job | Defeito encontrado ao implementar: o job podia deixar a plataforma sem administrador (teste de reprodução em `retention.int.test.ts`) |

@@ -1,7 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { Db, User } from '@olly/db';
 import { sql } from 'kysely';
-import { ConflictError, UnauthenticatedError } from '../common/errors.js';
+import { AuditService } from '../audit/audit.service.js';
+import { ConflictError, PermissionDeniedError, UnauthenticatedError } from '../common/errors.js';
 import { DB } from '../core/tokens.js';
 import type { AccessTokenClaims } from './auth.types.js';
 import { IdpGroupSync } from './idp-group-sync.js';
@@ -30,6 +31,7 @@ export class UserSyncService {
   constructor(
     @Inject(DB) private readonly db: Db,
     @Inject(IdpGroupSync) private readonly groups: IdpGroupSync,
+    @Inject(AuditService) private readonly audit: AuditService,
   ) {}
 
   async sync(claims: AccessTokenClaims): Promise<User> {
@@ -42,11 +44,68 @@ export class UserSyncService {
     const cached = this.cache.get(key);
     if (cached && cached.expiresAt > Date.now()) return cached.user;
 
-    const user = await this.upsert(claims.sub, email, name);
+    const user = (await this.link(claims, email)) ?? (await this.upsert(claims.sub, email, name));
     if (user.is_active) await this.groups.sync(user.id, groups);
     if (this.cache.size >= CACHE_MAX) this.cache.clear();
     this.cache.set(key, { user, expiresAt: Date.now() + CACHE_TTL_MS });
     return user;
+  }
+
+  /**
+   * Spec 014 (FR-015): primeiro acesso pelo IdP com o e-mail de um usuário local (sem conta do
+   * IdP) vincula as contas, desde que o IdP declare o e-mail verificado; senão, recusa. Devolve o
+   * usuário vinculado, ou `undefined` quando não há o que vincular.
+   */
+  private async link(claims: AccessTokenClaims, email: string): Promise<User | undefined> {
+    const known = await this.db
+      .selectFrom('users')
+      .select('id')
+      .where('external_id', '=', claims.sub)
+      .executeTakeFirst();
+    if (known) return undefined;
+    const local = await this.db
+      .selectFrom('users')
+      .selectAll()
+      .where('email', '=', email)
+      .where('external_id', 'is', null)
+      .executeTakeFirst();
+    if (!local) return undefined;
+    const verified = claims.email_verified === true || claims.email_verified === 'true';
+    if (!verified) {
+      await this.audit.record(
+        this.db,
+        { userId: null, ip: null },
+        {
+          action: 'auth.idp_link_refused',
+          entityType: 'user',
+          entityId: local.id,
+          details: { email, sub: claims.sub, reason: 'e-mail não verificado pelo IdP' },
+        },
+      );
+      throw new PermissionDeniedError(
+        'Conta do IdP não vinculada: o IdP não confirmou o e-mail deste usuário',
+      );
+    }
+    return this.db.transaction().execute(async (trx) => {
+      const linked = await trx
+        .updateTable('users')
+        .set({ external_id: claims.sub, updated_at: sql<Date>`now()` })
+        .where('id', '=', local.id)
+        .where('external_id', 'is', null)
+        .returningAll()
+        .executeTakeFirstOrThrow();
+      await this.audit.record(
+        trx,
+        { userId: local.id, ip: null },
+        {
+          action: 'auth.idp_linked',
+          entityType: 'user',
+          entityId: local.id,
+          details: { email, sub: claims.sub },
+        },
+      );
+      return linked;
+    });
   }
 
   /** Esquece o usuário em cache (ex.: desativado pela administração). */

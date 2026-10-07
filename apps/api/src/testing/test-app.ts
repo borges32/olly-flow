@@ -97,6 +97,13 @@ export async function startTestContext(
       requireAuth: false,
     },
     code: { timeoutMs: 30_000, memoryMb: 128 },
+    auth: {
+      idpEnabled: true,
+      sessionIdleMs: 8 * 3_600_000,
+      sessionMaxMs: 24 * 3_600_000,
+      loginMaxAttempts: 5,
+      loginLockMs: 15 * 60_000,
+    },
     ...overrides,
     // Sobrescrita parcial do OIDC (ex.: claim de grupos, spec 009): o emissor é o do teste.
     oidc: {

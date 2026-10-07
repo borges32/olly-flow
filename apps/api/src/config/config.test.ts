@@ -4,6 +4,7 @@ import { ConfigError, loadConfig } from './config.js';
 const valid = {
   DATABASE_URL: 'postgres://olly:segredo-do-banco@localhost:5432/olly',
   REDIS_URL: 'redis://localhost:6379',
+  OLLY_IDP_ENABLED: 'true',
   OIDC_ISSUER_URL: 'http://localhost:8080/realms/olly/',
   OIDC_AUDIENCE: 'olly-api',
   OLLY_MASTER_KEY: Buffer.alloc(32, 7).toString('base64'),
@@ -144,7 +145,7 @@ describe('configuração da API (validação zod na inicialização)', () => {
   it('spec 009 — FR-001/FR-005/FR-013/FR-017: cofre, grupos, dados e retenção', () => {
     const config = loadConfig(valid);
     expect(config.credentials.keyProvider).toBe('env');
-    expect(config.oidc.groupsClaim).toBe('groups');
+    expect(config.oidc?.groupsClaim).toBe('groups');
     expect(config.governance).toMatchObject({
       userInactiveDays: 90,
       inlineDataLimit: 262_144,
@@ -217,5 +218,40 @@ describe('configuração da API (validação zod na inicialização)', () => {
     });
     expect(custom.ai).not.toHaveProperty('allowedModels');
     expect(custom.ai.approvalTimeoutMs).toBe(3_600_000);
+  });
+
+  it('spec 014 — FR-010/NFR-004: IdP desligado por padrão, sem exigir OIDC; limites de sessão', () => {
+    const local = Object.fromEntries(
+      Object.entries(valid).filter(
+        ([k]) => !['OLLY_IDP_ENABLED', 'OIDC_ISSUER_URL', 'OIDC_AUDIENCE'].includes(k),
+      ),
+    );
+    const config = loadConfig(local);
+    expect(config.auth).toEqual({
+      idpEnabled: false,
+      sessionIdleMs: 8 * 3_600_000,
+      sessionMaxMs: 24 * 3_600_000,
+      loginMaxAttempts: 5,
+      loginLockMs: 15 * 60_000,
+    });
+    expect(config.oidc).toBeUndefined();
+    // Com o IdP ligado, o emissor e a audiência passam a ser obrigatórios.
+    expect(() => loadConfig({ ...local, OLLY_IDP_ENABLED: 'true' })).toThrow(/OIDC_ISSUER_URL/);
+    expect(
+      loadConfig({ ...local, OLLY_IDP_ENABLED: 'false', OIDC_AUDIENCE: 'x' }).oidc,
+    ).toBeUndefined();
+    const custom = loadConfig({
+      ...local,
+      OLLY_SESSION_IDLE_MINUTES: '30',
+      OLLY_SESSION_MAX_HOURS: '2',
+      OLLY_LOGIN_MAX_ATTEMPTS: '3',
+      OLLY_LOGIN_LOCK_MINUTES: '5',
+    });
+    expect(custom.auth).toMatchObject({
+      sessionIdleMs: 30 * 60_000,
+      sessionMaxMs: 2 * 3_600_000,
+      loginMaxAttempts: 3,
+      loginLockMs: 5 * 60_000,
+    });
   });
 });

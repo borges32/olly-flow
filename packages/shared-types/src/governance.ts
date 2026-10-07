@@ -1,3 +1,4 @@
+import type { UserOrigin } from './auth.js';
 import type { RoleName } from './rbac.js';
 import type { Edge, WorkflowDefinition, WorkflowNode } from './workflow.js';
 
@@ -143,6 +144,11 @@ export interface UserAdminSummary {
   isActive: boolean;
   lastLoginAt: string | null;
   createdAt: string;
+  /** Spec 014 (FR-014): origem, administração global, bloqueio e troca de senha pendente. */
+  origin: UserOrigin;
+  isAdmin: boolean;
+  locked: boolean;
+  mustChangePassword: boolean;
 }
 
 // ---------------------------------------------------------------------------------------------

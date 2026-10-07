@@ -34,6 +34,33 @@ describe('FR-012: GET /health', () => {
     });
   });
 
+  it('spec 014 — FR-010: com o IdP desligado, ele não é checado e não degrada o /health', async () => {
+    const local = await startTestContext(
+      {
+        auth: {
+          idpEnabled: false,
+          sessionIdleMs: 8 * 3_600_000,
+          sessionMaxMs: 24 * 3_600_000,
+          loginMaxAttempts: 5,
+          loginLockMs: 15 * 60_000,
+        },
+      },
+      { worker: false },
+    );
+    try {
+      const res = await local.app.inject({ method: 'GET', url: '/health' });
+      expect(res.statusCode).toBe(200);
+      expect(res.json<HealthResponse>()).toEqual({
+        status: 'ok',
+        db: 'up',
+        redis: 'up',
+        idp: 'disabled',
+      });
+    } finally {
+      await local.close();
+    }
+  });
+
   it('FR-012: Redis fora do ar → 503', async () => {
     await ctx.redis.stop();
     const result = await health();

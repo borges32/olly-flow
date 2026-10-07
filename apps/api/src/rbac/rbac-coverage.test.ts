@@ -34,6 +34,13 @@ beforeAll(async () => {
     host: '127.0.0.1',
     databaseUrl: 'postgres://ninguem:x@127.0.0.1:1/nada',
     redisUrl: 'redis://127.0.0.1:1',
+    auth: {
+      idpEnabled: true,
+      sessionIdleMs: 8 * 3_600_000,
+      sessionMaxMs: 24 * 3_600_000,
+      loginMaxAttempts: 5,
+      loginLockMs: 15 * 60_000,
+    },
     oidc: { issuerUrl: 'http://127.0.0.1:1', audience: 'olly-api', adminGroup: 'admin' },
     execution: {
       expressionTimeoutMs: 100,

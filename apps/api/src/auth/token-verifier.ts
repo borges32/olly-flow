@@ -33,11 +33,17 @@ export class OidcTokenVerifier {
   private readonly groups: GroupResolver;
 
   constructor(@Inject(APP_CONFIG) private readonly config: AppConfig) {
-    this.groups = new ClaimGroupResolver(config.oidc.groupsClaim ?? 'groups');
+    this.groups = new ClaimGroupResolver(config.oidc?.groupsClaim ?? 'groups');
+  }
+
+  /** Spec 014: só existe com o IdP ligado (`OLLY_IDP_ENABLED`). */
+  private get oidc(): NonNullable<AppConfig['oidc']> {
+    if (!this.config.oidc) throw new UnauthenticatedError('Login pelo IdP desativado');
+    return this.config.oidc;
   }
 
   private get discoveryUrl(): string {
-    const base = this.config.oidc.discoveryUrl ?? this.config.oidc.issuerUrl;
+    const base = this.oidc.discoveryUrl ?? this.oidc.issuerUrl;
     return `${base}/.well-known/openid-configuration`;
   }
 
@@ -46,8 +52,8 @@ export class OidcTokenVerifier {
     let payload: unknown;
     try {
       ({ payload } = await jwtVerify(token, jwks, {
-        issuer: this.config.oidc.issuerUrl,
-        audience: this.config.oidc.audience,
+        issuer: this.oidc.issuerUrl,
+        audience: this.oidc.audience,
         algorithms: ALLOWED_ALGORITHMS,
         requiredClaims: ['sub', 'exp'],
         clockTolerance: 5,
@@ -65,10 +71,12 @@ export class OidcTokenVerifier {
     if (!claims.success) throw new UnauthenticatedError('Token com claims inválidas');
     // Spec 009, FR-005: grupos da claim configurada (OIDC_GROUPS_CLAIM).
     const groups = this.groups.resolve(payload as Record<string, unknown>);
-    const { sub, email, name, preferred_username } = claims.data;
+    const { sub, email, name, preferred_username, email_verified } = claims.data;
     return {
       sub,
       ...(email !== undefined && { email }),
+      // Spec 014 (FR-015): base da vinculação com um usuário local.
+      ...(email_verified !== undefined && { email_verified }),
       ...(name !== undefined && { name }),
       ...(preferred_username !== undefined && { preferred_username }),
       ...(groups && { groups }),
@@ -103,7 +111,7 @@ export class OidcTokenVerifier {
     });
     if (!res.ok) throw new Error(`HTTP ${res.status} em ${this.discoveryUrl}`);
     const doc = discoverySchema.parse(await res.json());
-    if (doc.issuer.replace(/\/+$/, '') !== this.config.oidc.issuerUrl) {
+    if (doc.issuer.replace(/\/+$/, '') !== this.oidc.issuerUrl) {
       throw new Error(`issuer divergente na descoberta: ${doc.issuer}`);
     }
     return createRemoteJWKSet(new URL(doc.jwks_uri), { timeoutDuration: DISCOVERY_TIMEOUT_MS });

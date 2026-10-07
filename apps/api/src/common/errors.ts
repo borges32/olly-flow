@@ -51,6 +51,12 @@ export class DependencyUnavailableError extends DomainError {
   readonly httpStatus = 503;
 }
 
+/** Spec 014 (FR-007): senha definida pela administração precisa ser trocada antes. */
+export class PasswordChangeRequiredError extends DomainError {
+  readonly code = 'password_change_required';
+  readonly httpStatus = 403;
+}
+
 export class TooManyRequestsError extends DomainError {
   readonly code = 'too_many_requests';
   readonly httpStatus = 429;

@@ -17,8 +17,19 @@ const envSchema = z.object({
   API_HOST: z.string().min(1).default('0.0.0.0'),
   DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
   REDIS_URL: z.url({ protocol: /^rediss?$/ }),
-  OIDC_ISSUER_URL: z.url({ protocol: /^https?$/ }),
-  OIDC_AUDIENCE: z.string().min(1),
+  // Spec 014 (FR-010): login pelo IdP (OIDC) opcional, desligado por padrão. Com ele ligado,
+  // OIDC_ISSUER_URL e OIDC_AUDIENCE são obrigatórias.
+  OLLY_IDP_ENABLED: z
+    .enum(['true', 'false', '1', '0'])
+    .default('false')
+    .transform((v) => v === 'true' || v === '1'),
+  OIDC_ISSUER_URL: z.url({ protocol: /^https?$/ }).optional(),
+  OIDC_AUDIENCE: z.string().min(1).optional(),
+  // Spec 014 (NFR-004): sessões locais e bloqueio por tentativas erradas.
+  OLLY_SESSION_IDLE_MINUTES: z.coerce.number().int().min(1).max(10_080).default(480),
+  OLLY_SESSION_MAX_HOURS: z.coerce.number().int().min(1).max(720).default(24),
+  OLLY_LOGIN_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(100).default(5),
+  OLLY_LOGIN_LOCK_MINUTES: z.coerce.number().int().min(1).max(1440).default(15),
   // Endereço interno do emissor para descoberta e JWKS, quando difere do `iss` público
   // (ex.: API em container falando com o IdP pela rede do compose).
   OIDC_DISCOVERY_URL: z.url({ protocol: /^https?$/ }).optional(),
@@ -127,7 +138,16 @@ export interface AppConfig {
   trustProxy?: boolean;
   databaseUrl: string;
   redisUrl: string;
-  oidc: {
+  /** Spec 014: autenticação (login local sempre; IdP opcional) e limites das sessões locais. */
+  auth: {
+    idpEnabled: boolean;
+    sessionIdleMs: number;
+    sessionMaxMs: number;
+    loginMaxAttempts: number;
+    loginLockMs: number;
+  };
+  /** Só com o IdP ligado (`auth.idpEnabled`). */
+  oidc?: {
     issuerUrl: string;
     discoveryUrl?: string;
     audience: string;
@@ -230,6 +250,10 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
   }
   const e = parsed.data;
   const issues: string[] = [];
+  if (e.OLLY_IDP_ENABLED) {
+    if (!e.OIDC_ISSUER_URL) issues.push('OIDC_ISSUER_URL: obrigatória com OLLY_IDP_ENABLED=true');
+    if (!e.OIDC_AUDIENCE) issues.push('OIDC_AUDIENCE: obrigatória com OLLY_IDP_ENABLED=true');
+  }
   if (e.OLLY_KEY_PROVIDER === 'env' && !e.OLLY_MASTER_KEY) {
     issues.push('OLLY_MASTER_KEY: obrigatória com OLLY_KEY_PROVIDER=env');
   }
@@ -270,13 +294,26 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     trustProxy: e.OLLY_TRUST_PROXY,
     databaseUrl: e.DATABASE_URL,
     redisUrl: e.REDIS_URL,
-    oidc: {
-      issuerUrl: e.OIDC_ISSUER_URL.replace(/\/+$/, ''),
-      ...(e.OIDC_DISCOVERY_URL && { discoveryUrl: e.OIDC_DISCOVERY_URL.replace(/\/+$/, '') }),
-      audience: e.OIDC_AUDIENCE,
-      adminGroup: e.OIDC_ADMIN_GROUP,
-      groupsClaim: e.OIDC_GROUPS_CLAIM,
+    auth: {
+      idpEnabled: e.OLLY_IDP_ENABLED,
+      sessionIdleMs: e.OLLY_SESSION_IDLE_MINUTES * 60_000,
+      sessionMaxMs: e.OLLY_SESSION_MAX_HOURS * 3_600_000,
+      loginMaxAttempts: e.OLLY_LOGIN_MAX_ATTEMPTS,
+      loginLockMs: e.OLLY_LOGIN_LOCK_MINUTES * 60_000,
     },
+    ...(e.OLLY_IDP_ENABLED &&
+      e.OIDC_ISSUER_URL &&
+      e.OIDC_AUDIENCE && {
+        oidc: {
+          issuerUrl: e.OIDC_ISSUER_URL.replace(/\/+$/, ''),
+          ...(e.OIDC_DISCOVERY_URL && {
+            discoveryUrl: e.OIDC_DISCOVERY_URL.replace(/\/+$/, ''),
+          }),
+          audience: e.OIDC_AUDIENCE,
+          adminGroup: e.OIDC_ADMIN_GROUP,
+          groupsClaim: e.OIDC_GROUPS_CLAIM,
+        },
+      }),
     execution: {
       expressionTimeoutMs: e.OLLY_EXPRESSION_TIMEOUT_MS,
       isolateMemoryMb: e.OLLY_ISOLATE_MEMORY_MB,

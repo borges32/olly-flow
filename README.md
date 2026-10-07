@@ -63,9 +63,11 @@ Abra <http://localhost:5173>. A API e o frontend usam as portas `3000` e `5173`:
 
 - **Apagar tudo e recomeçar:** `pnpm app:reset` (remove containers e volumes e sobe de novo).
 - **Banco sempre pronto:** o serviço `db-init` aplica migrations e seed e continua vigiando; se o banco for recriado com a API no ar, o schema volta em segundos.
-- **Usuários:** o login é exclusivamente pelo IdP (não há cadastro na plataforma). No ambiente local, use os usuários de teste da tabela acima, que existem no Keycloak desde a subida; o registro na plataforma acontece no primeiro login.
+- **Usuários (spec 014):** por padrão, o login é **local** (e-mail e senha) e o IdP fica desligado. Numa instalação nova, a primeira pessoa a abrir <http://localhost:5173> cadastra o administrador; os demais usuários são criados em **Administração › Usuários**. Para usar os usuários de teste do Keycloak da tabela acima, suba com `OLLY_IDP_ENABLED=true` (a tela passa a mostrar também "Entrar com conta institucional"). Sem acesso de administrador: `docker compose exec api node apps/api/dist/cli/users-admin.js --email <e-mail>`. Detalhes: [docs/autenticacao.md](docs/autenticacao.md).
 
-Roteiro sugerido: entre uma vez com cada usuário de teste (para existirem na plataforma), depois, como `admin@olly.local`, crie um projeto em **Administração** e adicione os demais com os papéis desejados.
+> **Instalação anterior à spec 014 (só usuários do Keycloak):** com o novo padrão, ninguém tem senha local. Suba com `OLLY_IDP_ENABLED=true` para continuar como antes, ou crie um administrador local com o comando acima.
+
+Roteiro sugerido: cadastre o administrador na primeira tela, crie um projeto em **Administração**, crie os usuários locais e adicione-os ao projeto com os papéis desejados.
 
 Outros endereços úteis:
 

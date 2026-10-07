@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| **Status** | Planejada |
+| **Status** | Implementada (pendente: validação da Segurança para o login local) |
 | **Fase** | 1 — MVP (apoio à validação de UX) |
 | **Depende de** | 002, 009 |
 | **Requisitos de produto** | PR-08 (parcial), PR-20 (parcial); altera a NFR-G03 |

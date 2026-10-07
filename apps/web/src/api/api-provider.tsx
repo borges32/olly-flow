@@ -6,19 +6,20 @@ import { createApiClient, type ApiClient } from './client';
 const ApiContext = createContext<ApiClient | null>(null);
 
 export function ApiProvider({ children }: { children: ReactNode }) {
-  const { getAccessToken, login } = useAuth();
+  const { getAccessToken, expire } = useAuth();
   const client = useMemo(
     () =>
       createApiClient({
         getAccessToken,
+        // Sessão inválida ou expirada: volta à tela de entrada (spec 014).
         onUnauthorized: () => {
-          void login(window.location.pathname);
+          expire();
         },
         onForbidden: (message) => {
           toast.error('Acesso negado', { description: message });
         },
       }),
-    [getAccessToken, login],
+    [getAccessToken, expire],
   );
   return <ApiContext.Provider value={client}>{children}</ApiContext.Provider>;
 }

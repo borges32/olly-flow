@@ -28,6 +28,8 @@ export interface MaintenanceReport {
   memoryDeleted: number;
   partitionsDropped: string[];
   usersInactivated: number;
+  /** Spec 014: sessões locais expiradas ou revogadas há mais de 7 dias, apagadas. */
+  sessionsDeleted: number;
 }
 
 interface StoredRetention {
@@ -66,6 +68,7 @@ export class MaintenanceService {
       memoryDeleted: 0,
       partitionsDropped: [],
       usersInactivated: 0,
+      sessionsDeleted: 0,
     };
     const token = randomUUID();
     const locked = await this.redis.set(LOCK_KEY, token, 'PX', LOCK_TTL_MS, 'NX');
@@ -104,6 +107,15 @@ export class MaintenanceService {
       report.usersInactivated = await this.inactivateUsers(
         new Date(now.getTime() - this.config.governance.userInactiveDays * DAY_MS),
       );
+      // Spec 014: sessões locais encerradas há mais de 7 dias não servem para mais nada.
+      const sessionCutoff = new Date(now.getTime() - 7 * DAY_MS);
+      const sessions = await this.db
+        .deleteFrom('user_sessions')
+        .where((eb) =>
+          eb.or([eb('expires_at', '<', sessionCutoff), eb('revoked_at', '<', sessionCutoff)]),
+        )
+        .executeTakeFirst();
+      report.sessionsDeleted = Number(sessions.numDeletedRows);
       await this.audit.record(
         this.db,
         { userId: null, ip: null },
@@ -239,11 +251,23 @@ export class MaintenanceService {
 
   /** FR-006: sem login há N dias (ou nunca, desde a criação) → inativo. */
   private async inactivateUsers(cutoff: Date): Promise<number> {
+    // Spec 014 (FR-009): se todos os administradores ativos estiverem sem login há tempo, o mais
+    // recente fica ativo; a plataforma nunca fica sem administrador.
+    const admins = await this.db
+      .selectFrom('users')
+      .select(['id', sql<Date>`coalesce(last_login_at, created_at)`.as('seen')])
+      .where('is_active', '=', true)
+      .where('is_admin', '=', true)
+      .orderBy(sql`coalesce(last_login_at, created_at)`, 'desc')
+      .execute();
+    const keep =
+      admins.length > 0 && admins.every((a) => a.seen < cutoff) ? admins[0]?.id : undefined;
     const rows = await this.db
       .updateTable('users')
       .set({ is_active: false })
       .where('is_active', '=', true)
       .where(sql<boolean>`coalesce(last_login_at, created_at) < ${cutoff}`)
+      .$if(keep !== undefined, (q) => q.where('id', '!=', keep ?? ''))
       .returning(['id', 'email'])
       .execute();
     for (const user of rows) {

@@ -136,7 +136,7 @@ Spec 011:
 
 Catálogo e papéis padrão em `packages/shared-types/src/rbac.ts` (seed da spec 001): `admin` tem todas; `editor`, todas exceto `user:manage`, `project:manage`, `audit:read` e `mcp:manage`; `executor`, `workflow:read`, `workflow:execute` e `execution:read`; `viewer`, `workflow:read` e `execution:read`. `mcp:manage` entrou no catálogo e no seed na spec 010, como permissão exclusiva do admin, e vale só no escopo da plataforma.
 
-**Permissões efetivas (spec 002):** o grupo de administração do IdP (`OIDC_ADMIN_GROUP`) concede todas as permissões em todos os projetos; os demais usuários têm as permissões do seu papel somente nos projetos dos quais são membros (`project_members`). `GET /api/v1/me` devolve `permissions: { global: Permission[], projects: { [projectId]: Permission[] } }` (`EffectivePermissions` em `@olly/shared-types`). Toda rota declara `@Public()`, `@Authenticated()`, `@RequireProjectMember(param)` ou `@RequirePermission(permissão, escopo)`; recurso de projeto do qual o usuário não é membro responde 404.
+**Permissões efetivas (spec 002):** o grupo de administração do IdP (`OIDC_ADMIN_GROUP`, com o IdP ativado) ou `users.is_admin` (spec 014) concede todas as permissões em todos os projetos; os demais usuários têm as permissões do seu papel somente nos projetos dos quais são membros (`project_members`). `GET /api/v1/me` devolve `permissions: { global: Permission[], projects: { [projectId]: Permission[] } }` (`EffectivePermissions` em `@olly/shared-types`). Toda rota declara `@Public()`, `@Authenticated()`, `@RequireProjectMember(param)` ou `@RequirePermission(permissão, escopo)`; recurso de projeto do qual o usuário não é membro responde 404.
 
 Matriz por papel: [`docs/rbac-matriz.md`](../rbac-matriz.md), gerada pelo teste da spec 005.
 
@@ -246,3 +246,20 @@ Tipos em `packages/shared-types/src/ai.ts`; runtime em `packages/nodes/src/ai/ru
 - **Auditoria:** `agent.approval_requested|approved|rejected|expired`, `ai.model_allow|remove`, `ai.pricing_update|delete` e `project.ai_settings`.
 - **Aprovação:** pedido criado quando a execução entra em `waiting` com `approvals`; a decisão é entregue ao nó (`ExecutionWaits.deliver`) e, com todos os pedidos do nó decididos, a execução retoma. Expiração (`OLLY_APPROVAL_TIMEOUT_HOURS`, 24) na varredura de 30 s do worker, como rejeição. Cancelar a execução cancela os pedidos pendentes.
 - **Configuração:** `OLLY_AGENT_MAX_ITERATIONS` (25), `OLLY_AGENT_TOOL_RESULT_MAX_CHARS` (20 000), `OLLY_APPROVAL_TIMEOUT_HOURS` (24) e `OLLY_RETENTION_MEMORY_DAYS` (30). Credencial `fakeLlm` só com `NODE_ENV=test`.
+
+## Autenticação (spec 014)
+
+Usuários locais (e-mail e senha) sempre; login OIDC opcional (`OLLY_IDP_ENABLED`, padrão `false`). Guia: [docs/autenticacao.md](../autenticacao.md).
+
+- **Token:** sessão local opaca (`olly_s_…`, `user_sessions`, guardada como hash) ou access token OIDC, os dois como `Bearer`. O `Authenticator` decide pelo prefixo; com o IdP desligado, um token que não é sessão local responde 401. `AuthenticatedUser` ganhou `authMethod`, `sessionId?` e `mustChangePassword`; `GET /me` devolve `authMethod` e `mustChangePassword`.
+- **Rotas:**
+  - `GET /auth/config` (pública): `{ setupRequired, idpEnabled }`;
+  - `POST /auth/setup` (pública, só sem usuários; 409 depois): primeiro usuário, administrador da plataforma; devolve a sessão;
+  - `POST /auth/local/login` (pública): `{ token, expiresAt, mustChangePassword }`; 401 genérico;
+  - `POST /auth/logout` e `PUT /auth/password { currentPassword, newPassword }` (autenticadas);
+  - `POST /admin/users`, `PATCH /admin/users/:id`, `PUT /admin/users/:id/password` e `PUT /admin/users/:id/active` (`user:manage` global); `GET /admin/users` traz `origin`, `isAdmin`, `locked`, `mustChangePassword`;
+  - `POST /auth/login` (registro do login OIDC, spec 009) responde 404 com o IdP desligado.
+- **Erros:** `password_change_required` (403: sessão com troca de senha pendente fora de `GET /me`, `PUT /auth/password` e `POST /auth/logout`); política de senha em 422 com `issues[].code = password_policy`.
+- **Vinculação:** token OIDC com o e-mail de um usuário local sem `external_id` vincula as contas se `email_verified` for `true`; senão, 403.
+- **Comando:** `node apps/api/dist/cli/users-admin.js --email <e-mail> [--name <nome>]` (na raiz do repositório, também dentro do container `api`) (recuperação de administrador).
+- **Configuração:** `OLLY_IDP_ENABLED`, `OLLY_SESSION_IDLE_MINUTES` (480), `OLLY_SESSION_MAX_HOURS` (24), `OLLY_LOGIN_MAX_ATTEMPTS` (5), `OLLY_LOGIN_LOCK_MINUTES` (15).

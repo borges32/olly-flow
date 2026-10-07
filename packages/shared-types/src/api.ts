@@ -11,12 +11,15 @@ import type {
 
 export type DependencyStatus = 'up' | 'down';
 
-/** `GET /health`. `idp` indica se o emissor OIDC responde (caso de borda da spec 001). */
+/**
+ * `GET /health`. `idp` indica se o emissor OIDC responde (caso de borda da spec 001); com o login
+ * pelo IdP desligado (spec 014), `disabled` e não é checado.
+ */
 export interface HealthResponse {
   status: 'ok' | 'degraded' | 'error';
   db: DependencyStatus;
   redis: DependencyStatus;
-  idp: DependencyStatus;
+  idp: DependencyStatus | 'disabled';
 }
 
 /**
@@ -34,6 +37,10 @@ export interface MeResponse {
   email: string;
   name: string | null;
   permissions: EffectivePermissions;
+  /** Spec 014: como a sessão atual foi aberta. */
+  authMethod: 'local' | 'idp';
+  /** Spec 014 (FR-007): a senha precisa ser trocada antes de usar a plataforma. */
+  mustChangePassword: boolean;
 }
 
 /** Problema apontado pela validação (corpo, estrutura do workflow...). */

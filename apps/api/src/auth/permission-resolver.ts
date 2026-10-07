@@ -41,7 +41,10 @@ export class ProjectPermissionResolver implements PermissionResolver {
 
   async resolve(user: User, claims: AccessTokenClaims): Promise<ResolvedPermissions> {
     const groups = claims.groups ?? [];
-    const isAdmin = groups.includes(this.config.oidc.adminGroup);
+    // Spec 014 (FR-003): administração global da plataforma (`is_admin`) ou, com o IdP ligado,
+    // o grupo de administração do IdP.
+    const isAdmin =
+      user.is_admin || (this.config.oidc ? groups.includes(this.config.oidc.adminGroup) : false);
     if (isAdmin) {
       return {
         isAdmin,

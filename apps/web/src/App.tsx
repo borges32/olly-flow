@@ -11,6 +11,7 @@ import { EditorPage } from '@/editor/editor-page';
 import { AdminAuditPage } from '@/pages/admin-audit-page';
 import { AdminMaskingPage } from '@/pages/admin-masking-page';
 import { AdminAiPage } from '@/pages/admin-ai-page';
+import { ChangePasswordPage } from '@/pages/change-password-page';
 import { AdminMcpPage } from '@/pages/admin-mcp-page';
 import { AdminPage } from '@/pages/admin-page';
 import { AdminSsoPage } from '@/pages/admin-sso-page';
@@ -54,6 +55,8 @@ const router = createBrowserRouter([
           { path: 'admin/mcp', element: <AdminMcpPage /> },
           { path: 'admin/ai', element: <AdminAiPage /> },
           { path: 'approvals', element: <ApprovalsPage /> },
+          // Spec 014: troca voluntária da senha local.
+          { path: 'change-password', element: <ChangePasswordPage /> },
           { path: '*', element: <NotFoundPage /> },
         ],
       },
