@@ -100,8 +100,27 @@ export type AgentRunResult =
 
 const ajv = new Ajv({ strict: false, allErrors: true, validateSchema: false });
 
-const contentText = (message: BaseMessage) =>
-  typeof message.content === 'string' ? message.content : JSON.stringify(message.content);
+/**
+ * Texto da resposta. Alguns provedores devolvem campos extras (ex.: `images: []` da Bridge,
+ * spec 016) e o LangChain entrega o conteúdo em blocos (`[{ type: 'text', text }]`): os blocos de
+ * texto são juntados; outro formato vira JSON.
+ */
+export const contentText = (message: BaseMessage): string => {
+  const { content } = message;
+  if (typeof content === 'string') return content;
+  const blocks = content as unknown[];
+  const texts = blocks.map((block) =>
+    typeof block === 'string'
+      ? block
+      : block &&
+          typeof block === 'object' &&
+          (block as { type?: unknown }).type === 'text' &&
+          typeof (block as { text?: unknown }).text === 'string'
+        ? (block as { text: string }).text
+        : undefined,
+  );
+  return texts.every((t) => t !== undefined) ? texts.join('') : JSON.stringify(content);
+};
 
 /** JSON da resposta: aceita o texto puro ou dentro de um bloco ```json. */
 export function extractJson(text: string): unknown {

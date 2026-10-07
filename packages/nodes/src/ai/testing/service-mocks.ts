@@ -99,12 +99,16 @@ export interface BridgeMockOptions {
   loginDelayMs?: number;
   script?: BridgeMockStep[];
   usage?: { prompt_tokens: number; completion_tokens: number };
+  /** Modelos sem permissão para o usuário de serviço: respondem 403 com uma mensagem. */
+  forbiddenModels?: string[];
 }
 
 export interface BridgeMockCall {
   model: string;
   authorization: string | undefined;
   body: Record<string, unknown>;
+  /** Cabeçalhos recebidos (nomes em minúsculas). */
+  headers: Record<string, string | string[] | undefined>;
 }
 
 export interface BridgeMock {
@@ -116,10 +120,12 @@ export interface BridgeMock {
   /** Logins aceitos. */
   readonly logins: number;
   readonly calls: BridgeMockCall[];
+  /** Cabeçalhos de cada login recebido. */
+  readonly loginHeaders: Record<string, string | string[] | undefined>[];
   /** Tokens emitidos (para a busca por sentinelas). */
   readonly tokens: string[];
-  /** As próximas `n` chamadas ao modelo respondem 401, como um token recusado. */
-  rejectNextCalls(n: number): void;
+  /** As próximas `n` chamadas ao modelo respondem 401 (ou o status pedido), como um token recusado. */
+  rejectNextCalls(n: number, status?: number): void;
   /** Invalida os tokens emitidos (como se tivessem vencido no servidor). */
   expireTokens(): void;
   close(): Promise<void>;
@@ -136,10 +142,13 @@ export async function startBridgeMock(options: BridgeMockOptions = {}): Promise<
   const valid = new Set<string>();
   const tokens: string[] = [];
   const calls: BridgeMockCall[] = [];
+  const loginHeaders: BridgeMock['loginHeaders'] = [];
   let logins = 0;
   let reject = 0;
+  let rejectStatus = 401;
 
-  const login = async (body: string): Promise<MockResponse> => {
+  const login = async (req: IncomingMessage, body: string): Promise<MockResponse> => {
+    loginHeaders.push(req.headers);
     const data = parse(body);
     if (data.identificador !== identificador || data.senha !== senha) {
       return { status: 401, json: { mensagem: 'Usuário ou senha inválidos' } };
@@ -152,17 +161,36 @@ export async function startBridgeMock(options: BridgeMockOptions = {}): Promise<
       : `${base64url({ alg: 'HS256', typ: 'JWT' })}.${base64url({ sub: identificador, exp, n: logins })}.assinatura`;
     valid.add(token);
     tokens.push(token);
-    return { status: 200, json: { token } };
+    // Formato do exemplo da Bridge (prompt "Prompt N8N.md").
+    return {
+      status: 200,
+      json: {
+        nome: '278 - AIOps operator',
+        email: 'servico@exemplo.local',
+        token,
+        projeto_perfil: {
+          project: { id: 'p1', codigo: 'CD_PLATAFORM_278', descricao: '278 - AIOps operator' },
+          perfil: { id: 'u1', status: 'ACTIVE', codigo: 'USUARIO', descricao: 'Usuário' },
+        },
+      },
+    };
   };
 
   const chat = (req: IncomingMessage, model: string, body: string): MockResponse => {
     const authorization = req.headers.authorization;
     const data = parse(body);
-    calls.push({ model, authorization, body: data });
+    calls.push({ model, authorization, body: data, headers: req.headers });
     const token = authorization?.replace(/^Bearer /, '') ?? '';
     if (reject > 0 || !valid.has(token)) {
+      const status = reject > 0 ? rejectStatus : 401;
       reject = Math.max(0, reject - 1);
-      return { status: 401, json: { mensagem: 'Token inválido ou expirado' } };
+      return { status, json: { mensagem: 'Token inválido ou expirado' } };
+    }
+    if (options.forbiddenModels?.includes(model)) {
+      return {
+        status: 403,
+        json: { mensagem: `Modelo ${model} não liberado para o projeto CD_PLATAFORM_278` },
+      };
     }
     const step = script.shift() ?? { content: 'ok' };
     if (step.status)
@@ -218,42 +246,59 @@ export async function startBridgeMock(options: BridgeMockOptions = {}): Promise<
         choices: [
           {
             index: 0,
+            // Campos extras e nulos como no exemplo da Bridge.
             message: {
-              role: 'assistant',
               content: step.content ?? null,
-              ...(toolCalls.length > 0 && {
-                tool_calls: toolCalls.map(({ index: _index, ...call }) => call),
-              }),
+              role: 'assistant',
+              tool_calls:
+                toolCalls.length > 0
+                  ? toolCalls.map((call) =>
+                      Object.fromEntries(Object.entries(call).filter(([k]) => k !== 'index')),
+                    )
+                  : null,
+              function_call: null,
+              images: [],
+              thinking_blocks: [],
+              provider_specific_fields: null,
             },
             finish_reason: finish,
           },
         ],
-        usage: usageBody,
+        system_fingerprint: null,
+        usage: {
+          ...usageBody,
+          completion_tokens_details: { reasoning_tokens: 0, text_tokens: usage.completion_tokens },
+          prompt_tokens_details: { cached_tokens: null, text_tokens: usage.prompt_tokens },
+        },
+        vertex_ai_grounding_metadata: [],
       },
     };
   };
 
   const { server, origin } = await listen(options.tls ?? false, (req, body) => {
     const path = new URL(req.url ?? '/', 'http://x').pathname;
-    if (req.method === 'POST' && path === '/identity/v1/login') return login(body);
-    const match = /^\/llm\/v1\/deployments\/([^/]+)\/chat\/completions$/.exec(path);
+    if (req.method === 'POST' && path === '/iagen-identity/v1/usuarios/login-servico')
+      return login(req, body);
+    const match = /^\/iagen-llm-proxy\/v1\/deployments\/([^/]+)\/chat\/completions$/.exec(path);
     if (req.method === 'POST' && match?.[1]) return chat(req, decodeURIComponent(match[1]), body);
     return { status: 404, json: { mensagem: `Rota inexistente: ${path}` } };
   });
 
   return {
     origin,
-    tokenUrl: `${origin}/identity/v1/login`,
-    baseUrl: `${origin}/llm/v1`,
+    tokenUrl: `${origin}/iagen-identity/v1/usuarios/login-servico`,
+    baseUrl: `${origin}/iagen-llm-proxy/v1`,
     identificador,
     senha,
     get logins() {
       return logins;
     },
     calls,
+    loginHeaders,
     tokens,
-    rejectNextCalls: (n) => {
+    rejectNextCalls: (n, status = 401) => {
       reject = n;
+      rejectStatus = status;
     },
     expireTokens: () => {
       valid.clear();

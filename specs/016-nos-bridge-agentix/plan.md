@@ -65,7 +65,10 @@
 - **`bridge-fetch.ts`:** o `fetch` entregue ao `ChatOpenAI`:
   1. tira o `model` do corpo JSON (salvo com `sendModelInBody`);
   2. põe `Authorization: Bearer <token>`;
-  3. em 401/403, invalida o token, faz um novo login e repete uma vez.
+  3. em 401/403, invalida o token, faz um novo login e repete uma vez. Se a recusa persistir, troca o corpo por `{ error: { message } }` com o endereço, o motivo e o que conferir (o SDK usa esse texto no erro);
+  4. envia só os cabeçalhos do exemplo da Bridge, mais `accept` e `user-agent: Olly-Flow/1.0 (bridge)` (também no login): sem os `x-stainless-*` e o agente do SDK.
+
+  A URL base passa por `bridgeBaseUrl` (sem `/` final e sem `/deployments…` colado). O Agent junta os blocos de texto da resposta (`contentText`), já que a resposta da Bridge traz `images` e o LangChain entrega o conteúdo em blocos.
 
   Usa `ai.fetchFor({ insecureTls, allowPrivateNetworks: true })`, sempre pelo anti-SSRF. O login usa as mesmas opções.
 - **Nó `ai.bridgeChatModel`** ("Bridge Chat Model", categoria `ai`, saída `ai_languageModel`, credencial `bridgeApi`):
@@ -184,3 +187,4 @@ Nenhuma variável nova. Os endereços internos da Bridge e do Agentix **não** p
 | 07/10/2026 | Pré-requisitos respondidos pelo PO: Bridge como modelo de chat customizado (ADR-0008; resumo, constituição e §6); sem restrição de endereço interno para os dois nós (§2 `allowPrivateNetworks`, §3, §4, configuração, decisões, testes e riscos); fixtures a fornecer | Decisão humana |
 | 07/10/2026 | Implementação: ícone do Agentix `bot-message-square` (o `bot` já é do Agent); servidores simulados exportados por `@olly/nodes` (`startBridgeMock`, `startAgentixMock`, como o modelo simulado da spec 011) com um certificado autoassinado só de teste; `BridgeTokenManager.invalidate` descarta só o token recusado | Implementação |
 | 07/10/2026 | Correção do Agentix (erro 403 em dev): `User-Agent` próprio, `agentixBaseUrl`, `status` da criação, mensagens de 401/403 com o endereço e o motivo; simulador no formato do exemplo da API (`/v2/api`, `status` na criação, 403 sem chave) | Correção de bug |
+| 07/10/2026 | Correção da Bridge (erro 403 em dev): cabeçalhos iguais ao exemplo (`User-Agent` próprio, sem `x-stainless-*`), `bridgeBaseUrl`, mensagem do 401/403 persistente; `contentText` do Agent junta os blocos de texto; simulador no formato do exemplo da Bridge | Correção de bug |

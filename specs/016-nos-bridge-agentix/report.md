@@ -103,6 +103,17 @@ Foram entregues:
 - **Ícone do Agentix:** `bot-message-square` em vez de `bot`, que já é o ícone do Agent. Registrado no histórico do plano.
 - Os demais detalhes de implementação (servidores simulados exportados, invalidação só do token recusado) foram registrados no histórico do plano. Spec e plano estão alinhados ao código.
 
+## Correção após a implementação: erro 403 da Bridge em dev
+
+Relatado pelo PO ao testar em dev. O erro não mostrava a causa. Comparando a chamada real do nó (capturada num servidor local) com o exemplo da Bridge (`Bridge-Chat-Model/prompt/Prompt N8N.md`), o corpo já estava igual ao curl do exemplo. Os cabeçalhos não estavam, e foram corrigidos junto com os demais pontos:
+- **Cabeçalhos:** o login ia com `user-agent: undici`, e o `chat/completions` com `user-agent: langchainjs-openai/…` e sete cabeçalhos `x-stainless-*` do SDK da OpenAI. Esses três tipos são comuns em listas de bloqueio de WAFs corporativos. Agora o nó envia só os cabeçalhos do exemplo (`authorization`, `content-type`), mais `accept` e `User-Agent: Olly-Flow/1.0 (bridge)`.
+- **URL base:** se a credencial receber o endpoint completo do exemplo, o nó passa a usar a raiz do proxy (`bridgeBaseUrl`).
+- **Diagnóstico:** um 401 ou 403 que persiste depois do novo login agora gera `A Bridge recusou a chamada (403) em POST <endereço>: <motivo>`. A mensagem diz o que conferir: modelo (alias), permissões do projeto do usuário de serviço, URL base e rede.
+- **Resposta no formato real:** a resposta da Bridge traz `images: []` e `thinking_blocks: []`. Com esses campos, o LangChain entrega o conteúdo em blocos, e o Agent devolvia a resposta final como JSON dos blocos quando o streaming estava desligado. Agora o `contentText` do Agent junta os blocos de texto.
+- **Simulador:** passou a seguir o exemplo (caminhos `iagen-identity/…/login-servico` e `iagen-llm-proxy/v1`, resposta do login com `nome`, `email` e `projeto_perfil`, campos extras na resposta, 403 para modelo não liberado). Ele também registra os cabeçalhos recebidos.
+
+Testes que reproduzem e comprovam: `bridge.test.ts` › "spec 016 — HU-1: chamada igual ao exemplo da Bridge (erro 403 em dev)", com 7 casos: cabeçalhos, resposta em blocos, URL base colada (3) e 403 persistente ou passageiro. Os testes anteriores que liam `content` falharam com o novo formato da resposta e evidenciaram o defeito dos blocos.
+
 ## Correção após a implementação: erro 403 do Agentix em dev
 
 Relatado pelo PO ao testar em dev. A causa exata não aparece no erro antigo, que só trazia o status. Comparando o nó com o exemplo da API (`Bridge-Chat-Model/prompt/Agentix`) e com o tráfego real do nó, foram corrigidos:

@@ -30,7 +30,7 @@ Sub-nó do [Agente de IA](ai.agent.md): um **modelo de chat customizado** servid
 | Campo | Descrição |
 |---|---|
 | `tokenUrl` | URL de login de serviço. Obrigatória, **sem valor padrão** |
-| `baseUrl` | URL base do proxy de modelos. Obrigatória, **sem valor padrão** |
+| `baseUrl` | URL base do proxy de modelos (ex.: `https://<host>/iagen-llm-proxy/v1`). Obrigatória, **sem valor padrão**. Se for colada com o endpoint (`…/deployments/{modelo}/chat/completions`), o nó usa a raiz |
 | `identificador` | Identificador do usuário de serviço |
 | `senha` | Senha do usuário de serviço (secreta) |
 | `tokenSkewSeconds` | Margem de renovação do token, em segundos (padrão 60, de 0 a 600) |
@@ -41,6 +41,8 @@ Sub-nó do [Agente de IA](ai.agent.md): um **modelo de chat customizado** servid
 ## Comportamento
 
 - **Chamada (FR-003):** `POST <baseUrl>/deployments/{modelo}/chat/completions`, no formato `chat/completions` da OpenAI, com `Authorization: Bearer <token>`. O campo `model` não vai no corpo, a menos que `sendModelInBody` esteja ligado.
+- **Cabeçalhos:** os do exemplo da Bridge (`authorization`, `content-type`), mais `accept` e `User-Agent: Olly-Flow/1.0 (bridge)`, no login e nas chamadas. Os cabeçalhos `x-stainless-*` e o agente `langchainjs-openai/…` do SDK da OpenAI não são enviados: são comuns em listas de bloqueio de WAFs corporativos.
+- **Resposta:** os campos extras da Bridge (`images`, `thinking_blocks`, `provider_specific_fields`...) são aceitos; a resposta chega ao Agent como texto.
 - **Token (FR-004):**
   - **login:** `POST tokenUrl { identificador, senha }` devolve `{ token }`;
   - **reaproveitamento:** o token fica em memória, em cada processo (API e workers), por credencial; alterar a credencial faz um novo login;
@@ -63,7 +65,16 @@ Sub-nó do [Agente de IA](ai.agent.md): um **modelo de chat customizado** servid
 - **Segredos (FR-014):** a senha é um campo secreto, e cada token obtido entra no mascaramento da execução. Nenhum dos dois aparece em logs, dados de execução, passos do agente ou respostas da API.
 - **Erros:**
   - **login recusado:** `Login na Bridge falhou com status <status>: <trecho>`;
+  - **chamada recusada (401/403) mesmo depois do novo login:** `A Bridge recusou a chamada (<status>) em POST <endereço>: <motivo>`, com o que conferir;
   - **modelo inexistente ou outra falha da Bridge:** o status e a mensagem voltam na execução.
+
+## Erro 403
+
+Depois de um 403, o nó faz um novo login e repete a chamada uma vez. Se o 403 continuar, a mensagem mostra o endereço chamado e o motivo devolvido:
+- **Motivo da Bridge (ex.: modelo não liberado):** o usuário de serviço não tem acesso ao modelo. Confira o nome (o alias cadastrado na Bridge, ex.: `gemini-2.5-flash`) e as permissões do projeto do usuário de serviço.
+- **Endereço errado:** a URL base termina em `…/iagen-llm-proxy/v1`; o nó acrescenta `deployments/{modelo}/chat/completions`.
+- **Sem motivo no corpo, ou uma página HTML:** a rede (proxy ou WAF) barrou a chamada. Confira, com a infraestrutura, a liberação da origem (API e workers) para o endereço da Bridge.
+- **No login:** a mensagem é `Login na Bridge falhou com status 403`. Confira o identificador, a senha e a URL de login.
 
 ## Exemplo (trecho do JSON do workflow)
 

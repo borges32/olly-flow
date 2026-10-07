@@ -22,6 +22,20 @@ interface BridgeOptions {
   sendModelInBody: boolean;
 }
 
+/**
+ * Raiz do proxy de modelos a partir da URL base da credencial. Aceita a URL colada com o
+ * endpoint do exemplo (`…/v1/deployments/{modelo}/chat/completions`): o nó acrescenta o caminho.
+ */
+export function bridgeBaseUrl(raw: unknown): string {
+  if (typeof raw !== 'string') return '';
+  return raw
+    .trim()
+    .replace(/\/+$/, '')
+    .replace(/\/deployments(\/.*)?$/, '')
+    .replace(/\/chat\/completions$/, '')
+    .replace(/\/+$/, '');
+}
+
 const finite = (v: unknown): number | undefined => {
   if (v === undefined || v === null || v === '') return undefined;
   const n = typeof v === 'number' ? v : Number(v);
@@ -69,7 +83,7 @@ async function supplyBridgeModel(
   const rawModel = ctx.getParam('model', itemIndex);
   const model = typeof rawModel === 'string' ? rawModel.trim() : '';
   if (!model) throw new NodeParameterError('model', 'informe o modelo');
-  const baseUrl = typeof credential.data.baseUrl === 'string' ? credential.data.baseUrl.trim() : '';
+  const baseUrl = bridgeBaseUrl(credential.data.baseUrl);
   if (!baseUrl) throw new Error('Credencial Bridge: informe o campo "baseUrl"');
   const stream = ctx.getParam('stream', itemIndex) !== false;
   const options = readOptions(ctx.getParam('options', itemIndex));
@@ -94,7 +108,7 @@ async function supplyBridgeModel(
     // 401/403 não entram nas novas tentativas do LangChain: o `fetch` já trata (FR-005).
     maxRetries: options.maxRetries,
     configuration: {
-      baseURL: `${baseUrl.replace(/\/+$/, '')}/deployments/${encodeURIComponent(model)}`,
+      baseURL: `${baseUrl}/deployments/${encodeURIComponent(model)}`,
       fetch: createBridgeFetch({
         credential,
         tokens,

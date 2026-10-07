@@ -1,5 +1,12 @@
 import type { ResolvedCredential } from '../../credentials/definitions.js';
 
+/**
+ * O nó se identifica, como o curl do exemplo da Bridge manda só `authorization` e
+ * `content-type`: os agentes `undici` (login) e `langchainjs-openai/…` (SDK) e os cabeçalhos
+ * `x-stainless-*` do SDK da OpenAI são comuns em listas de bloqueio de WAFs corporativos (403).
+ */
+export const BRIDGE_USER_AGENT = 'Olly-Flow/1.0 (bridge)';
+
 /** Duração padrão do token quando o `exp` não é legível (spec 016, FR-004). */
 export const BRIDGE_DEFAULT_TOKEN_TTL_MS = 20 * 60_000;
 const DEFAULT_SKEW_SECONDS = 60;
@@ -60,7 +67,12 @@ export async function bridgeLogin(
   const data = credential.data;
   const response = await fetchFn(field(data, 'tokenUrl'), {
     method: 'POST',
-    headers: { 'content-type': 'application/json', accept: 'application/json' },
+    // Como no exemplo da Bridge, com o agente da plataforma no lugar do `undici`.
+    headers: {
+      'content-type': 'application/json',
+      accept: 'application/json',
+      'user-agent': BRIDGE_USER_AGENT,
+    },
     body: JSON.stringify({
       identificador: field(data, 'identificador'),
       senha: field(data, 'senha'),

@@ -11,6 +11,7 @@ import {
   type BridgeMockOptions,
 } from '../testing/service-mocks.js';
 import type { AiFetchOptions, AiGateway, ChatModelSupply } from '../runtime/types.js';
+import { contentText } from '../runtime/agent.js';
 import { createBridgeChatModelNode } from './definition.js';
 import { BridgeTokenManager } from './token-manager.js';
 
@@ -94,7 +95,7 @@ describe('spec 016 — HU-1: Bridge Chat Model', () => {
     expect(fetchOptions).toEqual([{ insecureTls: false, allowPrivateNetworks: true }]);
 
     const response = (await supplied.chatModel.invoke('oi')) as AIMessage;
-    expect(response.content).toBe('Olá da Bridge');
+    expect(contentText(response)).toBe('Olá da Bridge');
     expect(response.usage_metadata).toMatchObject({ input_tokens: 12, output_tokens: 7 });
     expect(m.calls).toHaveLength(1);
     const [call] = m.calls;
@@ -112,7 +113,7 @@ describe('spec 016 — HU-1: Bridge Chat Model', () => {
       { script: [{ content: 'parte' }] },
     );
     const streamed = (await plain.supplied.chatModel.invoke('oi')) as AIMessage;
-    expect(streamed.content).toBe('parte');
+    expect(contentText(streamed)).toBe('parte');
     expect(plain.mock.calls[0]?.body).toMatchObject({ stream: true });
     expect(plain.mock.calls[0]?.body).not.toHaveProperty('stream_options');
     await plain.mock.close();
@@ -186,7 +187,7 @@ describe('spec 016 — HU-1: Bridge Chat Model', () => {
     await supplied.chatModel.invoke('primeira');
     m.expireTokens(); // o token venceu no servidor: a próxima chamada recebe 401
     const response = (await supplied.chatModel.invoke('segunda')) as AIMessage;
-    expect(response.content).toBe('ok');
+    expect(contentText(response)).toBe('ok');
     expect(m.logins).toBe(2);
     expect(m.calls).toHaveLength(3);
     expect(m.calls[2]?.authorization).toBe(`Bearer ${m.tokens[1] ?? ''}`);
@@ -211,7 +212,7 @@ describe('spec 016 — HU-1: Bridge Chat Model', () => {
       { allowUnauthorizedCerts: true },
     );
     expect(insecure.fetchOptions).toEqual([{ insecureTls: true, allowPrivateNetworks: true }]);
-    expect(((await insecure.supplied.chatModel.invoke('oi')) as AIMessage).content).toBe(
+    expect(contentText((await insecure.supplied.chatModel.invoke('oi')) as AIMessage)).toBe(
       'via https',
     );
     await insecure.mock.close();
@@ -256,6 +257,89 @@ describe('spec 016 — HU-1: Bridge Chat Model', () => {
     await expect(
       node.execute({ inputs: {}, items: [] }, fakeContext({ params: {} })),
     ).rejects.toThrow('sub-nó');
+  });
+});
+
+// Correções a partir do exemplo da Bridge (prompt "Prompt N8N.md"), depois do erro 403 em dev.
+describe('spec 016 — HU-1: chamada igual ao exemplo da Bridge (erro 403 em dev)', () => {
+  it('FR-003: só os cabeçalhos do exemplo, com o User-Agent da plataforma (sem x-stainless nem o agente do SDK)', async () => {
+    const { supplied, mock: m } = await supply({
+      model: 'gemini-2.5-flash',
+      stream: false,
+      options: { maxRetries: 0 },
+    });
+    await supplied.chatModel.invoke('oi');
+    const headers = m.calls[0]?.headers ?? {};
+    expect(Object.keys(headers).filter((h) => h.startsWith('x-stainless'))).toEqual([]);
+    expect(headers['user-agent']).toMatch(/^Olly-Flow\//);
+    expect(headers['content-type']).toBe('application/json');
+    expect(headers.authorization).toMatch(/^Bearer /);
+    // O login também se identifica (o fetch mandaria "undici").
+    expect(m.loginHeaders[0]?.['user-agent']).toMatch(/^Olly-Flow\//);
+    // Corpo como no curl do exemplo: mensagens, sem "model".
+    expect(m.calls[0]?.body).toEqual({
+      stream: false,
+      messages: [{ role: 'user', content: 'oi' }],
+    });
+  });
+
+  it('FR-001: resposta no formato da Bridge (images, thinking_blocks) chega ao Agent como texto', async () => {
+    const { supplied } = await supply(
+      { model: 'gemini-2.5-flash', stream: false, options: { maxRetries: 0 } },
+      { script: [{ content: 'Três títulos' }] },
+    );
+    const response = (await supplied.chatModel.invoke('oi')) as AIMessage;
+    // Com `images: []` na resposta, o LangChain entrega o conteúdo em blocos.
+    expect(response.content).toEqual([
+      expect.objectContaining({ type: 'text', text: 'Três títulos' }),
+    ]);
+    // O Agent junta os blocos de texto (antes, a resposta final saía como JSON dos blocos).
+    expect(contentText(response)).toBe('Três títulos');
+  });
+
+  it.each(['/deployments/gemini-2.5-flash/chat/completions', '/deployments', '/chat/completions'])(
+    'FR-003: URL base colada com o endpoint (%s) é corrigida para a raiz do proxy',
+    async (suffix) => {
+      mock = await startBridgeMock();
+      const { ai } = gateway();
+      const ctx = fakeContext({
+        params: { model: 'gemini-2.5-flash', stream: false, options: { maxRetries: 0 } },
+        credential: credentialFor(mock, { baseUrl: `${mock.baseUrl}${suffix}` }),
+        ai,
+      });
+      const node = createBridgeChatModelNode({ tokens: new BridgeTokenManager() });
+      const model = ((await node.supplyData?.(ctx, 0)) as ChatModelSupply).chatModel;
+      expect(contentText((await model.invoke('oi')) as AIMessage)).toBe('ok');
+      expect(mock.calls[0]?.model).toBe('gemini-2.5-flash');
+    },
+  );
+
+  it('FR-005: 403 persistente mostra o endereço, o modelo e o motivo devolvido pela Bridge', async () => {
+    const { supplied, mock: m } = await supply(
+      { model: 'gpt-4', stream: false, options: { maxRetries: 0 } },
+      { forbiddenModels: ['gpt-4'] },
+    );
+    const error = await supplied.chatModel.invoke('oi').catch((e: unknown) => e as Error);
+    const message = (error as Error).message;
+    expect(message).toContain('A Bridge recusou a chamada (403)');
+    expect(message).toContain(`${m.baseUrl}/deployments/gpt-4/chat/completions`);
+    expect(message).toContain('Modelo gpt-4 não liberado para o projeto CD_PLATAFORM_278');
+    expect(message).toContain('alias');
+    // Um novo login e uma única repetição, como no 401.
+    expect(m.calls).toHaveLength(2);
+    expect(m.logins).toBe(2);
+    expect(message).not.toContain(m.tokens[0] ?? 'sem-token');
+  });
+
+  it('FR-005: um 403 só na primeira chamada (token recusado) é resolvido pelo novo login', async () => {
+    const { supplied, mock: m } = await supply({
+      model: 'gpt-4',
+      stream: false,
+      options: { maxRetries: 0 },
+    });
+    m.rejectNextCalls(1, 403);
+    expect(contentText((await supplied.chatModel.invoke('oi')) as AIMessage)).toBe('ok');
+    expect(m.logins).toBe(2);
   });
 });
 
