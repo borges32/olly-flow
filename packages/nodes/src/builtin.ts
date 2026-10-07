@@ -1,4 +1,7 @@
 import { agentNode } from './ai/agent/definition.js';
+import { createAgentixNode } from './ai/agentix/definition.js';
+import { createBridgeChatModelNode } from './ai/bridge/definition.js';
+import { BridgeTokenManager } from './ai/bridge/token-manager.js';
 import { chatModelNode } from './ai/chat-model/definition.js';
 import { mcpClientNode } from './ai/mcp-client/definition.js';
 import { bufferMemoryNode, postgresMemoryNode } from './ai/memory/definitions.js';
@@ -39,6 +42,8 @@ export interface BuiltinNodeOptions {
   oauth?: OAuth2TokenCache;
   pools?: PoolManager;
   columns?: ColumnCache;
+  /** Spec 016: tokens da Bridge em memória (um gerenciador por processo). */
+  bridgeTokens?: BridgeTokenManager;
 }
 
 /**
@@ -47,10 +52,12 @@ export interface BuiltinNodeOptions {
  */
 export function createBuiltinNodes(options: BuiltinNodeOptions = {}): NodeDefinition[] {
   const pools = options.pools ?? new PoolManager();
+  const guard = options.httpGuard ?? createHttpGuard();
+  const maxResponseBytes = options.httpMaxResponseBytes ?? DEFAULT_HTTP_MAX_RESPONSE_BYTES;
   const httpRequest = createHttpRequestNode({
-    guard: options.httpGuard ?? createHttpGuard(),
+    guard,
     oauth: options.oauth ?? new OAuth2TokenCache(),
-    maxResponseBytes: options.httpMaxResponseBytes ?? DEFAULT_HTTP_MAX_RESPONSE_BYTES,
+    maxResponseBytes,
   });
   const postgresQuery = createPostgresQueryNode({ pools });
   return [
@@ -84,6 +91,9 @@ export function createBuiltinNodes(options: BuiltinNodeOptions = {}): NodeDefini
     ...createAgentToolNodes({ httpRequest, postgresQuery }),
     // Spec 015: marcador de nó importado sem suporte.
     placeholderNode,
+    // Spec 016: Bridge (modelo de chat customizado) e Agentix.
+    createBridgeChatModelNode({ tokens: options.bridgeTokens ?? new BridgeTokenManager() }),
+    createAgentixNode({ guard, maxResponseBytes }),
   ];
 }
 

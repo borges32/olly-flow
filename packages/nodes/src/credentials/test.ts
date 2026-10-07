@@ -1,4 +1,5 @@
 import pg from 'pg';
+import { bridgeLogin } from '../ai/bridge/token-manager.js';
 import { applyHttpCredential, OAuth2TokenCache } from '../http/auth.js';
 import { connectionConfig } from '../postgres/pool.js';
 import type { HttpGuard } from '../shared/http-guard.js';
@@ -18,8 +19,8 @@ const TEST_TIMEOUT_MS = 15_000;
 
 /**
  * Testa uma credencial (spec 004, FR-005, plan §10): Postgres roda `SELECT 1`; OAuth2 obtém um
- * token novo; os tipos HTTP genéricos fazem um GET autenticado na URL informada, pelo filtro
- * anti-SSRF. A mensagem pode citar o servidor, mas nunca o segredo (a API ainda mascara).
+ * token novo; a Bridge faz o login de serviço (spec 016); os tipos HTTP genéricos fazem um GET
+ * autenticado na URL informada, pelo filtro anti-SSRF. A mensagem pode citar o servidor, mas nunca o segredo (a API ainda mascara).
  */
 export async function testCredential(
   credential: ResolvedCredential,
@@ -50,6 +51,32 @@ export async function testCredential(
     } catch (error) {
       return fail(error);
     }
+  }
+  if (credential.type === 'bridgeApi') {
+    // Spec 016, FR-002: o mesmo login da execução, com as opções da Bridge (TLS e redes internas).
+    try {
+      await bridgeLogin(
+        credential,
+        (url, init) =>
+          deps.guard.fetch(url, {
+            ...init,
+            signal: init.signal ?? signal,
+            insecureTls: credential.data.allowUnauthorizedCerts === true,
+            allowPrivateNetworks: true,
+          }),
+        signal,
+      );
+      return { ok: true, message: 'Login bem-sucedido' };
+    } catch (error) {
+      const cause = (error as { cause?: unknown }).cause;
+      return fail(cause instanceof Error ? cause : error);
+    }
+  }
+  if (credential.type === 'agentixApi') {
+    // Spec 016, plan §1: como no N8N, o Agentix não tem um endpoint só de validação.
+    throw new CredentialTestInputError(
+      'A credencial Agentix é validada na primeira execução do nó (o Agentix não tem um endpoint só de validação)',
+    );
   }
   if (credential.type.startsWith('mcp')) {
     // Spec 010: a credencial MCP é testada pela conexão com o servidor (catálogo MCP) ou, no

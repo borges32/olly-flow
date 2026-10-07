@@ -65,13 +65,32 @@ export function ipInList(address: string, entries: readonly string[]): boolean {
   return inAllowlist(normalize(address), parseAllowlist(entries));
 }
 
+/**
+ * Redes internas aceitas com `allowPrivateNetworks` (spec 016, FR-013): privadas (10/8,
+ * 172.16/12, 192.168/16), CGNAT (100.64/10) e ULA (fc00::/7). Loopback, link-local (inclusive o
+ * endereço de metadados da nuvem) e as demais faixas continuam bloqueadas.
+ */
+const PRIVATE_NETWORK_RANGES = new Set(['private', 'carrierGradeNat', 'uniqueLocal']);
+
+/** Opções de destino por chamada (spec 016). */
+export interface DestinationOptions {
+  /** Aceita as redes internas (`PRIVATE_NETWORK_RANGES`) sem allowlist. Só Bridge e Agentix. */
+  allowPrivateNetworks?: boolean;
+}
+
 /** Motivo do bloqueio, ou `null` se o endereço pode ser acessado. */
-export function blockedReason(address: string, allowlist: Allowlist): string | null {
+export function blockedReason(
+  address: string,
+  allowlist: Allowlist,
+  options: DestinationOptions = {},
+): string | null {
   if (!ipaddr.isValid(address)) return 'endereço inválido';
   const ip = normalize(address);
   if (inAllowlist(ip, allowlist)) return null;
   const range = ip.range();
-  return range === 'unicast' ? null : `endereço ${ip.toString()} é de rede ${range}`;
+  if (range === 'unicast') return null;
+  if (options.allowPrivateNetworks && PRIVATE_NETWORK_RANGES.has(range)) return null;
+  return `endereço ${ip.toString()} é de rede ${range}`;
 }
 
 const defaultResolve: Resolver = (hostname) =>
@@ -86,15 +105,21 @@ const stripBrackets = (host: string) => host.replace(/^\[(.*)\]$/, '$1');
 
 export interface HttpGuard {
   /** Lança `SsrfBlockedError` se a URL não pode ser acessada (protocolo, host ou algum IP). */
-  assertDestinationAllowed(url: string | URL): Promise<void>;
+  assertDestinationAllowed(url: string | URL, options?: DestinationOptions): Promise<void>;
   /** `fetch` que conecta só em IPs validados e revalida cada redirect. */
   fetch(url: string | URL, init?: GuardedRequestInit): Promise<Response>;
   close(): Promise<void>;
 }
 
-export interface GuardedRequestInit extends Omit<RequestInit, 'redirect' | 'dispatcher'> {
+export interface GuardedRequestInit
+  extends Omit<RequestInit, 'redirect' | 'dispatcher'>, DestinationOptions {
   followRedirects?: boolean;
   maxRedirects?: number;
+  /**
+   * Não verifica o certificado TLS do servidor (spec 016, FR-002/FR-008: opção da credencial).
+   * Vale só para esta chamada; o filtro anti-SSRF continua igual.
+   */
+  insecureTls?: boolean;
 }
 
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
@@ -105,21 +130,27 @@ export function createHttpGuard(options: HttpGuardOptions = {}): HttpGuard {
   const resolve = options.resolve ?? defaultResolve;
 
   /** Endereços validados para conectar; lança se algum resolvido for bloqueado. */
-  async function validatedAddresses(hostname: string): Promise<string[]> {
+  async function validatedAddresses(
+    hostname: string,
+    options: DestinationOptions = {},
+  ): Promise<string[]> {
     const host = stripBrackets(hostname).toLowerCase();
     const allowedHost = allowlist.hosts.has(host);
     const addresses = isIP(host) ? [host] : await resolve(host);
     if (addresses.length === 0) throw new SsrfBlockedError(host, 'o nome não resolve');
     if (allowedHost) return addresses;
     for (const address of addresses) {
-      const reason = blockedReason(address, allowlist);
+      const reason = blockedReason(address, allowlist, options);
       // Qualquer IP bloqueado barra o destino: o resolvedor poderia escolher justamente esse.
       if (reason) throw new SsrfBlockedError(host, reason);
     }
     return addresses;
   }
 
-  async function assertDestinationAllowed(url: string | URL): Promise<void> {
+  async function assertDestinationAllowed(
+    url: string | URL,
+    options: DestinationOptions = {},
+  ): Promise<void> {
     let parsed: URL;
     try {
       parsed = new URL(url);
@@ -129,46 +160,67 @@ export function createHttpGuard(options: HttpGuardOptions = {}): HttpGuard {
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
       throw new SsrfBlockedError(parsed.host, `protocolo ${parsed.protocol} não permitido`);
     }
-    await validatedAddresses(parsed.hostname);
+    await validatedAddresses(parsed.hostname, options);
   }
 
   // A conexão usa o mesmo filtro no `lookup`: o IP conectado é o validado, mesmo que o DNS
-  // mude entre a verificação e a conexão (DNS rebinding).
-  const agent = new Agent({
-    connect: {
-      lookup: (hostname, opts, callback) => {
-        validatedAddresses(hostname).then(
-          (addresses) => {
-            const entries = addresses.map((address) => ({
-              address,
-              family: isIP(address) === 6 ? 6 : 4,
-            }));
-            if ((opts as { all?: boolean }).all) callback(null, entries);
-            else {
-              const [first] = entries;
-              if (first) callback(null, first.address, first.family);
-              else callback(new SsrfBlockedError(hostname, 'o nome não resolve'), '', 4);
-            }
-          },
-          (err: unknown) => {
-            callback(err instanceof Error ? err : new Error(String(err)), '', 4);
-          },
-        );
+  // mude entre a verificação e a conexão (DNS rebinding). Um agente por combinação de opções
+  // (spec 016), criado sob demanda.
+  const createAgent = (insecureTls: boolean, destination: DestinationOptions) =>
+    new Agent({
+      connect: {
+        ...(insecureTls && { rejectUnauthorized: false }),
+        lookup: (hostname, opts, callback) => {
+          validatedAddresses(hostname, destination).then(
+            (addresses) => {
+              const entries = addresses.map((address) => ({
+                address,
+                family: isIP(address) === 6 ? 6 : 4,
+              }));
+              if ((opts as { all?: boolean }).all) callback(null, entries);
+              else {
+                const [first] = entries;
+                if (first) callback(null, first.address, first.family);
+                else callback(new SsrfBlockedError(hostname, 'o nome não resolve'), '', 4);
+              }
+            },
+            (err: unknown) => {
+              callback(err instanceof Error ? err : new Error(String(err)), '', 4);
+            },
+          );
+        },
       },
-    },
-  });
+    });
+  const agents = new Map<string, Agent>();
+  const agentFor = (insecureTls: boolean, destination: DestinationOptions): Agent => {
+    const key = `${String(insecureTls)}|${String(destination.allowPrivateNetworks === true)}`;
+    let agent = agents.get(key);
+    if (!agent) {
+      agent = createAgent(insecureTls, destination);
+      agents.set(key, agent);
+    }
+    return agent;
+  };
 
   async function guardedFetch(
     input: string | URL,
     init: GuardedRequestInit = {},
   ): Promise<Response> {
-    const { followRedirects = true, maxRedirects = 5, ...rest } = init;
+    const {
+      followRedirects = true,
+      maxRedirects = 5,
+      insecureTls = false,
+      allowPrivateNetworks = false,
+      ...rest
+    } = init;
+    const destination = { allowPrivateNetworks };
+    const agent = agentFor(insecureTls, destination);
     let url = new URL(input);
     let method = (rest.method ?? 'GET').toUpperCase();
     let body = rest.body;
     const headers = new Headers(rest.headers);
     for (let redirects = 0; ; redirects++) {
-      await assertDestinationAllowed(url);
+      await assertDestinationAllowed(url, destination);
       const response = await fetch(url, {
         ...rest,
         method,
@@ -204,6 +256,9 @@ export function createHttpGuard(options: HttpGuardOptions = {}): HttpGuard {
   return {
     assertDestinationAllowed,
     fetch: guardedFetch,
-    close: () => agent.close(),
+    close: async () => {
+      await Promise.all([...agents.values()].map((agent) => agent.close()));
+      agents.clear();
+    },
   };
 }

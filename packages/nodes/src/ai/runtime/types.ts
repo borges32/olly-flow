@@ -4,8 +4,11 @@ import type { BaseMessage, StoredMessage } from '@langchain/core/messages';
 /** Mensagem armazenável (formato do LangChain), para a memória persistente. */
 export type StoredChatMessage = StoredMessage;
 
-/** Provedores de modelo (ADR-0008); `fake` só nos testes (FR-016). */
-export type ChatModelProvider = 'openai' | 'anthropic' | 'google' | 'fake';
+/**
+ * Provedores de modelo (ADR-0008); `bridge` é o modelo de chat customizado do gateway interno
+ * (spec 016); `fake` só nos testes (FR-016).
+ */
+export type ChatModelProvider = 'openai' | 'anthropic' | 'google' | 'bridge' | 'fake';
 
 /** O que o sub-nó `ai.chatModel` entrega ao Agent. */
 export interface ChatModelSupply {
@@ -62,6 +65,12 @@ export interface AiUsageInput {
   outputTokens: number;
 }
 
+/** Opções do `fetch` dos modelos (spec 016). */
+export interface AiFetchOptions {
+  insecureTls?: boolean;
+  allowPrivateNetworks?: boolean;
+}
+
 /** Memória guardada pela API (persistente) ou só na execução (temporária). */
 export interface AiMemoryStore {
   load(limit: number): Promise<StoredMessage[]>;
@@ -86,6 +95,11 @@ export interface AiGateway {
   executionMemory: (nodeId: string, sessionKey: string) => AiMemoryStore;
   /** `fetch` com anti-SSRF para os provedores de modelo. */
   readonly fetch: typeof fetch;
+  /**
+   * Spec 016: o mesmo `fetch`, com as opções da credencial (verificação TLS desligada) e do nó
+   * (redes internas aceitas, só Bridge). Continua passando pelo filtro anti-SSRF.
+   */
+  fetchFor: (options: AiFetchOptions) => typeof fetch;
   readonly limits: {
     /** `OLLY_AGENT_MAX_ITERATIONS` (teto global, NFR-001). */
     maxIterations: number;

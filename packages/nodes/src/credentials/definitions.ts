@@ -332,6 +332,80 @@ export const fakeLlmCredential: CredentialTypeDefinition = {
   },
 };
 
+const insecureTlsField: JSONSchema7 = {
+  type: 'boolean',
+  title: 'Não verificar o certificado TLS',
+  description:
+    'Conecta mesmo que o certificado do servidor não possa ser verificado (ex.: CA interna). Deixa a conexão exposta a interceptação: prefira instalar a CA interna. O filtro de rede continua valendo.',
+  default: false,
+};
+
+/**
+ * Spec 016, FR-002: Bridge, o gateway interno de IA (modelo de chat customizado, ADR-0008). O
+ * login de serviço devolve um token de curta duração, renovado pela plataforma. Sem endereços
+ * padrão: o usuário informa todos.
+ */
+export const bridgeApiCredential: CredentialTypeDefinition = {
+  name: 'bridgeApi',
+  displayName: 'IA: Bridge',
+  description:
+    'Gateway interno de IA: login de serviço (identificador e senha) com token de curta duração, renovado automaticamente.',
+  properties: {
+    type: 'object',
+    required: ['tokenUrl', 'baseUrl', 'identificador', 'senha'],
+    properties: {
+      tokenUrl: {
+        type: 'string',
+        title: 'URL de login',
+        description:
+          'Endpoint que troca identificador e senha por um token (~20 min). Endereços da rede interna são aceitos.',
+        minLength: 1,
+      },
+      baseUrl: {
+        type: 'string',
+        title: 'URL base',
+        description:
+          'URL base do proxy de modelos da Bridge: o nó acrescenta deployments/{modelo}/chat/completions. Endereços da rede interna são aceitos.',
+        minLength: 1,
+      },
+      identificador: { type: 'string', title: 'Identificador', minLength: 1 },
+      senha: secret('Senha'),
+      tokenSkewSeconds: {
+        type: 'integer',
+        title: 'Margem de renovação do token (s)',
+        description:
+          'Quantos segundos antes do vencimento ("exp") o token é renovado. Sem vencimento legível, vale 20 minutos menos esta margem.',
+        minimum: 0,
+        maximum: 600,
+        default: 60,
+      },
+      allowUnauthorizedCerts: insecureTlsField,
+    },
+  },
+};
+
+/** Spec 016, FR-008: Agentix, a plataforma interna de agentes (chave no cabeçalho `X-API-Key`). */
+export const agentixApiCredential: CredentialTypeDefinition = {
+  name: 'agentixApi',
+  displayName: 'Agentix',
+  description: 'Plataforma interna de agentes: a chave vai no cabeçalho X-API-Key.',
+  properties: {
+    type: 'object',
+    required: ['baseUrl', 'apiKey'],
+    properties: {
+      baseUrl: {
+        type: 'string',
+        title: 'URL base',
+        description:
+          'URL base da API do Agentix (ex.: …/v1): o nó chama sessions/invoke e sessions/{id}. Endereços da rede interna são aceitos.',
+        minLength: 1,
+      },
+      apiKey: secret('Chave da API'),
+      allowUnauthorizedCerts: insecureTlsField,
+    },
+  },
+};
+
 /** Tipos de credencial dos modelos de chat (spec 011, FR-002). */
 export const CHAT_MODEL_CREDENTIAL_TYPES = [
   'openAiCompatible',
@@ -371,6 +445,9 @@ export const builtinCredentialTypes: readonly CredentialTypeDefinition[] = [
   openAiCompatibleCredential,
   anthropicCredential,
   googleGeminiCredential,
+  // Spec 016: Bridge (modelo de chat customizado) e Agentix.
+  bridgeApiCredential,
+  agentixApiCredential,
 ];
 
 /** Tipos usados pelo `http.request` (autenticação por credencial). */

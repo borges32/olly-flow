@@ -441,3 +441,147 @@ describe('spec 015 — FR-016/FR-026: nós sem conversão e relatório de migra�
     expect(convertN8n({ nodes: [], connections: {} }).errors).toEqual([]);
   });
 });
+
+describe('spec 016 — FR-012/SC-005: nós customizados Bridge e Agentix', () => {
+  const ai = (to: string, kind: string) => ({ node: to, type: kind, index: 0 });
+  const workflow = (prefix: string) => ({
+    nodes: [
+      node('Início', 'n8n-nodes-base.manualTrigger'),
+      node(
+        'Agente',
+        '@n8n/n8n-nodes-langchain.agent',
+        { promptType: 'define', text: '={{ $json.pergunta }}' },
+        { typeVersion: 1.7 },
+      ),
+      node(
+        'Bridge',
+        `${prefix}bridgeChatModel`,
+        {
+          model: 'gpt-4',
+          options: { temperature: 0.3, maxTokens: -1, timeout: 120000, stop: 'FIM', n: 2 },
+        },
+        { credentials: { bridgeApi: { id: '7', name: 'Bridge produção' } } },
+      ),
+      node(
+        'Agentix',
+        `${prefix}agentix`,
+        {
+          entityType: 'workflow',
+          entityName: 'conversor',
+          entityVersion: '0.1.0',
+          bundle: 'olly-kb',
+          bundleVersion: '0.1.0.dev10',
+          payload: '={\n  "pergunta": "{{ $json.output }}"\n}',
+          options: { pollInterval: 5, timeout: 900, includeSession: true },
+        },
+        { credentials: { agentixApi: { id: '8', name: 'Agentix' } } },
+      ),
+    ],
+    connections: {
+      Início: { main: [[main('Agente')]] },
+      Bridge: { ai_languageModel: [[ai('Agente', 'ai_languageModel')]] },
+      Agente: { main: [[main('Agentix')]] },
+    },
+  });
+
+  it.each(['CUSTOM.', 'n8n-nodes-bridge-chat-model.'])(
+    'FR-012/SC-005: com o prefixo "%s", os dois nós são convertidos sem marcadores, com as credenciais',
+    (prefix) => {
+      const { result, validation, byName, edge, report, errors } = importN8n(workflow(prefix));
+      expect(errors).toEqual([]);
+      expect([...result.issues.errors, ...validation.errors]).toEqual([]);
+      expect(report.nodes.unsupported).toEqual([]);
+      expect(byName('Bridge')).toMatchObject({
+        type: 'ai.bridgeChatModel',
+        params: {
+          model: 'gpt-4',
+          stream: true,
+          options: {
+            temperature: 0.3,
+            maxTokens: 0,
+            timeoutMs: 120000,
+            stop: 'FIM',
+            n: 2,
+            maxRetries: 2,
+            streamUsage: false,
+            sendModelInBody: false,
+          },
+        },
+      });
+      expect(byName('Agentix')).toMatchObject({
+        type: 'ai.agentix',
+        params: {
+          entityType: 'workflow',
+          entityName: 'conversor',
+          bundleVersion: '0.1.0.dev10',
+          payload: '={\n  "pergunta": "{{ $json.output }}"\n}',
+          constants: '{}',
+          waitForCompletion: true,
+          output: 'finalAnswer',
+          options: {
+            pollIntervalSeconds: 5,
+            timeoutSeconds: 900,
+            maxPollErrors: 3,
+            includeSession: true,
+          },
+        },
+      });
+      expect(edge('Bridge', 'Agente')).toMatchObject({
+        fromPort: 'ai_languageModel',
+        toPort: 'ai_languageModel',
+      });
+      expect(edge('Agente', 'Agentix')).toBeDefined();
+      expect(report.credentialsToCreate).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            n8nType: 'bridgeApi',
+            ollyType: 'bridgeApi',
+            nodes: ['Bridge'],
+          }),
+          expect.objectContaining({
+            n8nType: 'agentixApi',
+            ollyType: 'agentixApi',
+            nodes: ['Agentix'],
+          }),
+        ]),
+      );
+    },
+  );
+
+  it('FR-012: valores padrão omitidos pelo N8N viram os padrões do nó customizado', () => {
+    const { byName } = importN8n({
+      nodes: [
+        node('Bridge', 'CUSTOM.bridgeChatModel'),
+        node('Agentix', 'CUSTOM.agentix', { payload: { pergunta: 'objeto' } }),
+      ],
+      connections: {},
+    });
+    expect(byName('Bridge')?.params).toMatchObject({ model: 'gemini-2.5-flash', stream: true });
+    expect(byName('Agentix')?.params).toMatchObject({
+      entityType: 'agent',
+      payload: JSON.stringify({ pergunta: 'objeto' }, null, 2),
+      options: { pollIntervalSeconds: 3, timeoutSeconds: 600 },
+    });
+  });
+
+  it('FR-012: o Agentix como ferramenta de um AI Agent vira marcador', () => {
+    const { byName, report } = importN8n({
+      nodes: [
+        node('Agente', '@n8n/n8n-nodes-langchain.agent', {}, { typeVersion: 1.7 }),
+        node('Ferramenta', 'CUSTOM.agentixTool', { entityName: 'x' }),
+        node('Ligado como tool', 'n8n-nodes-bridge-chat-model.agentix', { entityName: 'y' }),
+      ],
+      connections: {
+        Ferramenta: { ai_tool: [[ai('Agente', 'ai_tool')]] },
+        'Ligado como tool': { ai_tool: [[ai('Agente', 'ai_tool')]] },
+      },
+    });
+    for (const name of ['Ferramenta', 'Ligado como tool']) {
+      expect(byName(name)).toMatchObject({ type: 'placeholder.unsupported', disabled: true });
+    }
+    expect(report.nodes.unsupported.map((u) => u.reason)).toEqual([
+      expect.stringContaining('fora do escopo (spec 016)'),
+      expect.stringContaining('fora do escopo (spec 016)'),
+    ]);
+  });
+});

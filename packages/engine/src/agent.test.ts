@@ -79,6 +79,7 @@ function gateway() {
     persistentMemory: () => ({ load: () => Promise.resolve([]), append: () => Promise.resolve() }),
     executionMemory: () => ({ load: () => Promise.resolve([]), append: () => Promise.resolve() }),
     fetch,
+    fetchFor: () => fetch,
     limits: { maxIterations: 25, toolResultMaxChars: 20_000 },
     allowFakeModel: true,
   };

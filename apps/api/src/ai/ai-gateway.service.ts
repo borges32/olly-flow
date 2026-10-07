@@ -3,7 +3,13 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { Db } from '@olly/db';
 import type { Masker } from '@olly/engine';
 import { guardedFetchLike, type GuardedFetch } from '@olly/mcp-client';
-import type { AiGateway, AiMemoryStore, HttpGuard, StoredChatMessage } from '@olly/nodes';
+import type {
+  AiFetchOptions,
+  AiGateway,
+  AiMemoryStore,
+  HttpGuard,
+  StoredChatMessage,
+} from '@olly/nodes';
 import { APP_CONFIG, type AppConfig } from '../config/config.js';
 import { DB } from '../core/tokens.js';
 import { ExecutionEventSink } from '../executions/execution-events.service.js';
@@ -46,16 +52,37 @@ export class AiGatewayFactory {
     byModel: Map<string, { input: number; output: number; currency: string }>;
   };
   readonly fetch: typeof fetch;
+  private readonly fetches = new Map<string, typeof fetch>();
 
   constructor(
     @Inject(DB) private readonly db: Db,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
-    @Inject(HTTP_GUARD) guard: HttpGuard,
+    @Inject(HTTP_GUARD) private readonly guard: HttpGuard,
     @Inject(ExecutionEventSink) private readonly events: ExecutionEventSink,
   ) {
-    const guarded = ((url: string | URL, init: Parameters<GuardedFetch>[1]) =>
-      guard.fetch(url, init)) as unknown as GuardedFetch;
-    this.fetch = guardedFetchLike(guarded, MODEL_RESPONSE_MAX_BYTES) as typeof fetch;
+    this.fetch = this.fetchFor({});
+  }
+
+  /**
+   * `fetch` dos modelos com o anti-SSRF e as opções da spec 016 (TLS sem verificação, redes
+   * internas): um por combinação, reaproveitado.
+   */
+  fetchFor(options: AiFetchOptions): typeof fetch {
+    const insecureTls = options.insecureTls === true;
+    const allowPrivateNetworks = options.allowPrivateNetworks === true;
+    const key = `${String(insecureTls)}|${String(allowPrivateNetworks)}`;
+    let fetchFn = this.fetches.get(key);
+    if (!fetchFn) {
+      const guarded = ((url: string | URL, init: Parameters<GuardedFetch>[1]) =>
+        this.guard.fetch(url, {
+          ...init,
+          insecureTls,
+          allowPrivateNetworks,
+        })) as unknown as GuardedFetch;
+      fetchFn = guardedFetchLike(guarded, MODEL_RESPONSE_MAX_BYTES) as typeof fetch;
+      this.fetches.set(key, fetchFn);
+    }
+    return fetchFn;
   }
 
   /** Modelos permitidos na instalação: o cadastro da administração, lido a cada uso (FR-002). */
@@ -258,6 +285,7 @@ export class AiGatewayFactory {
         };
       },
       fetch: this.fetch,
+      fetchFor: (options) => this.fetchFor(options),
       limits: {
         maxIterations: this.config.ai.maxIterations,
         toolResultMaxChars: this.config.ai.toolResultMaxChars,

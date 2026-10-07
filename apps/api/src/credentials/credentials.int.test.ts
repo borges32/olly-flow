@@ -193,8 +193,11 @@ describe('spec 004 — FR-002/FR-007: API de credenciais e permissões', () => {
         { name: string; properties: { properties: Record<string, Record<string, unknown>> } }[]
       >();
     expect(types.map((t) => t.name).sort()).toEqual([
+      // Spec 016: Agentix e Bridge.
+      'agentixApi',
       // Spec 011: provedores de modelo (`fakeLlm` só com NODE_ENV=test, como nos testes).
       'anthropic',
+      'bridgeApi',
       'fakeLlm',
       'googleGemini',
       'httpBasic',

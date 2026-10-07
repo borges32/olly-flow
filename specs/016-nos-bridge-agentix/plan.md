@@ -115,7 +115,7 @@
 
 ### §6 Editor
 
-O nó aparece como "Bridge Chat Model" na categoria de IA, ao lado do "Modelo de chat", e a descrição o apresenta como modelo de chat customizado do gateway interno. Os ícones `bridge` e `agentix` entram em `node-icons.ts` (ícones lucide equivalentes: `Waypoints` e `Bot`). O painel de parâmetros e o formulário das credenciais são gerados dos schemas, sem tela nova.
+O nó aparece como "Bridge Chat Model" na categoria de IA, ao lado do "Modelo de chat", e a descrição o apresenta como modelo de chat customizado do gateway interno. Os ícones entram em `node-icons.ts`: `waypoints` (lucide `Waypoints`) para a Bridge e `bot-message-square` (lucide `BotMessageSquare`) para o Agentix, já que o `bot` é o ícone do Agent. O painel de parâmetros e o formulário das credenciais são gerados dos schemas, sem tela nova.
 
 ## Modelo de dados
 
@@ -181,3 +181,4 @@ Nenhuma variável nova. Os endereços internos da Bridge e do Agentix **não** p
 |---|---|---|
 | 07/10/2026 | Criação, depois dos esclarecimentos do PO | Spec 016 |
 | 07/10/2026 | Pré-requisitos respondidos pelo PO: Bridge como modelo de chat customizado (ADR-0008; resumo, constituição e §6); sem restrição de endereço interno para os dois nós (§2 `allowPrivateNetworks`, §3, §4, configuração, decisões, testes e riscos); fixtures a fornecer | Decisão humana |
+| 07/10/2026 | Implementação: ícone do Agentix `bot-message-square` (o `bot` já é do Agent); servidores simulados exportados por `@olly/nodes` (`startBridgeMock`, `startAgentixMock`, como o modelo simulado da spec 011) com um certificado autoassinado só de teste; `BridgeTokenManager.invalidate` descarta só o token recusado | Implementação |

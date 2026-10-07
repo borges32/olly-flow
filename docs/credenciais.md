@@ -21,9 +21,16 @@ Credenciais guardam os dados de acesso a APIs e bancos usados pelos nós. Introd
 | `openAiCompatible` | **apiKey**, baseURL (vazio = OpenAI), organization | — (modelos do Agent, spec 011) |
 | `anthropic` | **apiKey**, baseURL (opcional) | — |
 | `googleGemini` | **apiKey**, baseURL (vazio = endpoint compatível com OpenAI do Gemini) | — |
+| `bridgeApi` | tokenUrl, baseUrl, identificador, **senha**, tokenSkewSeconds (60), allowUnauthorizedCerts (`false`). Endereços sem valor padrão | Login de serviço, como na execução (spec 016) |
+| `agentixApi` | baseUrl, **apiKey**, allowUnauthorizedCerts (`false`). Endereço sem valor padrão | — (validada na primeira execução do nó, spec 016) |
 | `fakeLlm` | script (roteiro JSON) | — (só com `NODE_ENV=test`: modelo simulado dos testes, FR-016) |
 
 O teste dos tipos HTTP passa pelo filtro anti-SSRF, como as requisições dos nós.
+
+**Bridge e Agentix (spec 016):**
+- **Endereços internos:** as chamadas dos dois nós (e o teste da credencial Bridge) passam pelo filtro anti-SSRF, mas aceitam endereços de **rede privada** (10/8, 172.16/12, 192.168/16, 100.64/10, fc00::/7) **sem** `OLLY_HTTP_ALLOWLIST` (decisão do PO). Continuam barrados: loopback, link-local (inclusive o endereço de metadados da nuvem), endereços reservados e protocolos diferentes de HTTP e HTTPS. Um serviço na própria máquina ainda exige a allowlist. Os demais nós mantêm a regra de sempre.
+- **Certificado TLS:** `allowUnauthorizedCerts` desliga a verificação do certificado só para as chamadas daquela credencial (por exemplo, com uma CA interna), sem mudar as regras de rede. A conexão fica exposta a interceptação: prefira instalar a CA interna (`NODE_EXTRA_CA_CERTS`) e deixar a opção desligada.
+- **Token da Bridge:** fica só em memória, em cada processo, e é mascarado nos dados de execução (como o token OAuth2).
 
 ## Uso
 
@@ -50,7 +57,7 @@ O teste dos tipos HTTP passa pelo filtro anti-SSRF, como as requisições dos n�
 |---|---|---|
 | `OLLY_KEY_PROVIDER` | `env` | Provedor da chave mestra |
 | `OLLY_MASTER_KEY` | — (obrigatória) | Chave mestra do provedor `env` |
-| `OLLY_HTTP_ALLOWLIST` | vazio | Hosts e CIDRs internos liberados para o nó HTTP e o teste de credencial |
+| `OLLY_HTTP_ALLOWLIST` | vazio | Hosts e CIDRs internos liberados para o nó HTTP e o teste de credencial (a Bridge e o Agentix aceitam redes privadas sem ela) |
 | `OLLY_HTTP_MAX_RESPONSE_MB` | 50 | Limite de resposta HTTP |
 | `OLLY_PG_POOL_MAX` | 5 | Conexões por credencial Postgres |
 | `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET`, `S3_REGION` | — | Object storage dos binários. Sem `S3_ENDPOINT`, resposta binária do nó HTTP falha |

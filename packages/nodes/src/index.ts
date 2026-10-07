@@ -64,3 +64,23 @@ export {
   GEMINI_OPENAI_BASE_URL,
 } from './ai/runtime/models.js';
 export { placeholderNode, PLACEHOLDER_NODE_TYPE } from './flow/placeholder/definition.js';
+export {
+  createBridgeChatModelNode,
+  BRIDGE_CHAT_MODEL_TYPE,
+  BRIDGE_DEFAULT_TIMEOUT_MS,
+} from './ai/bridge/definition.js';
+export {
+  BridgeTokenManager,
+  bridgeLogin,
+  jwtExpiration,
+  BRIDGE_DEFAULT_TOKEN_TTL_MS,
+} from './ai/bridge/token-manager.js';
+export { createBridgeFetch } from './ai/bridge/bridge-fetch.js';
+export {
+  createAgentixNode,
+  extractMessages as extractAgentixMessages,
+  AGENTIX_NODE_TYPE,
+  AGENTIX_FAILURE_STATES,
+} from './ai/agentix/definition.js';
+// Spec 016, NFR-003: serviços simulados para os testes (como o modelo simulado da spec 011).
+export * from './ai/testing/service-mocks.js';

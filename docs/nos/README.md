@@ -30,12 +30,14 @@ Cada nó vive em `packages/nodes/src/<categoria>/<nome>/` (`definition.ts`, `exe
 | `memory.postgres`, `memory.buffer` | Memória persistente e temporária (sub-nós) | 011 | [memory.md](memory.md) |
 | `tool.mcp`, `tool.httpRequest`, `tool.postgresQuery`, `tool.workflow`, `tool.code` | Ferramentas do agente (sub-nós) | 011 | [tools.md](tools.md) |
 | `placeholder.unsupported` | Nó não suportado (marcador da importação) | 015 | [placeholder.unsupported.md](placeholder.unsupported.md) |
+| `ai.bridgeChatModel` | Bridge Chat Model: modelo de chat customizado do gateway interno (sub-nó) | 016 | [ai.bridgeChatModel.md](ai.bridgeChatModel.md) |
+| `ai.agentix` | Agentix: invoca um agente ou workflow do Agentix | 016 | [ai.agentix.md](ai.agentix.md) |
 
 **Sub-nós (spec 011):** nós cujas saídas são todas de um tipo `ai_*` (`ai_languageModel`, `ai_memory`, `ai_tool`). Conectam-se às entradas de mesmo tipo na base do Agent (desenhadas embaixo do nó, com arestas tracejadas), não executam no fluxo principal e fornecem ao nó pai um objeto (`NodeDefinition.supplyData`), lido por `ctx.subNodes(tipo, item)`. `PortDef.maxConnections` limita as conexões de uma entrada (1 modelo, 1 memória).
 
 **Portas dinâmicas (spec 007):** `dynamicPorts` descreve portas calculadas a partir dos parâmetros: `mergeInputs` (Merge) ou `switchOutputs` (Switch). A regra fica em `resolveNodePorts` (`@olly/shared-types`), usada pelo motor, pela validação e pelo editor. Com `settings.onError = 'errorOutput'`, qualquer nó ganha a saída `error`: os itens que falharam seguem por ela, com o campo `error`. Nós por item (`data.set`, `http.request`, `postgres.query`, `postgres.write`) desviam só os itens que falharam; nos demais, uma falha desvia todos os itens de entrada.
 
-Os nós de integração recebem as dependências da API por `createBuiltinNodes({ httpGuard, httpMaxResponseBytes, pools })`: filtro anti-SSRF com a allowlist, limite de resposta e pools Postgres. Credenciais: [docs/credenciais.md](../credenciais.md). O Cliente MCP (spec 010) usa o `McpGateway` que o motor recebe em `RunOptions.mcp` e entrega em `ctx.mcp()`: a governança (catálogo, políticas, snapshot, registro) fica na API ([docs/mcp-governanca.md](../mcp-governanca.md)).
+Os nós de integração recebem as dependências da API por `createBuiltinNodes({ httpGuard, httpMaxResponseBytes, pools, bridgeTokens })`: filtro anti-SSRF com a allowlist, limite de resposta, pools Postgres e os tokens da Bridge em memória (spec 016). O `HttpGuard` aceita, por chamada, `insecureTls` (não verificar o certificado) e `allowPrivateNetworks` (redes privadas sem allowlist, só Bridge e Agentix). Credenciais: [docs/credenciais.md](../credenciais.md). O Cliente MCP (spec 010) usa o `McpGateway` que o motor recebe em `RunOptions.mcp` e entrega em `ctx.mcp()`: a governança (catálogo, políticas, snapshot, registro) fica na API ([docs/mcp-governanca.md](../mcp-governanca.md)).
 
 ## Convenções de `paramsSchema`
 

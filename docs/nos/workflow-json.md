@@ -189,13 +189,14 @@ As portas são numeradas na ordem abaixo, separadamente para entradas e saídas 
 | `logic.while` | 0 = entrada, 1 = continuar (retorno do laço) | 0 = laço (corpo), 1 = concluído |
 | `logic.loopOverItems` | 0 = entrada, 1 = continuar (retorno do laço) | 0 = concluído, 1 = lote (corpo) |
 | `ai.agent` | 0 | 0 |
+| `ai.agentix` | 0 | 0 |
 | `placeholder.unsupported` | `in0`, `in1`... de `params.ports.inputs` | `out0`, `out1`... de `params.ports.outputs` |
 
 **Sub-nós e entradas do Agent:**
 
 | Tipo | Saída | Entrada do Agent |
 |---|---|---|
-| `ai.chatModel` | `ai_languageModel` 0 | `ai_languageModel` 0: **obrigatória**, exatamente 1 modelo |
+| `ai.chatModel`, `ai.bridgeChatModel` | `ai_languageModel` 0 | `ai_languageModel` 0: **obrigatória**, exatamente 1 modelo |
 | `memory.postgres`, `memory.buffer` | `ai_memory` 0 | `ai_memory` 0: opcional, no máximo 1 memória |
 | `tool.mcp`, `tool.httpRequest`, `tool.postgresQuery`, `tool.workflow`, `tool.code` | `ai_tool` 0 | `ai_tool` 0: opcional, quantas ferramentas forem necessárias |
 
@@ -327,6 +328,8 @@ Na importação, a credencial é procurada no projeto de destino: primeiro pelo 
 | `webhookHmac` | `trigger.webhook` | Com `authentication: "hmac"` |
 | `mcpBearer`, `mcpHeaders`, `mcpOAuth` | `ai.mcpClient` | Quando o servidor MCP exige autenticação |
 | `openAiCompatible`, `anthropic`, `googleGemini` | `ai.chatModel` | Provedor do modelo. **Obrigatória** |
+| `bridgeApi` | `ai.bridgeChatModel` | Bridge, o gateway interno de IA (login de serviço). **Obrigatória** |
+| `agentixApi` | `ai.agentix` | Agentix (chave no `X-API-Key`). **Obrigatória** |
 
 Cada nó tem no máximo uma credencial.
 
@@ -669,7 +672,7 @@ Criado pela **importação** quando o tipo não existe nesta instalação (ou é
 
 #### `ai.agent` — Agent
 
-Agente de IA que raciocina e usa ferramentas para responder. Precisa de **um** `ai.chatModel` ligado à entrada `ai_languageModel`. Memória e ferramentas são opcionais ([4.3](#43-sub-nós-agent)). A saída tem o campo `output` com a resposta.
+Agente de IA que raciocina e usa ferramentas para responder. Precisa de **um** modelo (`ai.chatModel` ou `ai.bridgeChatModel`) ligado à entrada `ai_languageModel`. Memória e ferramentas são opcionais ([4.3](#43-sub-nós-agent)). A saída tem o campo `output` com a resposta.
 
 | Parâmetro | Tipo | Padrão | Descrição |
 |---|---|---|---|
@@ -694,6 +697,30 @@ Saída `ai_languageModel`. Credencial obrigatória: `openAiCompatible`, `anthrop
 | `maxTokens` | inteiro | 0 | 0 = padrão do provedor |
 | `timeoutMs` | inteiro | 60 000 | |
 | `maxRetries` | inteiro | 2 | |
+
+#### `ai.bridgeChatModel` — Bridge Chat Model (sub-nó)
+
+Modelo de chat customizado servido pela Bridge, o gateway interno de IA. Saída `ai_languageModel`. Credencial obrigatória: `bridgeApi`. **Não** usa a lista de modelos de Administração › IA: o nome é conferido pela Bridge. Detalhes: [ai.bridgeChatModel.md](ai.bridgeChatModel.md).
+
+| Parâmetro | Tipo | Padrão | Descrição |
+|---|---|---|---|
+| `model` | texto | `""` | **Obrigatório**. Apelido do modelo na Bridge (por exemplo, `gemini-2.5-flash`), enviado no endereço |
+| `stream` | booleano | `true` | Streaming da resposta |
+| `options` | objeto | `{}` | `temperature` (0–2), `topP` (0–1), `maxTokens` (0 = o modelo decide), `n` (1), `stop` (texto separado por vírgula), `user`, `timeoutMs` (360 000), `maxRetries` (2), `streamUsage` (`false`; com streaming, sem ele o uso de tokens fica zerado), `sendModelInBody` (`false`) |
+
+#### `ai.agentix` — Agentix
+
+Invoca um agente ou workflow do Agentix e espera a resposta dentro do nó (uma sessão por item). Entrada e saída `main`. Credencial obrigatória: `agentixApi`. Detalhes: [ai.agentix.md](ai.agentix.md).
+
+| Parâmetro | Tipo | Padrão | Descrição |
+|---|---|---|---|
+| `entityType` | `agent` \| `workflow` | `agent` | Tipo da entidade |
+| `entityName`, `entityVersion`, `bundle`, `bundleVersion` | texto | `""` | **Obrigatórios** |
+| `payload` | texto (objeto JSON) | `{"pergunta": ""}` | Aceita expressão, como `={{ { pergunta: $json.pergunta } }}` |
+| `constants` | texto (objeto JSON) | `{}` | |
+| `waitForCompletion` | booleano | `true` | `false`: devolve a resposta da criação (com `session_id`) sem esperar |
+| `output` | `finalAnswer` \| `allMessages` | `finalAnswer` | Saída: `{ session_id, state, output }` ou `{ session_id, state, messages }` |
+| `options` | objeto | `{}` | `pollIntervalSeconds` (3), `timeoutSeconds` (600; 0 = sem limite próprio), `maxPollErrors` (3), `includeSession` (`false`) |
 
 #### `memory.buffer` e `memory.postgres` — Memória (sub-nós)
 

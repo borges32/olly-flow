@@ -250,6 +250,9 @@ describe('spec 002 — FR-006: catálogo de tipos de nó', () => {
     expect(types.map((t) => t.type)).toEqual([
       // Spec 011: agente e modelo.
       'ai.agent',
+      // Spec 016: Agentix e Bridge Chat Model.
+      'ai.agentix',
+      'ai.bridgeChatModel',
       'ai.chatModel',
       // Spec 010.
       'ai.mcpClient',

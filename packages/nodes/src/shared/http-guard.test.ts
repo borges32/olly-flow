@@ -13,6 +13,11 @@ beforeAll(async () => {
       res.end();
       return;
     }
+    if (req.url === '/redirect-loopback') {
+      res.writeHead(302, { location: 'http://127.0.0.2/segredo' });
+      res.end();
+      return;
+    }
     if (req.url === '/redirect-local') {
       res.writeHead(302, { location: '/ok' });
       res.end();
@@ -124,5 +129,83 @@ describe('spec 004 — FR-008/SC-003: filtro anti-SSRF', () => {
     const res = await guard.fetch(`http://api.interna:${new URL(base).port}/x`);
     expect(await res.json()).toMatchObject({ url: '/x' });
     await guard.close();
+  });
+});
+
+describe('spec 016 — FR-013 e FR-002/FR-008: redes internas e TLS por chamada', () => {
+  const none = parseAllowlist([]);
+  const internal = { allowPrivateNetworks: true };
+
+  it.each([
+    ['10.0.0.5', 'privada'],
+    ['172.16.5.4', 'privada'],
+    ['192.168.0.10', 'privada'],
+    ['100.64.0.1', 'CGNAT'],
+    ['fc00::1', 'ULA'],
+  ])('FR-013: com allowPrivateNetworks, aceita %s (%s)', (address) => {
+    expect(blockedReason(address, none, internal)).toBeNull();
+    // Sem a opção, a regra da spec 004 não muda.
+    expect(blockedReason(address, none)).not.toBeNull();
+  });
+
+  it.each([
+    ['127.0.0.1', 'loopback'],
+    ['::1', 'loopback'],
+    ['169.254.169.254', 'linkLocal'],
+    ['fe80::1', 'linkLocal'],
+    ['0.0.0.0', 'unspecified'],
+    ['224.0.0.1', 'multicast'],
+    ['::ffff:127.0.0.1', 'loopback'],
+    ['64:ff9b::7f00:1', 'rfc6052'],
+    ['2002:7f00:1::', '6to4'],
+  ])('FR-013: mesmo com allowPrivateNetworks, bloqueia %s (%s)', (address, range) => {
+    expect(blockedReason(address, none, internal)).toContain(range);
+  });
+
+  it('FR-013: o nome interno resolve para rede privada e passa só com a opção; protocolo continua validado', async () => {
+    const guard = createHttpGuard({ resolve: () => Promise.resolve(['10.20.30.40']) });
+    await expect(guard.assertDestinationAllowed('https://bridge.interna/v1')).rejects.toThrow(
+      SsrfBlockedError,
+    );
+    await expect(
+      guard.assertDestinationAllowed('https://bridge.interna/v1', internal),
+    ).resolves.toBeUndefined();
+    await expect(guard.assertDestinationAllowed('file:///etc/passwd', internal)).rejects.toThrow(
+      'protocolo',
+    );
+    const metadata = createHttpGuard({ resolve: () => Promise.resolve(['169.254.169.254']) });
+    await expect(
+      metadata.assertDestinationAllowed('http://metadados.interna/', internal),
+    ).rejects.toThrow('linkLocal');
+  });
+
+  it('FR-013: redirect para loopback é bloqueado mesmo com allowPrivateNetworks', async () => {
+    const guard = createHttpGuard({ allowlist: ['127.0.0.1/32'] });
+    await expect(guard.fetch(`${base}/redirect-loopback`, internal)).rejects.toThrow('loopback');
+    await guard.close();
+  });
+
+  it('FR-002/FR-008: HTTPS autoassinado só conecta com insecureTls, e o filtro continua valendo', async () => {
+    const { startBridgeMock } = await import('../ai/testing/service-mocks.js');
+    const mock = await startBridgeMock({ tls: true });
+    const guard = createHttpGuard({ allowlist: ['127.0.0.1'] });
+    try {
+      const body = JSON.stringify({ identificador: mock.identificador, senha: mock.senha });
+      const init = { method: 'POST', headers: { 'content-type': 'application/json' }, body };
+      // Padrão: o certificado é verificado e a conexão falha.
+      await expect(guard.fetch(mock.tokenUrl, init)).rejects.toThrow();
+      const response = await guard.fetch(mock.tokenUrl, { ...init, insecureTls: true });
+      expect(response.status).toBe(200);
+      await response.body?.cancel();
+      // Sem a allowlist, o loopback continua bloqueado, mesmo sem verificar TLS e com redes internas.
+      const strict = createHttpGuard();
+      await expect(
+        strict.fetch(mock.tokenUrl, { ...init, insecureTls: true, allowPrivateNetworks: true }),
+      ).rejects.toThrow(SsrfBlockedError);
+      await strict.close();
+    } finally {
+      await guard.close();
+      await mock.close();
+    }
   });
 });

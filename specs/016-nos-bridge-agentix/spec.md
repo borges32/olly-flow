@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| **Status** | Planejada |
+| **Status** | Implementada (pendente: SC-006 em homologação; workflows reais da POC) |
 | **Fase** | 4 — Hardening (integrações institucionais, antes do go-live) |
 | **Depende de** | 004, 011, 015 |
 | **Requisitos de produto** | PR-16 (parcial), PR-17 (parcial), PR-18 (parcial) |
@@ -176,3 +176,5 @@ Como **editor**, quero importar workflows do N8N que usam os nós customizados, 
 | 07/10/2026 | Criação, a partir da análise do projeto `Bridge-Chat-Model` (nós customizados do N8N) | Pedido do PO |
 | 07/10/2026 | Esclarecimentos do PO: (1) cada credencial permite desligar a verificação do certificado TLS (FR-002, FR-008; risco aceito); (2) sem endereços padrão: o usuário informa todos (FR-002, FR-008); (3) a espera do Agentix fica dentro do nó, ocupando o worker, com o tempo limite padrão de 600 s configurável no nó (FR-007, FR-009); (4) o Agentix não entra como ferramenta do Agent: HU-3 removida e a antiga HU-4 virou HU-3; FR-012 anterior removido e FRs renumerados; (5) a Bridge não usa lista de modelos: o modelo é texto livre (FR-001, FR-006) | Decisão humana |
 | 07/10/2026 | Pré-requisitos respondidos pelo PO: (1) ADR-0008: a Bridge entra como um modelo de chat customizado, e não como um novo fornecedor da lista da ADR; (2) rede: os nós Bridge e Agentix não têm restrição de endereço interno. FR-013, o caso de borda "Serviço em endereço interno" e o SC-001 foram reescritos. As chamadas continuam pelo filtro anti-SSRF (constituição, Art. III.5), que segue barrando loopback, link-local e metadados da nuvem; (3) fixtures: o PO fornecerá os workflows da POC com os dois nós | Decisão humana |
+| 07/10/2026 | Plano e tarefas aprovados pelo PO ao pedir a implementação ("Implemente a spec specs/016-nos-bridge-agentix/ seguindo o AGENTS.md"); status `Em implementação` | Decisão humana |
+| 07/10/2026 | Implementação concluída; status `Implementada` (ver [report.md](report.md)) | Implementação |

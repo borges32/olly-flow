@@ -93,7 +93,7 @@ Spec 010:
 Spec 011:
 - **Sub-nós:** tipos cujas saídas são todas `ai_*` (`isSubNodeType`, `@olly/shared-types`). Ficam fora do agendador e não recebem itens; fornecem um objeto ao nó pai por `NodeDefinition.supplyData(ctx, itemIndex)`, que o pai lê com `ctx.subNodes(kind, itemIndex)` (`SubNodeSupply { node, type, data }[]`). O contexto do sub-nó resolve as expressões com os itens do pai. `ChatModelSupply` (modelo LangChain, provedor e nome), `MemorySupply` (`load`, `save`) e `AgentTool[]` (`name`, `description`, `schema`, `requireApproval`, `sideEffects`, `external`, `source`, `invoke`) em `packages/nodes/src/ai/runtime/types.ts`;
 - `ctx.withFromAI(valores, itemIndex)` devolve um leitor de parâmetros com `$fromAI()` resolvido para os argumentos do modelo;
-- `ctx.ai()` devolve o `AiGateway` (`RunOptions.ai`): `checkModel`, `beforeModelCall` (limite mensal), `recordUsage`, `recordStep` (mascara, grava e emite `agentStep`), `persistentMemory`, `executionMemory`, `fetch` (anti-SSRF), `limits` e `allowFakeModel`;
+- `ctx.ai()` devolve o `AiGateway` (`RunOptions.ai`): `checkModel`, `beforeModelCall` (limite mensal), `recordUsage`, `recordStep` (mascara, grava e emite `agentStep`), `persistentMemory`, `executionMemory`, `fetch` (anti-SSRF), `fetchFor({ insecureTls, allowPrivateNetworks })` (spec 016: o mesmo `fetch` com as opções da credencial e do nó), `limits` e `allowFakeModel`;
 - `NodeWaitSignal.approvals` (`NodeApprovalRequest { key, itemIndex, tool, arguments, reason }`): a API cria um pedido por chave; a decisão chega em `ctx.resume.value = { approvals: { [key]: { approved, comment } } }`;
 - validações `SUBNODE_ON_MAIN`, `AGENT_MODEL_REQUIRED`, `AGENT_MEMORY_MAX`, `TOOL_NAME_INVALID`, `TOOL_NAME_DUPLICATE`, `TOOL_DESCRIPTION_REQUIRED`;
 - `ctx.runCode` aceita `items` (entrada do código da ferramenta `tool.code`); fonte `aiModels` em `x-load-options`.
@@ -117,6 +117,7 @@ Spec 011:
 | `logic.while` | 007 | `ai.chatModel` | 011 |
 | `logic.loopOverItems` | 007 | `ai.agent` | 011 |
 | `placeholder.unsupported` | 015 | `tool.*`, `memory.*` (sub-nós) | 011 |
+| `ai.bridgeChatModel` (sub-nó) | 016 | `ai.agentix` | 016 |
 
 ## Permissões RBAC
 
@@ -281,3 +282,17 @@ Formato do arquivo (estrutura do N8N, tipos e parâmetros do Olly Flow): [docs/n
 - **Nó marcador:** `placeholder.unsupported` (`dynamicPorts: { kind: 'placeholder' }`, portas `in0..`/`out0..` de `params.ports`). `unsupportedNodeIssues` (`@olly/engine`) gera `UNSUPPORTED_NODE` na publicação. O motor decide se um nó é sub-nó pelas portas efetivas.
 - **Auditoria:** `workflow.export` (`{ projectId, source: 'saved' | 'canvas', nodes }`) e `workflow.import` (`{ projectId, format, overwritten, nodes, pending, unsupported }`), sem o conteúdo.
 - **Configuração:** `OLLY_IMPORT_MAX_BYTES` (5 MiB), `OLLY_IMPORT_MAX_NODES` (500), `OLLY_IMPORT_MAX_DEPTH` (64).
+
+## Bridge e Agentix (spec 016)
+
+Páginas dos nós: [ai.bridgeChatModel.md](../nos/ai.bridgeChatModel.md) e [ai.agentix.md](../nos/ai.agentix.md).
+
+- **Tipos de nó:**
+  - `ai.bridgeChatModel`: sub-nó, saída `ai_languageModel`, credencial `bridgeApi`; entrega `ChatModelSupply` com `provider: 'bridge'` (novo valor de `ChatModelProvider`) e não chama `checkModel`;
+  - `ai.agentix`: `main` → `main`, credencial `agentixApi`, uma sessão por item.
+- **Tipos de credencial:** `bridgeApi` (`tokenUrl`, `baseUrl`, `identificador`, `senha` secreta, `tokenSkewSeconds`, `allowUnauthorizedCerts`) e `agentixApi` (`baseUrl`, `apiKey` secreta, `allowUnauthorizedCerts`), sem endereços padrão. O teste da `bridgeApi` faz o login; o da `agentixApi` responde 422 (validada na execução).
+- **`HttpGuard`:** `fetch(url, { insecureTls?, allowPrivateNetworks? })` e `assertDestinationAllowed(url, { allowPrivateNetworks? })`. `allowPrivateNetworks` aceita as faixas `private`, `carrierGradeNat` e `uniqueLocal`; loopback, link-local e as demais continuam bloqueadas. Um agente HTTP por combinação de opções, todos com o `lookup` validado.
+- **Token da Bridge:** `BridgeTokenManager` (memória do processo; chave `credencial.id|updatedAt`; renovação no `exp` menos a margem ou em 20 min; logins simultâneos unificados), entregue por `createBuiltinNodes({ bridgeTokens })`.
+- **Importação do N8N:** tipos `CUSTOM.*` e `n8n-nodes-bridge-chat-model.*`; credenciais `bridgeApi` e `agentixApi` com os mesmos nomes.
+- **Testes:** `startBridgeMock` e `startAgentixMock` (`@olly/nodes`) simulam os serviços (HTTP ou HTTPS autoassinado).
+- Sem rotas, tabelas ou variáveis novas.

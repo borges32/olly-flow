@@ -1069,6 +1069,86 @@ const convertMcpClientTool: Converter = (_node, p) => {
   );
 };
 
+// ---------------------------------------------------------------------------------------------
+// Nós customizados da POC (spec 016): Bridge Chat Model e Agentix (pacote n8n-nodes-bridge-chat-model)
+// ---------------------------------------------------------------------------------------------
+
+/** Motivo do marcador para o Agentix usado como ferramenta de um AI Agent (spec 016, FR-012). */
+export const AGENTIX_TOOL_REASON =
+  'Agentix como ferramenta do Agent: uso fora do escopo (spec 016)';
+
+const convertBridgeChatModel: Converter = (_node, p) => {
+  const o = isObject(p.options) ? p.options : {};
+  const maxTokens = num(o.maxTokens);
+  return ok(
+    'ai.bridgeChatModel',
+    {
+      // O N8N omite os valores padrão do nó customizado no JSON exportado.
+      model: str(p.model, 'gemini-2.5-flash'),
+      stream: p.stream !== false,
+      options: {
+        ...(num(o.temperature) !== undefined && { temperature: o.temperature }),
+        ...(num(o.topP) !== undefined && { topP: o.topP }),
+        maxTokens: maxTokens !== undefined && maxTokens > 0 ? maxTokens : 0,
+        ...(num(o.n) !== undefined && { n: o.n }),
+        ...(str(o.stop) && { stop: str(o.stop) }),
+        ...(str(o.user) && { user: str(o.user) }),
+        timeoutMs: num(o.timeout) ?? 360_000,
+        maxRetries: num(o.maxRetries) ?? 2,
+        streamUsage: o.streamUsage === true,
+        sendModelInBody: o.sendModelInBody === true,
+      },
+    },
+    [],
+    { bridgeApi: 'bridgeApi' },
+  );
+};
+
+/** Payload e constantes: texto JSON (o N8N pode exportar o objeto já interpretado). */
+const jsonText = (v: unknown, fallback: string): string =>
+  v === undefined || v === null
+    ? fallback
+    : typeof v === 'object'
+      ? JSON.stringify(v, null, 2)
+      : str(v);
+
+const convertAgentix: Converter = (_node, p) => {
+  const o = isObject(p.options) ? p.options : {};
+  return ok(
+    'ai.agentix',
+    {
+      entityType: str(p.entityType) === 'workflow' ? 'workflow' : 'agent',
+      entityName: str(p.entityName),
+      entityVersion: str(p.entityVersion),
+      bundle: str(p.bundle),
+      bundleVersion: str(p.bundleVersion),
+      payload: jsonText(p.payload, '{\n  "pergunta": ""\n}'),
+      constants: jsonText(p.constants, '{}'),
+      waitForCompletion: p.waitForCompletion !== false,
+      output: str(p.output) === 'allMessages' ? 'allMessages' : 'finalAnswer',
+      options: {
+        pollIntervalSeconds: num(o.pollInterval) ?? 3,
+        timeoutSeconds: num(o.timeout) ?? 600,
+        maxPollErrors: num(o.maxPollErrors) ?? 3,
+        includeSession: o.includeSession === true,
+      },
+    },
+    [],
+    { agentixApi: 'agentixApi' },
+  );
+};
+
+const agentixAsTool: Converter = () => ({ unsupported: AGENTIX_TOOL_REASON });
+
+/** Tipos com o prefixo da instalação (`CUSTOM.`) e com o do pacote (FR-012). */
+const CUSTOM_CONVERTERS: Record<string, Converter> = Object.fromEntries(
+  ['CUSTOM.', 'n8n-nodes-bridge-chat-model.'].flatMap((prefix) => [
+    [`${prefix}bridgeChatModel`, convertBridgeChatModel],
+    [`${prefix}agentix`, convertAgentix],
+    [`${prefix}agentixTool`, agentixAsTool],
+  ]),
+);
+
 const simple =
   (type: string, parameters: Params = {}): Converter =>
   () =>
@@ -1107,6 +1187,8 @@ export const CONVERTERS: Record<string, Converter> = {
   '@n8n/n8n-nodes-langchain.toolCode': convertToolCode,
   '@n8n/n8n-nodes-langchain.toolWorkflow': convertToolWorkflow,
   '@n8n/n8n-nodes-langchain.mcpClientTool': convertMcpClientTool,
+  // Spec 016: nós customizados da POC.
+  ...CUSTOM_CONVERTERS,
 };
 
 /** Tipos descartados na importação (sem efeito na execução). */

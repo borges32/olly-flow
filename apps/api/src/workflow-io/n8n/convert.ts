@@ -9,7 +9,7 @@ import {
   type WorkflowFileConnections,
   type WorkflowFileNode,
 } from '@olly/shared-types';
-import { CONVERTERS, DROPPED_TYPES, type N8nNode } from './converters.js';
+import { AGENTIX_TOOL_REASON, CONVERTERS, DROPPED_TYPES, type N8nNode } from './converters.js';
 import { isObject, list, num, str, type Params } from './helpers.js';
 
 export interface N8nConversion {
@@ -18,7 +18,8 @@ export interface N8nConversion {
   errors: ImportIssue[];
 }
 
-const N8N_TYPE = /^(n8n-nodes-|@n8n\/|@[\w.-]+\/n8n-nodes-)/;
+// Spec 016: `CUSTOM.` é o prefixo dos nós customizados instalados no N8N.
+const N8N_TYPE = /^(n8n-nodes-|@n8n\/|@[\w.-]+\/n8n-nodes-|CUSTOM\.)/;
 const PORT_KINDS: readonly string[] = ['main', 'ai_languageModel', 'ai_memory', 'ai_tool'];
 const isPortKind = (v: string): v is PortKind => PORT_KINDS.includes(v);
 
@@ -146,6 +147,14 @@ export function convertN8n(input: unknown): N8nConversion {
     }
   };
 
+  // Nós ligados a um Agent como ferramenta (conexões `ai_tool`).
+  const rawConnections = isObject(input.connections) ? input.connections : {};
+  const toolSources = new Set(
+    Object.entries(rawConnections)
+      .filter(([, byKind]) => isObject(byKind) && 'ai_tool' in byKind)
+      .map(([from]) => from),
+  );
+
   const nodes: WorkflowFileNode[] = [];
   const dropped = new Set<string>();
   const loopNodes = new Set<string>();
@@ -166,9 +175,13 @@ export function convertN8n(input: unknown): N8nConversion {
     };
     const params = isObject(node.parameters) ? node.parameters : {};
     const converter = CONVERTERS[type];
-    const result = converter
+    let result = converter
       ? converter(node, params, version)
       : { unsupported: `Tipo do N8N sem conversão: ${type}` };
+    // Spec 016, FR-012: o Agentix ligado como ferramenta de um AI Agent vira marcador.
+    if (!('unsupported' in result) && result.type === 'ai.agentix' && toolSources.has(name)) {
+      result = { unsupported: AGENTIX_TOOL_REASON };
+    }
     if ('unsupported' in result) {
       const original = Object.fromEntries(
         Object.entries(node as unknown as Params).filter(([k]) => k !== 'credentials'),

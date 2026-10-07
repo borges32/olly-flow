@@ -1,5 +1,6 @@
 import {
   Bot,
+  BotMessageSquare,
   Brain,
   CircleHelp,
   Code,
@@ -20,6 +21,7 @@ import {
   Siren,
   Split,
   Variable,
+  Waypoints,
   Webhook,
   Workflow,
   type LucideIcon,
@@ -55,6 +57,9 @@ export const NODE_ICONS: Record<string, LucideIcon> = {
   brain: Brain,
   'database-zap': DatabaseZap,
   'message-square': MessageSquare,
+  // Spec 016: Bridge Chat Model e Agentix.
+  waypoints: Waypoints,
+  'bot-message-square': BotMessageSquare,
 };
 
 /** Ícones conhecidos (o teste garante que todo nó da plataforma tenha o seu). */
