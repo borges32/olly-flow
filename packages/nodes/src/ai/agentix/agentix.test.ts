@@ -1,7 +1,7 @@
 import type { Item } from '@olly/shared-types';
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import type { ResolvedCredential } from '../../credentials/definitions.js';
-import { NodeParameterError } from '../../errors.js';
+import { NodeExecutionError, NodeParameterError } from '../../errors.js';
 import {
   createHttpGuard,
   type GuardedRequestInit,
@@ -9,6 +9,7 @@ import {
 } from '../../shared/http-guard.js';
 import { fakeContext } from '../../test-support/context.js';
 import {
+  AGENTIX_EXAMPLE_MESSAGES,
   startAgentixMock,
   type AgentixMock,
   type AgentixMockOptions,
@@ -64,14 +65,17 @@ async function run(
     data?: Record<string, unknown>;
     signal?: AbortSignal;
   } = {},
+  /** Ajusta a URL base da credencial (ex.: colada com o endpoint). */
+  baseUrl?: (base: string) => string,
 ) {
   mock = await startAgentixMock(options.mock);
+  const data = baseUrl ? { baseUrl: baseUrl(mock.baseUrl), ...options.data } : options.data;
   const merged = Array.isArray(params)
     ? params.map((p) => ({ ...baseParams, ...p }))
     : { ...baseParams, ...params };
   const ctx = fakeContext({
     params: merged,
-    credential: credentialFor(mock, options.data),
+    credential: credentialFor(mock, data),
     ...(options.signal && { signal: options.signal }),
     ...(options.onError && { node: { settings: { onError: options.onError } } }),
   });
@@ -102,11 +106,11 @@ describe('spec 016 — HU-2: Agentix', () => {
     expect(m.polls).toBe(3);
     // FR-008: a chave vai no X-API-Key de todas as chamadas.
     expect(m.requests.map((r) => [r.method, r.path, r.apiKey])).toEqual([
-      ['POST', '/agentix/v1/sessions/invoke', m.apiKey],
-      ['GET', '/agentix/v1/sessions/sessao-1', m.apiKey],
-      ['GET', '/agentix/v1/sessions/sessao-1', m.apiKey],
-      ['GET', '/agentix/v1/sessions/sessao-1', m.apiKey],
-      ['GET', '/agentix/v1/sessions/sessao-1/messages', m.apiKey],
+      ['POST', '/v2/api/sessions/invoke', m.apiKey],
+      ['GET', '/v2/api/sessions/sessao-1', m.apiKey],
+      ['GET', '/v2/api/sessions/sessao-1', m.apiKey],
+      ['GET', '/v2/api/sessions/sessao-1', m.apiKey],
+      ['GET', '/v2/api/sessions/sessao-1/messages', m.apiKey],
     ]);
     // FR-013: sempre pelo HttpGuard, com as redes internas e o TLS da credencial.
     expect(calls.every((c) => c.allowPrivateNetworks === true && c.insecureTls === false)).toBe(
@@ -121,7 +125,7 @@ describe('spec 016 — HU-2: Agentix', () => {
       options: { pollIntervalSeconds: 0.1, includeSession: true },
     });
     const json = output.main?.[0]?.json as Record<string, unknown>;
-    expect(json.messages).toHaveLength(4);
+    expect(json.messages).toHaveLength(5);
     expect(json.session).toMatchObject({ state: 'DONE', token_usage: { input_tokens: 30 } });
     expect(mock?.invokes[0]).toMatchObject({ entity_type: 'workflow' });
   });
@@ -136,7 +140,8 @@ describe('spec 016 — HU-2: Agentix', () => {
 
   it('FR-007: sem "esperar o fim", devolve a resposta da criação com o session_id', async () => {
     const { output, mock: m } = await run({ waitForCompletion: false });
-    expect(output.main?.[0]?.json).toEqual({ session_id: 'sessao-1', state: 'QUEUED' });
+    // A criação devolve `status` (exemplo da API), repassado como veio.
+    expect(output.main?.[0]?.json).toMatchObject({ session_id: 'sessao-1', status: 'QUEUED' });
     expect(m.polls).toBe(0);
   });
 
@@ -183,7 +188,7 @@ describe('spec 016 — HU-2: Agentix', () => {
       { mock: { scenarios: { conversor: { pollFailures: 5 } } } },
     ).catch((e: unknown) => e as Error);
     expect((error as Error).message).toContain('2 erros seguidos');
-    expect((error as Error).message).toContain('status 500');
+    expect((error as Error).message).toContain('respondeu 500 (Falha temporária)');
   });
 
   it('FR-008/FR-014: chave inválida falha com o status, sem expor a chave', async () => {
@@ -191,9 +196,97 @@ describe('spec 016 — HU-2: Agentix', () => {
       (e: unknown) => e as Error,
     );
     expect((error as Error).message).toBe(
-      'Chamada ao Agentix falhou: POST sessions/invoke (status 401)',
+      `Chamada ao Agentix falhou: POST ${mock?.baseUrl ?? ''}/sessions/invoke respondeu 401 (Chave de API inválida). Confira a chave da API e a URL base da credencial (ex.: https://<host>/v2/api).`,
     );
     expect(JSON.stringify(error)).not.toContain('chave-errada-sentinela');
+  });
+
+  // Correções a partir do exemplo da API (prompt/Agentix/exemplo_api_agentix.txt), depois do
+  // erro 403 relatado em dev.
+  it('FR-008: o 403 mostra o endereço chamado e o motivo devolvido pelo Agentix', async () => {
+    const error = await run({}, { data: { apiKey: '' } }).catch((e: unknown) => e as Error);
+    // Sem chave, o nó nem chama: a credencial exige a chave.
+    expect((error as Error).message).toContain('informe o campo "apiKey"');
+    await mock?.close();
+    // O simulador responde 403 "Not authenticated" quando o X-API-Key não chega.
+    const noKey: HttpGuard = {
+      ...guard,
+      fetch: (url, init = {}) => {
+        const headers = { ...(init.headers as Record<string, string>) };
+        delete headers['x-api-key'];
+        return realGuard.fetch(url, { ...init, headers });
+      },
+    };
+    mock = await startAgentixMock();
+    const ctx = fakeContext({ params: baseParams, credential: credentialFor(mock) });
+    const forbidden = await createAgentixNode({ guard: noKey, maxResponseBytes: 1024 * 1024 })
+      .execute({ inputs: { main: [{ json: {} }] }, items: [{ json: {} }] }, ctx)
+      .catch((e: unknown) => e as Error);
+    expect((forbidden as Error).message).toBe(
+      `Chamada ao Agentix falhou: POST ${mock.baseUrl}/sessions/invoke respondeu 403 (Not authenticated). Confira a chave da API e a URL base da credencial (ex.: https://<host>/v2/api).`,
+    );
+  });
+
+  it.each(['/sessions/invoke', '/sessions', '/sessions/invoke/'])(
+    'FR-008: URL base colada com o endpoint (%s) é corrigida para a raiz da API',
+    async (suffix) => {
+      const { output, mock: m } = await run({}, {}, (base) => `${base}${suffix}`);
+      expect(output.main?.[0]?.json).toMatchObject({ state: 'DONE' });
+      expect(m.requests[0]?.path).toBe('/v2/api/sessions/invoke');
+    },
+  );
+
+  it('FR-008: o nó se identifica no User-Agent (não envia o "undici" padrão, barrado por WAFs)', async () => {
+    const { mock: m } = await run();
+    expect(m.requests.map((r) => r.userAgent)).toEqual(
+      m.requests.map(() => expect.stringMatching(/^Olly-Flow\//) as unknown),
+    );
+  });
+
+  it('FR-009: com as mensagens do exemplo da API, a resposta final é o content do último "assistant"', async () => {
+    const { output } = await run(
+      {},
+      { mock: { scenarios: { conversor: { messages: AGENTIX_EXAMPLE_MESSAGES } } } },
+    );
+    expect(output.main?.[0]?.json).toEqual({
+      session_id: 'sessao-1',
+      state: 'DONE',
+      output: 'Porque o cachorro entrou na igreja? Porque a porta estava aberta',
+    });
+  });
+
+  it('FR-010: sessão recusada já na criação (status REJECTED) falha sem consultar o estado', async () => {
+    const error = await run(
+      {},
+      {
+        mock: {
+          scenarios: { conversor: { invokeStatus: 'REJECTED', errorMessage: 'sem permissão' } },
+        },
+      },
+    ).catch((e: unknown) => e as Error);
+    expect((error as Error).message).toBe(
+      'Sessão sessao-1 do Agentix terminou com o estado REJECTED: sem permissão',
+    );
+    expect(mock?.polls).toBe(0);
+  });
+
+  it('FR-010: error_message nulo não aparece na mensagem; BLOCKED no tempo limite explica a espera', async () => {
+    const failed = await run(
+      {},
+      { mock: { scenarios: { conversor: { states: ['FAILED'] } } } },
+    ).catch((e: unknown) => e as Error);
+    expect((failed as Error).message).toBe(
+      'Sessão sessao-1 do Agentix terminou com o estado FAILED',
+    );
+    await mock?.close();
+    const blocked = await run(
+      { options: { pollIntervalSeconds: 0.1, timeoutSeconds: 0.25 } },
+      { mock: { scenarios: { conversor: { states: ['BLOCKED'] } } } },
+    ).catch((e: unknown) => e as Error);
+    expect((blocked as Error).message).toContain('último estado: BLOCKED');
+    expect((blocked as NodeExecutionError).details.description).toContain(
+      'aguardando uma interação',
+    );
   });
 
   it('Agentix sem session_id e sessão DONE sem mensagem "assistant" geram erro no item', async () => {

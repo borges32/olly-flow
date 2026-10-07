@@ -96,7 +96,8 @@
        - "resposta final": `{ session_id, state, output }`, com o conteúdo da última mensagem `assistant`;
        - "todas as mensagens": `{ session_id, state, messages }`;
        - com `includeSession`, acrescenta `session`.
-  - **Chamadas:** pelo `HttpGuard` injetado (`createBuiltinNodes({ httpGuard })`), com `insecureTls` da credencial, `allowPrivateNetworks: true` e `accept: application/json`. Uma resposta fora de 2xx gera erro com o método, o caminho, o status e um trecho do corpo, sem a chave.
+  - **Chamadas:** pelo `HttpGuard` injetado (`createBuiltinNodes({ httpGuard })`), com `insecureTls` da credencial, `allowPrivateNetworks: true`, `accept: application/json` e `user-agent: Olly-Flow/1.0 (agentix)` (em vez do `undici` padrão). A URL base passa por `agentixBaseUrl` (sem `/` final e sem `/sessions…` colado). Uma resposta fora de 2xx gera erro com o método, o endereço, o status e o motivo (`detail`), sem a chave; em 401/403, com a orientação de conferir a chave e a URL base.
+  - **Estado:** `state` na consulta e `status` na criação (formato do exemplo da API); a criação com estado de falha encerra o item sem consultar.
   - **Tratamento de erro por item (FR-010):** o motor já aplica `settings.onError` por item, pelo `pairedItem` (como nos nós HTTP).
 - **Worker (NFR-002):** o sono não ocupa CPU. No encerramento, o sinal das execuções em andamento é abortado pelo mecanismo atual da spec 006.
 
@@ -182,3 +183,4 @@ Nenhuma variável nova. Os endereços internos da Bridge e do Agentix **não** p
 | 07/10/2026 | Criação, depois dos esclarecimentos do PO | Spec 016 |
 | 07/10/2026 | Pré-requisitos respondidos pelo PO: Bridge como modelo de chat customizado (ADR-0008; resumo, constituição e §6); sem restrição de endereço interno para os dois nós (§2 `allowPrivateNetworks`, §3, §4, configuração, decisões, testes e riscos); fixtures a fornecer | Decisão humana |
 | 07/10/2026 | Implementação: ícone do Agentix `bot-message-square` (o `bot` já é do Agent); servidores simulados exportados por `@olly/nodes` (`startBridgeMock`, `startAgentixMock`, como o modelo simulado da spec 011) com um certificado autoassinado só de teste; `BridgeTokenManager.invalidate` descarta só o token recusado | Implementação |
+| 07/10/2026 | Correção do Agentix (erro 403 em dev): `User-Agent` próprio, `agentixBaseUrl`, `status` da criação, mensagens de 401/403 com o endereço e o motivo; simulador no formato do exemplo da API (`/v2/api`, `status` na criação, 403 sem chave) | Correção de bug |

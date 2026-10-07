@@ -83,6 +83,9 @@ Como **editor**, quero importar workflows do N8N que usam os nós customizados, 
 - **Falha transitória na consulta da sessão:** tolerada até um número configurável de erros seguidos; depois, o nó falha.
 - **Payload ou constantes que não são um objeto JSON:** erro no item, com o nome do parâmetro.
 - **Agentix sem `session_id` na resposta da criação:** erro no item, com a resposta recebida.
+- **Criação já recusada:** a resposta da criação traz o campo `status`. Se ele for `REJECTED`, `FAILED` ou `CANCELLED`, o item falha sem consultar a sessão.
+- **URL base colada com o endpoint** (por exemplo, `…/v2/api/sessions/invoke`): o nó usa a raiz da API.
+- **Recusa da chamada (401/403):** a mensagem mostra o endereço chamado (sem a chave) e o motivo devolvido pelo Agentix, e orienta a conferir a chave e a URL base.
 - **Serviço em endereço interno:** a Bridge e o Agentix ficam na rede interna, então os dois nós acessam endereços de rede privada sem liberação da instalação. O filtro de rede continua barrando, também para eles, a própria máquina (loopback), os endereços link-local (inclusive o de metadados da nuvem) e os protocolos diferentes de HTTP e HTTPS. Desligar a verificação do certificado não muda essas regras.
 - **Modelo inexistente na Bridge:** o nome do modelo não é validado pela plataforma; o erro da Bridge (por exemplo, 404) volta na execução, com o status e um trecho da resposta.
 
@@ -178,3 +181,4 @@ Como **editor**, quero importar workflows do N8N que usam os nós customizados, 
 | 07/10/2026 | Pré-requisitos respondidos pelo PO: (1) ADR-0008: a Bridge entra como um modelo de chat customizado, e não como um novo fornecedor da lista da ADR; (2) rede: os nós Bridge e Agentix não têm restrição de endereço interno. FR-013, o caso de borda "Serviço em endereço interno" e o SC-001 foram reescritos. As chamadas continuam pelo filtro anti-SSRF (constituição, Art. III.5), que segue barrando loopback, link-local e metadados da nuvem; (3) fixtures: o PO fornecerá os workflows da POC com os dois nós | Decisão humana |
 | 07/10/2026 | Plano e tarefas aprovados pelo PO ao pedir a implementação ("Implemente a spec specs/016-nos-bridge-agentix/ seguindo o AGENTS.md"); status `Em implementação` | Decisão humana |
 | 07/10/2026 | Implementação concluída; status `Implementada` (ver [report.md](report.md)) | Implementação |
+| 07/10/2026 | Correção do Agentix após erro 403 em dev, a partir do exemplo da API (`prompt/Agentix`): casos de borda "criação já recusada" (`status` na criação), "URL base colada com o endpoint" e "recusa da chamada (401/403)" | Correção de bug |

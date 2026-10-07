@@ -15,6 +15,12 @@ export const AGENTIX_NODE_TYPE = 'ai.agentix';
 export const AGENTIX_FAILURE_STATES = ['FAILED', 'CANCELLED', 'REJECTED'] as const;
 const SUCCESS_STATE = 'DONE';
 const ERROR_SNIPPET = 500;
+/**
+ * O nó se identifica: o `fetch` mandaria `user-agent: undici`, que WAFs e gateways corporativos
+ * costumam barrar com 403.
+ */
+export const AGENTIX_USER_AGENT = 'Olly-Flow/1.0 (agentix)';
+const AUTH_HINT = 'Confira a chave da API e a URL base da credencial (ex.: https://<host>/v2/api).';
 
 export interface AgentixDeps {
   guard: HttpGuard;
@@ -75,6 +81,54 @@ function requiredText(ctx: NodeContext, name: string, itemIndex: number): string
   return text.trim();
 }
 
+/**
+ * Raiz da API a partir da URL base da credencial. Aceita a URL colada com o endpoint (por
+ * exemplo, `…/v2/api/sessions/invoke`, como no exemplo da API): o nó acrescenta os caminhos.
+ */
+export function agentixBaseUrl(raw: unknown): string {
+  if (typeof raw !== 'string') return '';
+  return raw
+    .trim()
+    .replace(/\/+$/, '')
+    .replace(/\/sessions(\/.*)?$/, '')
+    .replace(/\/+$/, '');
+}
+
+/** Estado da sessão: `state` na consulta, `status` na criação (exemplo da API). */
+const stateOf = (session: Json): string => {
+  const value = session.state ?? session.status;
+  return typeof value === 'string' ? value.toUpperCase() : '';
+};
+
+/** Motivo de uma resposta de erro: `detail`, `message` ou `error` do JSON, ou o texto. */
+function errorReason(text: string): string {
+  try {
+    const body = JSON.parse(text) as unknown;
+    if (isObject(body)) {
+      for (const key of ['detail', 'message', 'mensagem', 'error']) {
+        const value = body[key];
+        if (typeof value === 'string' && value) return value;
+        if (value !== undefined && value !== null) return JSON.stringify(value).slice(0, 200);
+      }
+    }
+  } catch {
+    // Não é JSON: usa o texto.
+  }
+  return text.trim().slice(0, 200);
+}
+
+/** Erro de uma sessão em estado de falha, com o `error_message` quando houver. */
+function failedSession(sessionId: string, state: string, session: Json): NodeExecutionError {
+  const message =
+    typeof session.error_message === 'string' && session.error_message
+      ? `: ${session.error_message}`
+      : '';
+  return new NodeExecutionError(
+    `Sessão ${sessionId} do Agentix terminou com o estado ${state}${message}`,
+    { description: JSON.stringify(session).slice(0, ERROR_SNIPPET) },
+  );
+}
+
 /** Lista de mensagens pura, ou embrulhada em `messages` ou `items`. */
 export function extractMessages(response: unknown): Json[] {
   const list = Array.isArray(response)
@@ -127,15 +181,17 @@ function createRequest(
   deps: AgentixDeps,
 ): Request {
   const data = credential.data;
-  const baseUrl = typeof data.baseUrl === 'string' ? data.baseUrl.trim().replace(/\/+$/, '') : '';
-  const apiKey = typeof data.apiKey === 'string' ? data.apiKey : '';
+  const baseUrl = agentixBaseUrl(data.baseUrl);
+  const apiKey = typeof data.apiKey === 'string' ? data.apiKey.trim() : '';
   if (!baseUrl) throw new Error('Credencial Agentix: informe o campo "baseUrl"');
   if (!apiKey) throw new Error('Credencial Agentix: informe o campo "apiKey"');
   return async (method, path, body) => {
-    const response = await deps.guard.fetch(`${baseUrl}/${path}`, {
+    const url = `${baseUrl}/${path}`;
+    const response = await deps.guard.fetch(url, {
       method,
       headers: {
         accept: 'application/json',
+        'user-agent': AGENTIX_USER_AGENT,
         'x-api-key': apiKey,
         ...(body && { 'content-type': 'application/json' }),
       },
@@ -147,8 +203,11 @@ function createRequest(
     });
     const text = await readText(response, deps.maxResponseBytes);
     if (!response.ok) {
+      // O endereço não tem segredo (a chave vai no cabeçalho) e mostra uma URL base errada.
+      const reason = errorReason(text);
+      const auth = response.status === 401 || response.status === 403 ? ` ${AUTH_HINT}` : '';
       throw new NodeExecutionError(
-        `Chamada ao Agentix falhou: ${method} ${path} (status ${String(response.status)})`,
+        `Chamada ao Agentix falhou: ${method} ${url} respondeu ${String(response.status)}${reason ? ` (${reason})` : ''}.${auth}`,
         { httpCode: response.status, description: text.slice(0, ERROR_SNIPPET) },
       );
     }
@@ -196,25 +255,21 @@ async function waitForSession(
       }
     }
     if (session) {
-      lastState = typeof session.state === 'string' ? session.state.toUpperCase() : '';
+      lastState = stateOf(session) || lastState;
       if (lastState === SUCCESS_STATE) return session;
       if ((AGENTIX_FAILURE_STATES as readonly string[]).includes(lastState)) {
-        const message =
-          typeof session.error_message === 'string' && session.error_message
-            ? `: ${session.error_message}`
-            : '';
-        throw new NodeExecutionError(
-          `Sessão ${sessionId} do Agentix terminou com o estado ${lastState}${message}`,
-          { description: JSON.stringify(session).slice(0, ERROR_SNIPPET) },
-        );
+        throw failedSession(sessionId, lastState, session);
       }
     }
     if (Date.now() + options.pollIntervalMs > deadline) {
       throw new NodeExecutionError(
         `Tempo limite esgotado esperando a sessão ${sessionId} do Agentix (último estado: ${lastState})`,
         {
-          description:
-            'Aumente "Tempo limite (s)" nas opções do nó, ou desligue "Esperar o fim" e consulte a sessão depois.',
+          description: `${
+            lastState === 'BLOCKED'
+              ? 'A sessão está pausada (BLOCKED), aguardando uma interação no Agentix. '
+              : ''
+          }Aumente "Tempo limite (s)" nas opções do nó, ou desligue "Esperar o fim" e consulte a sessão depois.`,
         },
       );
     }
@@ -240,6 +295,11 @@ async function runSession(ctx: NodeContext, request: Request, itemIndex: number)
       description: JSON.stringify(invoked).slice(0, ERROR_SNIPPET),
     });
   }
+  // A criação já pode vir recusada (`status`: REJECTED, FAILED ou CANCELLED).
+  const created = stateOf(invoke);
+  if ((AGENTIX_FAILURE_STATES as readonly string[]).includes(created)) {
+    throw failedSession(sessionId, created, invoke);
+  }
   if (ctx.getParam('waitForCompletion', itemIndex) === false) return invoke;
 
   const options = readOptions(ctx.getParam('options', itemIndex));
@@ -247,7 +307,7 @@ async function runSession(ctx: NodeContext, request: Request, itemIndex: number)
   const messages = extractMessages(
     await request('GET', `sessions/${encodeURIComponent(sessionId)}/messages`),
   );
-  const result: Json = { session_id: sessionId, state: session.state };
+  const result: Json = { session_id: sessionId, state: stateOf(session) };
   if (ctx.getParam('output', itemIndex) === 'allMessages') {
     result.messages = messages;
   } else {

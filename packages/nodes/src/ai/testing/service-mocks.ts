@@ -278,6 +278,8 @@ export interface AgentixScenario {
   pollFailures?: number;
   /** A invocação não devolve `session_id`. */
   noSessionId?: boolean;
+  /** `status` devolvido já na criação (padrão `QUEUED`; ex.: `REJECTED`). */
+  invokeStatus?: string;
 }
 
 export interface AgentixMockOptions {
@@ -286,55 +288,125 @@ export interface AgentixMockOptions {
   scenarios?: Record<string, AgentixScenario>;
 }
 
+export interface AgentixMockRequest {
+  method: string;
+  path: string;
+  apiKey: string | undefined;
+  userAgent: string | undefined;
+}
+
 export interface AgentixMock {
   origin: string;
+  /** Como na API real: `<origem>/v2/api`. */
   baseUrl: string;
   apiKey: string;
   readonly invokes: Record<string, unknown>[];
   /** Consultas ao estado das sessões. */
   readonly polls: number;
-  readonly requests: { method: string; path: string; apiKey: string | undefined }[];
+  readonly requests: AgentixMockRequest[];
   close(): Promise<void>;
 }
 
 export const AGENTIX_MOCK_API_KEY = 'chave-sentinela-agentix-016';
 
+/** Mensagens com uma chamada de ferramenta intermediária (no formato do exemplo da API). */
 export const AGENTIX_DEFAULT_MESSAGES = [
-  { role: 'user', content: 'Qual é a capital do Brasil?' },
+  { role: 'system', content: '', tool_calls: null, tool_call_id: null, tool_name: null },
+  { role: 'user', content: "{'pergunta': 'Qual é a capital do Brasil?'}", tool_calls: null },
   {
     role: 'assistant',
     content: '',
     tool_calls: [{ id: 't1', function: { name: 'buscar', arguments: '{}' } }],
   },
-  { role: 'tool', content: 'Brasília' },
-  { role: 'assistant', content: 'A capital do Brasil é Brasília.' },
+  { role: 'tool', content: 'Brasília', tool_call_id: 't1', tool_name: 'buscar' },
+  { role: 'assistant', content: 'A capital do Brasil é Brasília.', tool_calls: null },
 ];
 
+/** Resposta de `sessions/{id}/messages` do exemplo da API do Agentix (prompt/Agentix). */
+export const AGENTIX_EXAMPLE_MESSAGES = [
+  {
+    role: 'system',
+    content: '',
+    tool_calls: null,
+    tool_call_id: null,
+    tool_name: null,
+    run_id: '568ea34d-68a9-42c7-b03d-ee8f2fdc37be',
+    created_at: 1790366234,
+  },
+  {
+    role: 'user',
+    content: "{'pergunta': 'Conte uma piada engraçada'}",
+    tool_calls: null,
+    tool_call_id: null,
+    tool_name: null,
+    run_id: '568ea34d-68a9-42c7-b03d-ee8f2fdc37be',
+    created_at: 1790366234,
+  },
+  {
+    role: 'assistant',
+    content: 'Porque o cachorro entrou na igreja? Porque a porta estava aberta',
+    tool_calls: null,
+    tool_call_id: null,
+    tool_name: null,
+    run_id: '568ea34d-68a9-42c7-b03d-ee8f2fdc37be',
+    created_at: 1790366234,
+  },
+];
+
+/**
+ * Agentix simulado no formato do exemplo da API (`prompt/Agentix/exemplo_api_agentix.txt`): a
+ * criação devolve `status`; a consulta, `state` e os demais campos (nulos quando vazios). Sem o
+ * cabeçalho `X-API-Key`, responde 403 `Not authenticated` (como o `APIKeyHeader` do FastAPI);
+ * com a chave errada, 401.
+ */
 export async function startAgentixMock(options: AgentixMockOptions = {}): Promise<AgentixMock> {
   const apiKey = options.apiKey ?? AGENTIX_MOCK_API_KEY;
   const invokes: Record<string, unknown>[] = [];
-  const requests: AgentixMock['requests'] = [];
-  const sessions = new Map<string, { scenario: AgentixScenario; polls: number; name: string }>();
+  const requests: AgentixMockRequest[] = [];
+  const sessions = new Map<
+    string,
+    { scenario: AgentixScenario; polls: number; invoke: Record<string, unknown> }
+  >();
   let polls = 0;
 
   const { server, origin } = await listen(options.tls ?? false, (req, body) => {
     const path = new URL(req.url ?? '/', 'http://x').pathname;
     const key = req.headers['x-api-key'];
     const keyValue = Array.isArray(key) ? key[0] : key;
-    requests.push({ method: req.method ?? 'GET', path, apiKey: keyValue });
+    requests.push({
+      method: req.method ?? 'GET',
+      path,
+      apiKey: keyValue,
+      userAgent: req.headers['user-agent'],
+    });
+    if (keyValue === undefined) return { status: 403, json: { detail: 'Not authenticated' } };
     if (keyValue !== apiKey) return { status: 401, json: { detail: 'Chave de API inválida' } };
 
-    if (req.method === 'POST' && path === '/agentix/v1/sessions/invoke') {
+    if (req.method === 'POST' && path === '/v2/api/sessions/invoke') {
       const data = parse(body);
       invokes.push(data);
-      const name = String(data.entity_name);
-      const scenario = options.scenarios?.[name] ?? {};
-      if (scenario.noSessionId) return { status: 200, json: { state: 'QUEUED' } };
+      const scenario = options.scenarios?.[String(data.entity_name)] ?? {};
       const id = `sessao-${String(invokes.length)}`;
-      sessions.set(id, { scenario, polls: 0, name });
-      return { status: 201, json: { session_id: id, state: 'QUEUED' } };
+      const invoke = {
+        session_id: id,
+        status: scenario.invokeStatus ?? 'QUEUED',
+        component: `${String(data.entity_type)}/${String(data.entity_name)}@${String(data.entity_version)}`,
+        tenant_id: 'AMON',
+        bundle_version: data.version,
+        bundle_content_hash: 'sha256:eeda7d91',
+        ...(scenario.invokeStatus &&
+          scenario.errorMessage && { error_message: scenario.errorMessage }),
+      };
+      if (scenario.noSessionId) {
+        return {
+          status: 200,
+          json: Object.fromEntries(Object.entries(invoke).filter(([k]) => k !== 'session_id')),
+        };
+      }
+      sessions.set(id, { scenario, polls: 0, invoke: data });
+      return { status: 201, json: invoke };
     }
-    const match = /^\/agentix\/v1\/sessions\/([^/]+)(\/messages)?$/.exec(path);
+    const match = /^\/v2\/api\/sessions\/([^/]+)(\/messages)?$/.exec(path);
     const session = match?.[1] ? sessions.get(decodeURIComponent(match[1])) : undefined;
     if (req.method === 'GET' && match?.[1] && session) {
       const id = decodeURIComponent(match[1]);
@@ -358,19 +430,31 @@ export async function startAgentixMock(options: AgentixMockOptions = {}): Promis
         status: 200,
         json: {
           session_id: id,
+          tenant_id: 'AMON',
+          entity_type: String(session.invoke.entity_type).toUpperCase(),
+          entity_name: session.invoke.entity_name,
+          entity_version: session.invoke.entity_version,
+          bundle_name: session.invoke.bundle,
+          bundle_version: session.invoke.version,
           state,
-          entity_name: session.name,
-          token_usage: { input_tokens: 30, output_tokens: 12 },
-          ...(scenario.errorMessage && { error_message: scenario.errorMessage }),
+          created_at: '2026-09-25T19:57:06.114820+00:00',
+          updated_at: '2026-09-25T19:57:26.641774+00:00',
+          partial_output: null,
+          error_message: scenario.errorMessage ?? null,
+          summary: null,
+          stages: [],
+          token_usage: state === 'DONE' ? { input_tokens: 30, output_tokens: 12 } : null,
+          triggered_by: 'f936245',
+          feedback: null,
         },
       };
     }
-    return { status: 404, json: { detail: `Rota inexistente: ${path}` } };
+    return { status: 404, json: { detail: 'Not Found' } };
   });
 
   return {
     origin,
-    baseUrl: `${origin}/agentix/v1`,
+    baseUrl: `${origin}/v2/api`,
     apiKey,
     invokes,
     get polls() {

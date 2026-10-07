@@ -103,6 +103,17 @@ Foram entregues:
 - **Ícone do Agentix:** `bot-message-square` em vez de `bot`, que já é o ícone do Agent. Registrado no histórico do plano.
 - Os demais detalhes de implementação (servidores simulados exportados, invalidação só do token recusado) foram registrados no histórico do plano. Spec e plano estão alinhados ao código.
 
+## Correção após a implementação: erro 403 do Agentix em dev
+
+Relatado pelo PO ao testar em dev. A causa exata não aparece no erro antigo, que só trazia o status. Comparando o nó com o exemplo da API (`Bridge-Chat-Model/prompt/Agentix`) e com o tráfego real do nó, foram corrigidos:
+- **User-Agent:** o nó enviava `user-agent: undici` (padrão do `fetch`), que WAFs e gateways corporativos costumam barrar com 403. Agora envia `Olly-Flow/1.0 (agentix)`.
+- **URL base:** o exemplo mostra o endpoint completo (`…/v2/api/sessions/invoke`). Colado na credencial, o nó chamava `…/sessions/invoke/sessions/invoke`, e um caminho não mapeado costuma voltar 403 ou 404 do gateway. Agora a raiz da API é extraída (`agentixBaseUrl`), e a chave passa sem espaços nas pontas.
+- **Diagnóstico:** em erro, a mensagem traz o endereço chamado (sem a chave) e o motivo devolvido (`detail`). Em 401/403, orienta a conferir a chave e a URL base.
+- **Formato real da API:** a criação devolve `status`, e não `state`. Uma criação já `REJECTED`, `FAILED` ou `CANCELLED` agora encerra o item sem consultar; um `error_message` nulo não aparece na mensagem; no tempo limite com `BLOCKED`, a mensagem explica que a sessão aguarda uma interação.
+- **Simulador:** passou a seguir o exemplo da API (`/v2/api`, `status` na criação, campos nulos, 403 `Not authenticated` sem a chave).
+
+Testes que reproduzem e comprovam (escritos antes da correção, falhando): `agentix.test.ts` › "FR-008: o 403 mostra o endereço chamado…", "FR-008: URL base colada com o endpoint…" (3 casos), "FR-008: o nó se identifica no User-Agent…", "FR-009: com as mensagens do exemplo da API…", "FR-010: sessão recusada já na criação…", "FR-010: error_message nulo…/BLOCKED…". Se o 403 continuar, a nova mensagem mostra o motivo exato para a próxima análise.
+
 ## Dependências adicionadas
 
 Nenhuma. A Bridge usa o `@langchain/openai` (`ChatOpenAI`) e o `undici`, que já estavam no projeto.
