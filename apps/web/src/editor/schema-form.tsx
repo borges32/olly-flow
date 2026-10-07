@@ -198,7 +198,9 @@ function Field({ name, path, schema, value, readOnly, onChange }: FieldProps) {
   const kind = fieldKind(schema);
   const testId = `param-${path}`;
   const description = schema.description && (
-    <p className="text-xs text-muted-foreground">{schema.description}</p>
+    <p className="text-xs break-words whitespace-pre-line text-muted-foreground">
+      {schema.description}
+    </p>
   );
 
   // Faixa do schema (`minimum`/`maximum`): avisa na hora; o salvamento também recusa.

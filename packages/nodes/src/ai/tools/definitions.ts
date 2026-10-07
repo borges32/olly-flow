@@ -35,6 +35,49 @@ const toolBase: Record<string, JSONSchema7> = {
 
 const META = new Set(['toolName', 'toolDescription', 'requireApproval']);
 
+/** Exemplos de `$fromAI` mostrados no formulário da ferramenta HTTP (valores em modo Expressão). */
+export const HTTP_TOOL_EXAMPLES = {
+  url: "https://api.exemplo.com/clientes/{{ $fromAI('id', 'Id do cliente') }}",
+  queryValue: "{{ $fromAI('cidade', 'Nome da cidade') }}",
+  jsonBody:
+    "{ \"cidade\": \"{{ $fromAI('cidade', 'Nome da cidade') }}\", \"dias\": {{ $fromAI('dias', 'Quantidade de dias', 'number', 3) }} }",
+};
+
+/** Exemplo da Ferramenta: código mostrado no formulário: o schema e o código que o usa. */
+export const CODE_TOOL_EXAMPLES = {
+  inputSchema:
+    '{"type":"object","properties":{"valor":{"type":"number","description":"Valor da compra em reais"},"parcelas":{"type":"integer","description":"Número de parcelas"}},"required":["valor","parcelas"]}',
+  jsCode: [
+    'const { valor, parcelas } = $input.first().json;',
+    'return { parcela: Number((valor / parcelas).toFixed(2)) };',
+  ].join('\n'),
+};
+
+/** Parâmetros do `http.request` com exemplos de `$fromAI` na ajuda dos campos. */
+function httpToolProperties(): Record<string, JSONSchema7> {
+  const props = httpRequestParamsSchema.properties as Record<string, JSONSchema7>;
+  const mode = 'Use o modo Expressão no campo para o modelo preencher o valor com $fromAI.';
+  return {
+    ...props,
+    queryParameters: {
+      ...(props.queryParameters as JSONSchema7),
+      description: [
+        mode,
+        `Na URL: ${HTTP_TOOL_EXAMPLES.url}`,
+        `Num parâmetro de query: Nome = cidade, Valor = ${HTTP_TOOL_EXAMPLES.queryValue}`,
+      ].join('\n'),
+    },
+    jsonBody: {
+      ...(props.jsonBody as JSONSchema7),
+      description: [
+        'Texto JSON ou expressão que produz um objeto.',
+        mode,
+        `Exemplo: ${HTTP_TOOL_EXAMPLES.jsonBody}`,
+      ].join('\n'),
+    },
+  };
+}
+
 /** Parâmetros sem os de identificação (base do schema gerado por `$fromAI`). */
 const toolParams = (ctx: NodeContext) =>
   Object.fromEntries(Object.entries(ctx.node.params).filter(([k]) => !META.has(k)));
@@ -118,7 +161,7 @@ export function createAgentToolNodes(deps: {
     'Ferramenta: HTTP',
     'Chama uma API HTTP; o modelo preenche os campos com $fromAI().',
     'globe',
-    { ...toolBase, ...(httpRequestParamsSchema.properties as Record<string, JSONSchema7>) },
+    { ...toolBase, ...httpToolProperties() },
     (ctx, itemIndex) => {
       const base = baseTool(ctx, itemIndex);
       const rawMethod = ctx.getParam('method', itemIndex);
@@ -236,6 +279,10 @@ export function createAgentToolNodes(deps: {
       inputSchema: {
         type: 'string',
         title: 'Schema dos argumentos (JSON Schema)',
+        description: [
+          'Os argumentos que o modelo envia ao chamar a ferramenta. Descreva cada campo em "description": é o que o modelo lê para preenchê-lo.',
+          `Exemplo: ${CODE_TOOL_EXAMPLES.inputSchema}`,
+        ].join('\n'),
         default: '{"type":"object","properties":{"query":{"type":"string"}},"required":["query"]}',
         'x-multiline': true,
         'x-no-expression': true,
@@ -243,7 +290,11 @@ export function createAgentToolNodes(deps: {
       jsCode: {
         type: 'string',
         title: 'Código',
-        description: 'Os argumentos estão em $input.first().json. Devolva um valor ou itens.',
+        description: [
+          'Recebe os argumentos do modelo em $input.first().json e devolve o resultado ao modelo (objeto, texto ou itens). Roda no sandbox, sem rede nem arquivos.',
+          'Exemplo, com o schema acima:',
+          CODE_TOOL_EXAMPLES.jsCode,
+        ].join('\n'),
         default: 'return { resposta: $input.first().json.query };',
         'x-code-editor': 'javascript',
         'x-no-expression': true,
