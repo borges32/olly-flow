@@ -81,6 +81,15 @@ const envSchema = z.object({
   OLLY_WEBHOOK_MAX_BODY: z.coerce.number().positive().max(1024).default(16),
   OLLY_WEBHOOK_RESPONSE_TIMEOUT: z.coerce.number().positive().max(3600).default(120),
   OLLY_WEBHOOK_RATE_LIMIT_PER_MIN: z.coerce.number().int().min(1).default(120),
+  // Spec 015, NFR-002: limites da importação de workflows (bytes, nós, profundidade do JSON).
+  OLLY_IMPORT_MAX_BYTES: z.coerce
+    .number()
+    .int()
+    .min(1024)
+    .max(64 * 1024 * 1024)
+    .default(5242880),
+  OLLY_IMPORT_MAX_NODES: z.coerce.number().int().min(1).max(10_000).default(500),
+  OLLY_IMPORT_MAX_DEPTH: z.coerce.number().int().min(8).max(512).default(64),
   OLLY_REQUIRE_WEBHOOK_AUTH: z
     .enum(['true', 'false', '1', '0'])
     .default('false')
@@ -227,6 +236,8 @@ export interface AppConfig {
     requireAuth: boolean;
   };
   code: { timeoutMs: number; memoryMb: number };
+  /** Spec 015, NFR-002: limites da importação de workflows. */
+  workflowImport: { maxBytes: number; maxNodes: number; maxDepth: number };
   s3?: { endpoint: string; region: string; accessKey: string; secretKey: string; bucket: string };
 }
 
@@ -390,6 +401,11 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
       requireAuth: e.OLLY_REQUIRE_WEBHOOK_AUTH,
     },
     code: { timeoutMs: e.OLLY_CODE_TIMEOUT_MS, memoryMb: e.OLLY_CODE_MEMORY_MB },
+    workflowImport: {
+      maxBytes: e.OLLY_IMPORT_MAX_BYTES,
+      maxNodes: e.OLLY_IMPORT_MAX_NODES,
+      maxDepth: e.OLLY_IMPORT_MAX_DEPTH,
+    },
     ...(e.S3_ENDPOINT &&
       e.S3_ACCESS_KEY &&
       e.S3_SECRET_KEY && {

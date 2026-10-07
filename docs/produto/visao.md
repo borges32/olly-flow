@@ -87,7 +87,7 @@ Os itens PR-01 a PR-14 são os requisitos originais solicitados. Os itens PR-15 
 | PR-14 MCP | | | | | | | | | | ● | ○ | | | | |
 | PR-15 Editor | ○ | ● | ● | | | | | | | | | | | | ○ |
 | PR-16 Agent | | | | | | | | | | | ● | | | | |
-| PR-17 N8N | | | ○ | | ○ | | | | | | | ● | ○ | | ○ |
+| PR-17 N8N | | | ○ | | ○ | | | | | | | | ○ | | ● |
 | PR-18 Credenciais | | | | ● | | | | | ○ | | | | | | ○ |
 | PR-19 Auditoria/LGPD | ○ | | | | ● | | | | ● | | | | | | ○ |
 | PR-20 Operação | ○ | | | | | ● | | | | | | ● | ● | ○ | |

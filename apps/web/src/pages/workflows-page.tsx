@@ -1,6 +1,6 @@
-import type { WorkflowDetail, WorkflowSummary } from '@olly/shared-types';
+import type { WorkflowDetail, WorkflowFile, WorkflowSummary } from '@olly/shared-types';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Trash2 } from 'lucide-react';
+import { Download, Plus, Trash2, Upload } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
@@ -20,6 +20,8 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
+import { downloadJson } from '@/editor/workflow-file-io';
+import { ImportWorkflowDialog } from './import-workflow-dialog';
 
 const PAGE_SIZE = 20;
 const dateFormat = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
@@ -36,6 +38,9 @@ export function WorkflowsPage() {
   const workflows = useWorkflows(projectId, page, PAGE_SIZE);
   const canCreate = useCan('workflow:create', projectId);
   const canDelete = useCan('workflow:delete', projectId);
+  // Spec 015, FR-008: só Editor e Admin do projeto baixam.
+  const canDownload = useCan('workflow:update', projectId);
+  const [importing, setImporting] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
   const [toDelete, setToDelete] = useState<WorkflowSummary | null>(null);
@@ -61,6 +66,18 @@ export function WorkflowsPage() {
         description: e instanceof ApiError ? e.message : undefined,
       }),
   });
+
+  // Spec 015, FR-006: baixa o rascunho salvo como JSON.
+  const download = async (wf: WorkflowSummary) => {
+    try {
+      const file = await api.get<WorkflowFile>(`/api/v1/workflows/${wf.id}/export`);
+      downloadJson(file, `${wf.name}.json`);
+    } catch (e) {
+      toast.error('Não foi possível baixar o workflow', {
+        description: e instanceof ApiError ? e.message : undefined,
+      });
+    }
+  };
 
   const onCreate = (e: FormEvent) => {
     e.preventDefault();
@@ -104,6 +121,16 @@ export function WorkflowsPage() {
         </div>
         {canCreate && (
           <Button
+            variant="outline"
+            onClick={() => {
+              setImporting(true);
+            }}
+          >
+            <Upload /> Importar
+          </Button>
+        )}
+        {canCreate && (
+          <Button
             onClick={() => {
               setCreating(true);
             }}
@@ -120,7 +147,7 @@ export function WorkflowsPage() {
               <th className="px-4 py-2 font-medium">Nome</th>
               <th className="px-4 py-2 font-medium">Versão</th>
               <th className="px-4 py-2 font-medium">Atualizado em</th>
-              {canDelete && <th className="w-12 px-4 py-2" />}
+              {(canDelete || canDownload) && <th className="w-24 px-4 py-2" />}
             </tr>
           </thead>
           <tbody>
@@ -135,18 +162,31 @@ export function WorkflowsPage() {
                 <td className="px-4 py-2 text-muted-foreground">
                   {dateFormat.format(new Date(wf.updatedAt))}
                 </td>
-                {canDelete && (
-                  <td className="px-2 py-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label={`Excluir ${wf.name}`}
-                      onClick={() => {
-                        setToDelete(wf);
-                      }}
-                    >
-                      <Trash2 />
-                    </Button>
+                {(canDelete || canDownload) && (
+                  <td className="px-2 py-1 text-right whitespace-nowrap">
+                    {canDownload && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Baixar ${wf.name}`}
+                        title="Baixar como JSON"
+                        onClick={() => void download(wf)}
+                      >
+                        <Download />
+                      </Button>
+                    )}
+                    {canDelete && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Excluir ${wf.name}`}
+                        onClick={() => {
+                          setToDelete(wf);
+                        }}
+                      >
+                        <Trash2 />
+                      </Button>
+                    )}
                   </td>
                 )}
               </tr>
@@ -188,6 +228,10 @@ export function WorkflowsPage() {
             Próxima
           </Button>
         </div>
+      )}
+
+      {projectId && (
+        <ImportWorkflowDialog projectId={projectId} open={importing} onOpenChange={setImporting} />
       )}
 
       <Dialog open={creating} onOpenChange={setCreating}>

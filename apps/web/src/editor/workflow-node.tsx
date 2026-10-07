@@ -134,6 +134,9 @@ export const WorkflowNodeView = memo(function WorkflowNodeView({
   const subOutputs = ports.outputs.filter((p) => isSubNodePort(p));
   const isSubNode = ports.outputs.length > 0 && subOutputs.length === ports.outputs.length;
   const hasError = errors.length > 0;
+  // Spec 015, FR-016: nó marcador de um nó importado sem suporte (tracejado âmbar).
+  const unsupported = node.type === 'placeholder.unsupported';
+  const originalType = typeof node.params.originalType === 'string' ? node.params.originalType : '';
   return (
     <div
       data-testid={`node-${node.name}`}
@@ -141,6 +144,7 @@ export const WorkflowNodeView = memo(function WorkflowNodeView({
       data-y={node.position[1]}
       data-diff={diffStatus}
       data-subnode={isSubNode || undefined}
+      data-unsupported={unsupported || undefined}
       title={hasError ? errors.join('\n') : undefined}
       // Portas espaçadas: o nó cresce com o número de entradas, saídas e sub-nós.
       style={nodeMinSize({
@@ -155,6 +159,7 @@ export const WorkflowNodeView = memo(function WorkflowNodeView({
         selected ? 'border-primary' : 'border-border',
         hasError && 'border-destructive',
         node.disabled && 'opacity-50',
+        unsupported && 'border-dashed border-amber-500',
         run?.status === 'error' && 'border-destructive',
         run?.status === 'running' && 'border-primary ring-2 ring-primary/30',
         diffStatus === 'added' && 'border-emerald-500 ring-2 ring-emerald-500/30',
@@ -202,7 +207,9 @@ export const WorkflowNodeView = memo(function WorkflowNodeView({
           {node.name}
         </span>
         <span className="truncate text-xs text-muted-foreground">
-          {description?.displayName ?? `Tipo desconhecido: ${node.type}`}
+          {unsupported
+            ? `Não suportado: ${originalType || 'tipo desconhecido'}`
+            : (description?.displayName ?? `Tipo desconhecido: ${node.type}`)}
         </span>
       </span>
       {pinned && (

@@ -272,6 +272,8 @@ describe('spec 002 — FR-006: catálogo de tipos de nó', () => {
       // Spec 011: memórias e ferramentas (sub-nós).
       'memory.buffer',
       'memory.postgres',
+      // Spec 015: marcador de nó importado sem suporte.
+      'placeholder.unsupported',
       'postgres.query',
       'postgres.write',
       'tool.code',

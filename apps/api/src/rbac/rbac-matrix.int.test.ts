@@ -188,6 +188,27 @@ const ACTIONS: Action[] = [
       return ok((await u.call('POST', `/workflows/${wf.id}/versions/1/restore`)).statusCode);
     },
   },
+  // Spec 015, FR-008/FR-017: baixar (Editor e Admin) e importar workflows em JSON.
+  {
+    name: 'Baixar workflow em JSON',
+    permission: 'workflow:update',
+    run: async (u) => {
+      const wf = await newWorkflow();
+      return ok((await u.call('GET', `/workflows/${wf.id}/export`)).statusCode);
+    },
+  },
+  {
+    name: 'Importar workflow em JSON (Olly Flow ou N8N)',
+    permission: 'workflow:create',
+    run: async (u) =>
+      ok(
+        (
+          await u.call('POST', `/projects/${project.id}/workflows/import`, {
+            content: { name: 'importado', nodes: [], connections: {} },
+          })
+        ).statusCode,
+      ),
+  },
   {
     name: 'Aprovar pedido de publicação de outra pessoa',
     permission: 'workflow:publish',

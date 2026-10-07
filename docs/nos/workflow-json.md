@@ -2,7 +2,12 @@
 
 Referência do arquivo JSON de um workflow do Olly Flow: o que se baixa, o que se importa e o que vai para a área de transferência ao copiar nós. Público: pessoas que leem ou editam o arquivo e **modelos de IA que geram workflows** a partir de uma descrição em linguagem natural. Este documento é autossuficiente: com ele, um modelo consegue montar um workflow importável sem acesso ao código.
 
-> **Situação:** formato definido pela [spec 015](../../specs/015-exportar-importar-json/spec.md) (Rascunho). Baixar, importar e colar JSON ainda **não estão disponíveis** na plataforma. Os tipos de nó, as portas e os parâmetros descritos aqui são os da plataforma atual. Os pontos em aberto da spec que afetam o formato estão marcados com **(proposta)**.
+> **Introduzido na [spec 015](../../specs/015-exportar-importar-json/spec.md).** Onde usar:
+> - **Baixar:** "Baixar" no editor ou na lista de workflows (Editor e Admin do projeto).
+> - **Importar:** **Workflows › Importar**, no formato Olly Flow ou N8N.
+> - **Copiar e colar:** Ctrl+C e Ctrl+V no canvas.
+>
+> Um teste automatizado garante que todo tipo de nó da plataforma está neste documento e que os exemplos completos da [seção 12](#12-exemplos-completos) são importáveis sem erros.
 
 **Como usar com um modelo de IA:** envie este documento como contexto e peça, por exemplo: "Gere o JSON de um workflow do Olly Flow que recebe um POST em `/pedidos`, grava no PostgreSQL e responde com o id gravado. Responda só com o JSON." O resultado é importado em **Workflows › Importar**.
 
@@ -28,6 +33,7 @@ O arquivo tem a mesma estrutura do JSON de workflow do N8N: uma lista de **nós*
 
 Exemplo mínimo: um gatilho manual ligado a um nó que define um campo.
 
+<!-- exemplo-completo -->
 ```json
 {
   "name": "Olá mundo",
@@ -83,11 +89,25 @@ Termos usados neste documento:
 | `meta` | objeto | não | Metadados. `meta.ollyFlow.formatVersion` é a versão do formato (atual: `1`). Sem ela, a importação assume `1` |
 | `tags` | lista | não | Etiquetas do N8N. O Olly Flow ainda não tem etiquetas: a exportação grava `[]` e a importação ignora |
 | `active` | booleano | não | Se o workflow estava publicado na origem. A importação **sempre** cria um rascunho não publicado |
-| `id` | texto | não | Id do workflow de origem. Ignorado na importação (o workflow recebe um id novo) |
+| `id` | texto | não | Id do workflow de origem. Se for de um workflow do projeto de destino, a importação **sobrepõe** esse workflow ([2.1](#21-importar-um-workflow-que-já-existe)) |
 
 Na exportação, `meta.ollyFlow` traz também `exportedAt` (data e hora ISO 8601) e `workflowVersion` (versão do rascunho exportado). Ambos são informativos e ignorados na importação.
 
 Para **copiar e colar**, o JSON pode ter só `nodes` e `connections` (e, opcionalmente, `pinData`).
+
+### 2.1 Importar um workflow que já existe
+
+A importação **sobrepõe** o rascunho de um workflow do projeto, em vez de criar outro, quando o arquivo corresponde a ele:
+1. pelo `id` do arquivo, que existe no arquivo baixado do Olly Flow;
+2. sem essa correspondência, pelo nome (o do arquivo ou o informado na tela), se houver **um único** workflow com esse nome no projeto. Com mais de um, cria um novo e avisa.
+
+A prévia diz qual workflow será sobreposto, e o botão vira "Importar e sobrepor".
+- **Versões:** o conteúdo vira uma **nova versão** do rascunho e o histórico é mantido, inclusive para comparar e restaurar.
+- **Nome:** continua o mesmo, a menos que outro seja informado.
+- **Publicação:** um workflow publicado continua com a versão publicada em produção até alguém publicar de novo.
+- **Permissão:** sobrepor exige a permissão de editar workflows.
+
+Um modelo de IA que gera um workflow novo deve omitir o `id` e usar um nome que ainda não exista no projeto.
 
 ## 3. Nó
 
@@ -169,6 +189,7 @@ As portas são numeradas na ordem abaixo, separadamente para entradas e saídas 
 | `logic.while` | 0 = entrada, 1 = continuar (retorno do laço) | 0 = laço (corpo), 1 = concluído |
 | `logic.loopOverItems` | 0 = entrada, 1 = continuar (retorno do laço) | 0 = concluído, 1 = lote (corpo) |
 | `ai.agent` | 0 | 0 |
+| `placeholder.unsupported` | `in0`, `in1`... de `params.ports.inputs` | `out0`, `out1`... de `params.ports.outputs` |
 
 **Sub-nós e entradas do Agent:**
 
@@ -319,7 +340,7 @@ Cada nó tem no máximo uma credencial.
 }
 ```
 
-**(proposta)** A exportação não inclui os dados fixados, a menos que o usuário escolha "Incluir dados fixados", porque podem conter dados pessoais (LGPD). A importação aceita `pinData` normalmente.
+A exportação **sempre** inclui os dados fixados, como no N8N (decisão do PO na spec 015, FR-009). Eles podem conter dados pessoais: por isso só Editor e Admin do projeto baixam, e cada download fica na auditoria. A importação aceita `pinData` normalmente.
 
 ## 8. Configurações do workflow
 
@@ -633,6 +654,17 @@ Chama outro workflow **publicado** que começa com `trigger.executeWorkflow` e r
 | `mode` | `once` \| `perItem` | `once` | Uma chamada com todos os itens, ou uma por item |
 | `waitForCompletion` | booleano | `true` | `false` dispara e segue sem esperar |
 
+#### `placeholder.unsupported` — Nó não suportado (marcador)
+
+Criado pela **importação** quando o tipo não existe nesta instalação (ou é um tipo do N8N sem conversão). Fica desabilitado: repassa a primeira entrada para a primeira saída. Enquanto existir, a publicação fica bloqueada; habilitado, falha ao executar. Não o use num workflow novo. Detalhes: [placeholder.unsupported.md](placeholder.unsupported.md).
+
+| Parâmetro | Tipo | Descrição |
+|---|---|---|
+| `originalType` / `originalTypeVersion` | texto / número | Tipo e versão do nó original |
+| `reason` | texto | Por que não foi convertido |
+| `originalJson` | texto | O nó original, em JSON (sem as credenciais) |
+| `ports` | `{ inputs: tipo[], outputs: tipo[] }` | Portas `in0..` e `out0..` copiadas das conexões originais (padrão: uma entrada e uma saída `main`) |
+
 ### IA
 
 #### `ai.agent` — Agent
@@ -702,30 +734,52 @@ Saída `ai_tool`. Todas, exceto `tool.mcp`, têm estes parâmetros comuns:
 
 ## 10. Regras de validação
 
-A importação aplica as mesmas regras do salvamento. Os **erros** impedem a importação; os **avisos**, não.
+A importação aplica as mesmas regras do salvamento e mais algumas próprias do arquivo:
+- os **erros** impedem a importação, e nada é criado;
+- as **pendências** e os **avisos** não impedem: o workflow é criado como rascunho e as pendências aparecem na prévia, para resolver no editor.
 
-| Código | Tipo | Regra |
-|---|---|---|
-| `NODE_UNKNOWN_TYPE` | erro | `type` não existe na plataforma |
-| `DUPLICATE_NODE_NAME` | erro | Dois nós com o mesmo `name` |
-| `DUPLICATE_NODE_ID` | erro | Dois nós com o mesmo `id` |
-| `EDGE_UNKNOWN_NODE` | erro | Conexão para um nó que não existe (confira o nome exato, com acentos e maiúsculas) |
-| `EDGE_UNKNOWN_PORT` | erro | Índice de saída ou de entrada que o nó não tem (por exemplo, a saída 2 de um If sem saída de erro) |
-| `SUBNODE_ON_MAIN` | erro | Conexão entre portas de tipos diferentes (por exemplo, um sub-nó ligado a uma entrada `main`) |
-| `AGENT_MODEL_REQUIRED` | erro | Agent sem modelo, ou com mais de um |
-| `AGENT_MEMORY_MAX` | erro | Agent com mais de uma memória |
-| `TOOL_NAME_INVALID` | erro | Nome de ferramenta com caracteres inválidos |
-| `TOOL_NAME_DUPLICATE` | erro | Duas ferramentas com o mesmo nome no mesmo Agent |
-| `TOOL_DESCRIPTION_REQUIRED` | erro | Ferramenta sem `toolDescription` |
-| `INVALID_CYCLE` | erro | Ciclo que não volta pela entrada continuar (`index: 1`) de um nó de laço |
-| `EXPRESSION_NOT_ALLOWED` | erro | Valor iniciado por `=` num parâmetro sem expressão |
-| `PARAM_OUT_OF_RANGE` | erro | Número fora da faixa (por exemplo, `numberInputs: 15` no Merge) |
-| `ORPHAN_NODE` | aviso | Nó sem nenhuma conexão (num workflow com mais de um nó) |
+**Erros do arquivo:**
 
-Além disso, a importação recusa um JSON inválido, a falta de `nodes` ou `connections`, nomes de nó vazios e tipos do N8N (`n8n-nodes-base.*`, `@n8n/*`). Ela lista como **pendências**, sem recusar:
-- as credenciais não encontradas;
-- os ids de workflow, de servidor MCP e de modelo que não existem no destino;
-- o caminho de webhook já usado.
+| Código | Regra |
+|---|---|
+| `IMPORT_INVALID` / `IMPORT_INVALID_JSON` | Não é um JSON de workflow (falta `nodes` ou `connections`, ou o JSON está malformado) |
+| `IMPORT_FORBIDDEN_KEY` | Chave `__proto__`, `constructor` ou `prototype` em qualquer nível |
+| `IMPORT_TOO_DEEP` / `IMPORT_TOO_MANY_NODES` | Aninhamento acima de `OLLY_IMPORT_MAX_DEPTH` (64) ou mais nós que `OLLY_IMPORT_MAX_NODES` (500). Arquivo maior que `OLLY_IMPORT_MAX_BYTES` (5 MiB): HTTP 413 |
+| `FORMAT_VERSION_UNSUPPORTED` | `meta.ollyFlow.formatVersion` maior que a suportada (1) |
+| `TYPE_VERSION_UNSUPPORTED` | `typeVersion` maior que a versão instalada do tipo |
+| `NODE_NAME_REQUIRED` / `NODE_TYPE_REQUIRED` / `NODE_INVALID` | Nó sem `name`, sem `type` ou com `parameters` que não é objeto |
+| `DUPLICATE_NODE_NAME` | Dois nós com o mesmo `name` (ids repetidos são trocados por novos) |
+| `CONNECTION_UNKNOWN_NODE` | Conexão de ou para um nó que não existe (confira o nome exato, com acentos e maiúsculas) |
+| `CONNECTION_UNKNOWN_PORT` | Índice de saída ou de entrada que o nó não tem (por exemplo, a saída 1 de um HTTP sem `onError: "continueErrorOutput"`) |
+| `N8N_FILE` / `OLLY_FILE` | Arquivo do N8N importado como "Olly Flow", ou o contrário: escolha o outro formato |
+
+**Erros da estrutura** (os mesmos do salvamento):
+
+| Código | Regra |
+|---|---|
+| `SUBNODE_ON_MAIN` | Conexão entre portas de tipos diferentes (por exemplo, um sub-nó ligado a uma entrada `main`) |
+| `AGENT_MODEL_REQUIRED` | Agent sem modelo, ou com mais de um |
+| `AGENT_MEMORY_MAX` | Agent com mais de uma memória |
+| `TOOL_NAME_INVALID` | Nome de ferramenta com caracteres inválidos |
+| `TOOL_NAME_DUPLICATE` | Duas ferramentas com o mesmo nome no mesmo Agent |
+| `TOOL_DESCRIPTION_REQUIRED` | Ferramenta sem `toolDescription` |
+| `INVALID_CYCLE` | Ciclo que não volta pela entrada continuar (`index: 1`) de um nó de laço |
+| `EXPRESSION_NOT_ALLOWED` | Valor iniciado por `=` num parâmetro sem expressão |
+| `PARAM_OUT_OF_RANGE` | Número fora da faixa (por exemplo, `numberInputs: 15` no Merge) |
+
+**Pendências:**
+
+| Código | Situação |
+|---|---|
+| `UNSUPPORTED_NODE` | Tipo desconhecido: o nó vira um **marcador desabilitado** ([`placeholder.unsupported`](placeholder.unsupported.md)) com o JSON original. A publicação fica bloqueada até ele ser substituído |
+| `CREDENTIAL_PENDING` | Credencial não encontrada no projeto (pelo id ou pelo nome e tipo) |
+| `WORKFLOW_REF_NOT_FOUND` | `workflowId` de `flow.executeWorkflow` ou `tool.workflow` inexistente no projeto |
+| `ERROR_WORKFLOW_REMOVED` | `settings.errorWorkflow` inexistente: retirado das configurações |
+| `MCP_SERVER_NOT_FOUND` | `serverId` vazio ou fora do catálogo do projeto |
+| `AI_MODEL_NOT_ALLOWED` | `model` do `ai.chatModel` não liberado no projeto |
+| `WEBHOOK_PATH_IN_USE` | Método e caminho do webhook já publicados por outro workflow |
+
+**Aviso:** `ORPHAN_NODE`, nó sem nenhuma conexão (num workflow com mais de um nó).
 
 ## 11. Lista de verificação para gerar um workflow
 
@@ -743,7 +797,7 @@ Além disso, a importação recusa um JSON inválido, a falta de `nodes` ou `con
 
 ## 12. Exemplos completos
 
-Todos os exemplos abaixo são importáveis sem erros (os credenciais e os ids de outros recursos aparecem como pendências).
+Todos os exemplos abaixo são importáveis sem erros. As credenciais, os modelos e os ids de outros recursos aparecem como pendências.
 
 ### 12.1 Webhook que responde com dados montados
 
@@ -1291,7 +1345,7 @@ Neste exemplo, três nós não têm `id` nem `typeVersion`, como num JSON escrit
 
 | Aspecto | N8N | Olly Flow |
 |---|---|---|
-| Tipos de nó | `n8n-nodes-base.httpRequest`... | `http.request`... ([seção 9](#9-catálogo-de-nós)). Arquivos do N8N passam pelo importador do N8N (spec 012) |
+| Tipos de nó | `n8n-nodes-base.httpRequest`... | `http.request`... ([seção 9](#9-catálogo-de-nós)). Arquivos do N8N são importados com o formato "N8N" ([importação do N8N](../importacao-n8n.md)) |
 | Parâmetros | Os do N8N | Os do Olly Flow. Muitos são equivalentes, mas não idênticos |
 | Retorno de laço (Loop Over Items) | Volta para a entrada 0 do próprio nó | Volta para a entrada 1 (continuar) |
 | While | Não existe | `logic.while` |

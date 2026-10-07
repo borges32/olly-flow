@@ -11,12 +11,13 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import type { NodeDescription } from '@olly/nodes';
-import type { ExecutionDetail, WorkflowDetail } from '@olly/shared-types';
+import type { ExecutionDetail, WorkflowDetail, WorkflowFile } from '@olly/shared-types';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
   ChartGantt,
   ClipboardCopy,
+  Download,
   Eye,
   History,
   Loader2,
@@ -29,7 +30,7 @@ import { Link, useBlocker, useNavigate, useParams, useSearchParams } from 'react
 import { toast } from 'sonner';
 import { ApiError } from '@/api/client';
 import { useApi } from '@/api/api-provider';
-import { queryKeys, useNodeTypes, useWorkflow } from '@/api/queries';
+import { queryKeys, useCredentials, useNodeTypes, useWorkflow } from '@/api/queries';
 import { useCan } from '@/api/use-can';
 import { useTheme } from '@/components/theme/theme-provider';
 import { Badge } from '@/components/ui/badge';
@@ -59,6 +60,13 @@ import { connectionRejection, isSubNodeEdge } from './subnodes';
 import { WorkflowSettingsButton } from './workflow-settings';
 import { VersionHistoryPanel, type DiffView } from './version-history';
 import { diffCanvas } from './version-diff';
+import {
+  catalogFrom,
+  downloadJson,
+  looksLikeWorkflowJson,
+  parsePastedFile,
+  selectionAsFileText,
+} from './workflow-file-io';
 
 const nodeTypes = { olly: WorkflowNodeView };
 const edgeTypes = { olly: WorkflowEdgeView };
@@ -176,6 +184,12 @@ export function Editor({
   const state = useEditorStore();
   const { nodes, edges, selection, errors, warnings, dirty, name, run, pinData } = state;
   const typesByName = useMemo(() => new Map(types.map((t) => [t.type, t])), [types]);
+  // Spec 015: credenciais do projeto (copiar e colar nós no formato do arquivo).
+  const credentialsQuery = useCredentials(workflow.projectId, canUpdate);
+  const credentials = useMemo(
+    () => (credentialsQuery.data ?? []).map((c) => ({ id: c.id, type: c.type, name: c.name })),
+    [credentialsQuery.data],
+  );
   const [measured, setMeasured] = useState<Record<string, { width: number; height: number }>>({});
   const [saving, setSaving] = useState(false);
   const [conflict, setConflict] = useState(false);
@@ -444,6 +458,66 @@ export function Editor({
     toast.info('Versão mais recente carregada');
   }, [api, queryClient, workflow.id]);
 
+  // Colar (FR-008 e spec 015, FR-020): JSON no formato do arquivo vira nós; sem ele, a cópia
+  // interna. Pelo evento `paste` (o Ctrl+V não é interceptado), dentro de campos não vale.
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      if (locked || document.querySelector('[data-testid="ndv"]')) return;
+      const target = e.target;
+      if (
+        target instanceof Element &&
+        target.closest('input, textarea, select, [contenteditable="true"]')
+      )
+        return;
+      const store = useEditorStore.getState();
+      const text = e.clipboardData?.getData('text/plain') ?? '';
+      e.preventDefault();
+      if (looksLikeWorkflowJson(text)) {
+        const parsed = parsePastedFile(text, catalogFrom(typesByName), credentials, () =>
+          crypto.randomUUID(),
+        );
+        if (!parsed.ok) {
+          toast.error('O texto colado não é um workflow válido', {
+            description: parsed.errors.map((i) => i.message).join('\n'),
+          });
+          return;
+        }
+        store.pasteNodes(parsed.clipboard);
+        if (parsed.pending.length > 0) {
+          toast.warning('Nós colados com pendências', {
+            description: parsed.pending.map((i) => i.message).join('\n'),
+          });
+        }
+      } else {
+        store.paste();
+      }
+      const state = useEditorStore.getState();
+      const pasted = state.nodes.find((n) => n.id === state.selection.nodeIds[0]);
+      if (pasted) ensureVisible(pasted.position);
+    };
+    window.addEventListener('paste', onPaste);
+    return () => {
+      window.removeEventListener('paste', onPaste);
+    };
+  }, [locked, typesByName, credentials, ensureVisible]);
+
+  // Spec 015, FR-006: baixa o que está no canvas (inclusive alterações não salvas).
+  const download = useCallback(async () => {
+    const state = useEditorStore.getState();
+    const fileName = (state.name.trim() || workflow.name) + '.json';
+    try {
+      const file = await api.post<WorkflowFile>(`/api/v1/workflows/${workflow.id}/export`, {
+        definition: state.definition(),
+        name: state.name.trim() || workflow.name,
+      });
+      downloadJson(file, fileName);
+    } catch (e) {
+      toast.error('Não foi possível baixar o workflow', {
+        description: e instanceof ApiError ? e.message : undefined,
+      });
+    }
+  }, [api, workflow.id, workflow.name]);
+
   // Atalhos (FR-008). Dentro de campos de texto só o Ctrl+S vale.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -473,13 +547,16 @@ export function Editor({
         store.redo();
       } else if (mod && key === 'c') {
         store.copy();
-      } else if (mod && key === 'v') {
-        e.preventDefault();
-        store.paste();
-        const pasted = useEditorStore
-          .getState()
-          .nodes.find((n) => n.id === useEditorStore.getState().selection.nodeIds[0]);
-        if (pasted) ensureVisible(pasted.position);
+        // Spec 015, FR-019: a área de transferência recebe o JSON no formato do arquivo.
+        const text = selectionAsFileText(
+          store,
+          store.selection.nodeIds,
+          catalogFrom(typesByName),
+          credentials,
+        );
+        // Sem HTTPS (ou sem permissão) a API não existe: fica só a cópia interna.
+        const system = navigator.clipboard as globalThis.Clipboard | undefined;
+        if (text && system) void system.writeText(text).catch(() => undefined);
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault();
         store.removeSelection();
@@ -489,7 +566,7 @@ export function Editor({
     return () => {
       window.removeEventListener('keydown', onKeyDown);
     };
-  }, [save, locked, ensureVisible]);
+  }, [save, locked, ensureVisible, typesByName, credentials]);
 
   // Alterações não salvas: confirma antes de sair (FR-008).
   useEffect(() => {
@@ -593,6 +670,16 @@ export function Editor({
             projectId={workflow.projectId}
             readOnly={readOnly}
           />
+        )}
+        {!execution && canUpdate && (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => void download()}
+            title="Baixar o workflow como JSON (inclusive alterações não salvas)"
+          >
+            <Download /> Baixar
+          </Button>
         )}
         {!execution && (
           <PublishControls workflow={workflow} dirty={dirty} canPublish={canPublish} />

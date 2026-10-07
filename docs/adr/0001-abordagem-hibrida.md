@@ -85,5 +85,11 @@ Construir uma **plataforma própria (Olly Flow)**, mantendo **compatibilidade co
 
 **Ponto de revisão:** fim da fase 1 (MVP), junto com o go/no-go de TCO versus N8N Enterprise.
 
+> **Nota (07/10/2026, spec 015):** o importador do item 3 foi implementado na [spec 015](../../specs/015-exportar-importar-json/spec.md), na mesma tela da importação do formato do Olly Flow. Diferenças em relação à tabela inicial:
+> - `mcpClientTool` vira `tool.mcp` (no N8N é uma ferramenta do Agent);
+> - `scheduleTrigger` e o código Python viram nós marcadores enquanto `trigger.schedule` e `code.python` não existirem.
+>
+> Detalhes: [docs/importacao-n8n.md](../importacao-n8n.md).
+
 ---
 Índice: [README](README.md)

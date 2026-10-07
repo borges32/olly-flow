@@ -23,7 +23,9 @@ export type IssueCode =
   | 'TOOL_NAME_DUPLICATE'
   | 'TOOL_DESCRIPTION_REQUIRED'
   // Spec 007, FR-001 (e todo parâmetro numérico com faixa no schema).
-  | 'PARAM_OUT_OF_RANGE';
+  | 'PARAM_OUT_OF_RANGE'
+  // Spec 015, FR-016: nó marcador (só na publicação; o rascunho aceita).
+  | 'UNSUPPORTED_NODE';
 
 export interface Issue {
   code: IssueCode;
@@ -332,3 +334,21 @@ function validateSubNodes(
 const hasToolName = (type: NodeDefinition) =>
   type.outputs.some((p) => p.kind === 'ai_tool') &&
   Object.hasOwn(type.paramsSchema.properties ?? {}, 'toolName');
+
+/**
+ * Spec 015, FR-016: nós marcadores (`placeholder.unsupported`) impedem a publicação. O
+ * salvamento do rascunho continua aceitando, para o usuário resolvê-los no editor.
+ */
+export function unsupportedNodeIssues(def: WorkflowDefinition): Issue[] {
+  return def.nodes
+    .filter((n) => n.type === 'placeholder.unsupported')
+    .map((n) => {
+      const original = n.params.originalType;
+      const what = typeof original === 'string' && original ? ` (${original})` : '';
+      return {
+        code: 'UNSUPPORTED_NODE' as const,
+        message: `Nó "${n.name}" não é suportado${what}: substitua-o antes de publicar`,
+        nodeIds: [n.id],
+      };
+    });
+}

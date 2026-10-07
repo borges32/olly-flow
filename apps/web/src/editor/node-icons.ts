@@ -1,6 +1,7 @@
 import {
   Bot,
   Brain,
+  CircleHelp,
   Code,
   Database,
   DatabaseZap,
@@ -43,6 +44,8 @@ export const NODE_ICONS: Record<string, LucideIcon> = {
   siren: Siren,
   // Spec 010.
   'plug-zap': PlugZap,
+  // Spec 015: nó marcador de nó importado sem suporte.
+  'circle-help': CircleHelp,
   // Spec 008.
   hourglass: Hourglass,
   'log-in': LogIn,

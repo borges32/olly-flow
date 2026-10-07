@@ -29,6 +29,7 @@ Cada nó vive em `packages/nodes/src/<categoria>/<nome>/` (`definition.ts`, `exe
 | `ai.chatModel` | Modelo de chat (sub-nó) | 011 | [ai.chatModel.md](ai.chatModel.md) |
 | `memory.postgres`, `memory.buffer` | Memória persistente e temporária (sub-nós) | 011 | [memory.md](memory.md) |
 | `tool.mcp`, `tool.httpRequest`, `tool.postgresQuery`, `tool.workflow`, `tool.code` | Ferramentas do agente (sub-nós) | 011 | [tools.md](tools.md) |
+| `placeholder.unsupported` | Nó não suportado (marcador da importação) | 015 | [placeholder.unsupported.md](placeholder.unsupported.md) |
 
 **Sub-nós (spec 011):** nós cujas saídas são todas de um tipo `ai_*` (`ai_languageModel`, `ai_memory`, `ai_tool`). Conectam-se às entradas de mesmo tipo na base do Agent (desenhadas embaixo do nó, com arestas tracejadas), não executam no fluxo principal e fornecem ao nó pai um objeto (`NodeDefinition.supplyData`), lido por `ctx.subNodes(tipo, item)`. `PortDef.maxConnections` limita as conexões de uma entrada (1 modelo, 1 memória).
 

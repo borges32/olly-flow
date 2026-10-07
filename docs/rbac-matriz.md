@@ -19,6 +19,8 @@ Papéis por projeto. "Admin da plataforma" é o grupo de administração do IdP 
 | Gerenciar membros do projeto | `project:manage` | ✅ | ✅ | — | — | — | — |
 | Ver histórico, versões e diff | `workflow:read` | ✅ | ✅ | ✅ | ✅ | ✅ | — |
 | Restaurar versão | `workflow:update` | ✅ | ✅ | ✅ | — | — | — |
+| Baixar workflow em JSON | `workflow:update` | ✅ | ✅ | ✅ | — | — | — |
+| Importar workflow em JSON (Olly Flow ou N8N) | `workflow:create` | ✅ | ✅ | ✅ | — | — | — |
 | Aprovar pedido de publicação de outra pessoa | `workflow:publish` | ✅ | ✅ | ✅ | — | — | — |
 | Ver dados das execuções (projeto com "Executor vê os dados") | `execution:readData` | ✅ | ✅ | ✅ | ✅ | — | — |
 | Configurar governança e mascaramento do projeto | `project:manage` | ✅ | ✅ | — | — | — | — |

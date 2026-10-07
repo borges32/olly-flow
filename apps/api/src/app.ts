@@ -39,6 +39,19 @@ export async function createApp(
   // Spec 005: /webhook e /webhook-test ficam fora do prefixo e dos guards (autenticação própria).
   app.get(WebhookGateway).register(app.getHttpAdapter().getInstance());
 
+  // Spec 015, NFR-002: as rotas de importação e de exportação do canvas aceitam corpos até o
+  // limite configurado (o texto JSON escapado ocupa mais que o arquivo); acima do limite do
+  // arquivo, o serviço responde 413 citando-o.
+  const ioBodyLimit = config.workflowImport.maxBytes * 2 + 64 * 1024;
+  app
+    .getHttpAdapter()
+    .getInstance()
+    .addHook('onRoute', (route) => {
+      if (/\/workflows\/import(\/preview)?$|\/workflows\/:id\/export$/.test(route.url)) {
+        route.bodyLimit = Math.max(route.bodyLimit ?? 0, ioBodyLimit);
+      }
+    });
+
   app
     .getHttpAdapter()
     .getInstance()

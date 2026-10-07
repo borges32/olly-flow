@@ -77,7 +77,7 @@ export interface NodeDefinition {
 `NodeContext` oferece, entre outros: `getParam(name, itemIndex)` (com expressões já resolvidas para o item; erros de expressão são lançados como `ExpressionError` na leitura), `setVariable(name, value)` (variável da execução, lida em `$vars`; spec 003), `getCredential()` (spec 004: devolve `{ id, type, data, updatedAt }`, a credencial do nó decifrada e verificada contra o projeto do workflow), `signal` (`AbortSignal`, abortado pelo timeout do nó ou pelo cancelamento), `logger`, `helpers` (paired items, binários no object storage e `registerSecret(valor)`, que inclui um segredo derivado, como um token OAuth2, no mascaramento), `runCode({ code, mode })` (spec 005: código de usuário no task runner com o contexto do nó; o `console` vai para o registro do nó), `respondToWebhook(resposta)` (spec 005: resposta do webhook; só a primeira vale, as seguintes devolvem `false`) e `mapItems(itens, fn)` (spec 006: processa os itens com a concorrência de `settings.parallelItems` quando o tipo tem `supportsParallelItems`; senão, um por vez; ordem preservada). Tipos com `supportsParallelItems` na spec 006: `http.request`, `postgres.query` (modo por item) e `postgres.write` (sem transação única). Spec 007:
 - `NodeContext.loop` (`LoopState { index, maxIterations, accumulated, data }`) existe só nos nós de laço;
 - `NodeContext.maxLoopIterations` é o teto global;
-- `NodeDefinition.dynamicPorts` (`mergeInputs` | `switchOutputs`) descreve portas calculadas pelos parâmetros, e `resolveNodePorts(tipo, nó)` (`@olly/shared-types`) devolve as portas efetivas, inclusive a saída `error` quando `settings.onError = 'errorOutput'`;
+- `NodeDefinition.dynamicPorts` (`mergeInputs` | `switchOutputs` | `placeholder`, este da spec 015) descreve portas calculadas pelos parâmetros, e `resolveNodePorts(tipo, nó)` (`@olly/shared-types`) devolve as portas efetivas, inclusive a saída `error` quando `settings.onError = 'errorOutput'`;
 - os laços são analisados por `analyzeLoops` (`@olly/shared-types`): ciclos só pela porta `continue` de um nó de laço dominador. `NodeExecuteInput` traz `inputs` (itens por porta) e `items` (atalho para `inputs.main`).
 
 Spec 008 (parte antecipada para a 011):
@@ -116,7 +116,7 @@ Spec 011:
 | `logic.merge` | 007 | `ai.mcpClient` | 010 |
 | `logic.while` | 007 | `ai.chatModel` | 011 |
 | `logic.loopOverItems` | 007 | `ai.agent` | 011 |
-| `placeholder.unsupported` | 012 | `tool.*`, `memory.*` (sub-nós) | 011 |
+| `placeholder.unsupported` | 015 | `tool.*`, `memory.*` (sub-nós) | 011 |
 
 ## Permissões RBAC
 
@@ -263,3 +263,21 @@ Usuários locais (e-mail e senha) sempre; login OIDC opcional (`OLLY_IDP_ENABLED
 - **Vinculação:** token OIDC com o e-mail de um usuário local sem `external_id` vincula as contas se `email_verified` for `true`; senão, 403.
 - **Comando:** `node apps/api/dist/cli/users-admin.js --email <e-mail> [--name <nome>]` (na raiz do repositório, também dentro do container `api`) (recuperação de administrador).
 - **Configuração:** `OLLY_IDP_ENABLED`, `OLLY_SESSION_IDLE_MINUTES` (480), `OLLY_SESSION_MAX_HOURS` (24), `OLLY_LOGIN_MAX_ATTEMPTS` (5), `OLLY_LOGIN_LOCK_MINUTES` (15).
+
+## Exportar e importar workflows em JSON (spec 015)
+
+Formato do arquivo (estrutura do N8N, tipos e parâmetros do Olly Flow): [docs/nos/workflow-json.md](../nos/workflow-json.md). Importação do N8N: [docs/importacao-n8n.md](../importacao-n8n.md).
+
+- **Conversão (`@olly/shared-types`, `workflow-file.ts`):**
+  - `toWorkflowFile(definição, { catalog, credentialOf, fragment? })` e `fromWorkflowFile(json, { catalog, newId, limits?, fragment?, allowN8nTypes? })` → `{ name, definition, issues: { errors, pending, warnings }, credentialRefs, counts }`;
+  - `resolveCredentialRef` e `checkUntrusted`;
+  - o catálogo (`NodeTypeCatalog`) é o `NodeRegistry` na API e a lista `/node-types` no editor.
+- **Tipos:** `WorkflowFile` (`meta.ollyFlow.formatVersion = 1`), `ImportPreview`, `ImportIssue` e `MigrationReport`.
+- **Rotas:**
+  - `POST /projects/:id/workflows/import/preview` (`workflow:create`): `{ format: 'olly' | 'n8n', content: texto | objeto, name? }` → `ImportPreview`;
+  - `POST /projects/:id/workflows/import` (`workflow:create`; sobrepor exige também `workflow:update`): cria o rascunho, ou sobrepõe o workflow correspondente (`ImportPreview.target`: pelo `id` do arquivo ou pelo nome único no projeto) como nova versão → `{ workflow, preview, overwritten }` (201). Com erro, 422 com as issues; acima de `OLLY_IMPORT_MAX_BYTES`, 413;
+  - `GET /workflows/:id/export` (`workflow:update`): o rascunho salvo, com `Content-Disposition: attachment`;
+  - `POST /workflows/:id/export { definition, name? }` (`workflow:update`): o canvas.
+- **Nó marcador:** `placeholder.unsupported` (`dynamicPorts: { kind: 'placeholder' }`, portas `in0..`/`out0..` de `params.ports`). `unsupportedNodeIssues` (`@olly/engine`) gera `UNSUPPORTED_NODE` na publicação. O motor decide se um nó é sub-nó pelas portas efetivas.
+- **Auditoria:** `workflow.export` (`{ projectId, source: 'saved' | 'canvas', nodes }`) e `workflow.import` (`{ projectId, format, overwritten, nodes, pending, unsupported }`), sem o conteúdo.
+- **Configuração:** `OLLY_IMPORT_MAX_BYTES` (5 MiB), `OLLY_IMPORT_MAX_NODES` (500), `OLLY_IMPORT_MAX_DEPTH` (64).

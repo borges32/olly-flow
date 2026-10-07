@@ -74,7 +74,9 @@
 - O mascaramento da spec 009 (`maskingLogOptions`) é aplicado **antes** da exportação, pois o destino recebe a linha já serializada; teste de que o exportado sai mascarado.
 - A saída local (stdout) continua; o envio ao SIEM, se houver, é feito pelo coletor da instituição.
 
-### §5 Importador (`packages/importer-n8n`)
+### §5 Importador (`packages/importer-n8n`) — passou para a spec 015
+
+> Desde 07/10/2026 o importador é da [spec 015](../015-exportar-importar-json/plan.md); esta seção fica como histórico.
 - **Entrada:** objeto ou array de workflows do N8N. Saída: `{ workflows: WorkflowDefinition[], report }`.
 - **Nós:** novo `id` (uuid); `name` e `position` preservados; `disabled` preservado.
 - **Conexões:** `connections[sourceName][type][outputIndex] = [{ node, type, index }]` → `Edge`, com o mapeamento de portas:
@@ -166,3 +168,4 @@ Nova coluna `executions.trace_id`. Nenhuma tabela nova.
 |---|---|---|
 | 06/10/2026 | Reescrito conforme a spec (Histórico de 06/10/2026): observabilidade só por OTLP para um coletor OTel (sem Prometheus/Grafana/Tempo/Loki no projeto, sem link do trace na UI, sem envio direto ao SIEM); removidos Helm (§7 antigo) e carga (§8 antigo); novo `packages/telemetry` | Decisão humana |
 | 06/10/2026 | Implementação da HU-1 (decisão humana: só a telemetria nesta rodada; importador e pentest pendentes): spans de nó pelos callbacks do runner (motor sem mudança); auto-instrumentação só de `http` (ESM); logs exportados por um destino do pino após o mascaramento, com os ids do trace acrescentados depois dele; spans do task-runner criados no cliente (o filho segue sem segredos nem SDK); sem spans `gen_ai.*` nesta rodada (o uso de LLM vai nas métricas) | Limitações do ESM, segurança do processo filho e simplicidade |
+| 07/10/2026 | §5, §6 (importação) e §7 (testes do importador) passaram para o plano da spec 015 | Decisão humana: importador junto com a importação do formato do Olly Flow |

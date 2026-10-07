@@ -18,7 +18,9 @@
 - [ ] T013 Resiliência: coletor desligado ou inacessível sem afetar execuções; medição do custo (FR-004, NFR-001, SC-006)
 - [ ] T014 Testes de exportação e de vazamento com valores sentinela (SC-001, SC-002, SC-003)
 
-## Fase 3 — HU-2: Importador (P1)
+## Fase 3 — HU-2: Importador (P1) — passou para a spec 015 (07/10/2026)
+
+As tarefas abaixo não fazem mais parte desta spec; ver [specs/015-exportar-importar-json/tasks.md](../015-exportar-importar-json/tasks.md).
 
 - [ ] T020 Conversão de nós e conexões com o mapeamento de portas (FR-005) → plan §5
 - [ ] T021 [P] Conversores por tipo/versão + testes unitários (FR-005) → plan §5

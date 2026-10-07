@@ -14,7 +14,8 @@ docs/
 ├── arquitetura/                  ← stack, contratos, visão geral, modelo de dados
 ├── adr/                          ← decisões de arquitetura
 ├── roadmap.md                    ← ordem das specs, status, pré-requisitos humanos
-├── nos/ ...                      ← documentação por nó (gerada pelas specs)
+├── nos/ ...                      ← documentação por nó e formato JSON do workflow (nos/workflow-json.md)
+├── importacao-n8n.md             ← importação de workflows do N8N (spec 015)
 ├── estudos/                      ← análise original (não normativa)
 └── _arquivo/                     ← documentos substituídos (não usar)
 specs/

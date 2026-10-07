@@ -147,6 +147,8 @@ export interface EditorState {
   setSelection(selection: Selection): void;
   copy(): void;
   paste(): void;
+  /** Spec 015, FR-020: acrescenta nós vindos de fora (JSON colado no formato do arquivo). */
+  pasteNodes(clipboard: Clipboard): void;
   undo(): void;
   redo(): void;
   setPinData(nodeId: string, items: Item[] | null): void;
@@ -515,6 +517,17 @@ export const useEditorStore = create<EditorState>()((set, get) => {
       const { nodes, edges, selection } = get();
       if (selection.nodeIds.length > 0)
         set({ clipboard: copySelection(nodes, edges, selection.nodeIds) });
+    },
+
+    pasteNodes: (clipboard) => {
+      const { nodes, edges } = get();
+      if (clipboard.nodes.length === 0) return;
+      const pasted = prepareClipboardPaste(clipboard, nodes, newId);
+      commit({
+        nodes: [...nodes, ...pasted.nodes],
+        edges: [...edges, ...pasted.edges],
+        selection: { nodeIds: pasted.nodes.map((n) => n.id), edgeIds: [] },
+      });
     },
 
     paste: () => {

@@ -61,3 +61,9 @@ export class TooManyRequestsError extends DomainError {
   readonly code = 'too_many_requests';
   readonly httpStatus = 429;
 }
+
+/** Spec 015, NFR-002: conteúdo acima do limite configurado (ex.: arquivo importado). */
+export class PayloadTooLargeError extends DomainError {
+  readonly code = 'payload_too_large';
+  readonly httpStatus = 413;
+}

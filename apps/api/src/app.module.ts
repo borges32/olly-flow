@@ -23,6 +23,7 @@ import { NodeTypesModule } from './node-types/node-types.module.js';
 import { ProjectsModule } from './projects/projects.module.js';
 import { UsersModule } from './users/users.module.js';
 import { WebhooksModule } from './webhooks/webhooks.module.js';
+import { WorkflowIoModule } from './workflow-io/workflow-io.module.js';
 import { WorkflowsModule } from './workflows/workflows.module.js';
 
 /**
@@ -85,6 +86,8 @@ export class AppModule {
         McpModule,
         // Spec 011: aprovações, uso e custo de IA.
         AiModule,
+        // Spec 015: baixar e importar workflows em JSON.
+        WorkflowIoModule,
       ],
       providers: [{ provide: APP_FILTER, useClass: DomainExceptionFilter }],
     };

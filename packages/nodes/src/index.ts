@@ -63,3 +63,4 @@ export {
   PROVIDER_BY_CREDENTIAL,
   GEMINI_OPENAI_BASE_URL,
 } from './ai/runtime/models.js';
+export { placeholderNode, PLACEHOLDER_NODE_TYPE } from './flow/placeholder/definition.js';

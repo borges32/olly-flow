@@ -4,6 +4,7 @@ import { mcpClientNode } from './ai/mcp-client/definition.js';
 import { bufferMemoryNode, postgresMemoryNode } from './ai/memory/definitions.js';
 import { createAgentToolNodes } from './ai/tools/definitions.js';
 import { executeWorkflowNode } from './flow/execute-workflow/definition.js';
+import { placeholderNode } from './flow/placeholder/definition.js';
 import { waitNode } from './flow/wait/definition.js';
 import { executeWorkflowTrigger } from './trigger/execute-workflow/definition.js';
 import { codeJavascriptNode } from './code/javascript/definition.js';
@@ -81,6 +82,8 @@ export function createBuiltinNodes(options: BuiltinNodeOptions = {}): NodeDefini
     postgresMemoryNode,
     bufferMemoryNode,
     ...createAgentToolNodes({ httpRequest, postgresQuery }),
+    // Spec 015: marcador de nó importado sem suporte.
+    placeholderNode,
   ];
 }
 

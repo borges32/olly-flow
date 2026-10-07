@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { Db } from '@olly/db';
-import { validateWorkflow } from '@olly/engine';
+import { unsupportedNodeIssues, validateWorkflow } from '@olly/engine';
 import { WEBHOOK_AUTH_CREDENTIAL, type NodeRegistry } from '@olly/nodes';
 import type {
   PublishResponse,
@@ -142,7 +142,12 @@ export class PublishingService {
       this.credentials,
       this.config.webhook.requireAuth,
     );
-    const errors = [...structure.errors, ...hooks.errors];
+    const errors = [
+      ...structure.errors,
+      ...hooks.errors,
+      // Spec 015, FR-016: nós marcadores (importação) bloqueiam a publicação.
+      ...unsupportedNodeIssues(definition),
+    ];
     if (errors.length > 0) {
       throw new UnprocessableError('O workflow não pode ser publicado', {
         issues: errors.map((e) => ({ code: e.code, message: e.message, nodeIds: e.nodeIds })),

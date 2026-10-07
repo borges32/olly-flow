@@ -89,6 +89,7 @@ beforeAll(async () => {
       requireAuth: false,
     },
     code: { timeoutMs: 30_000, memoryMb: 128 },
+    workflowImport: { maxBytes: 5 * 1024 * 1024, maxNodes: 500, maxDepth: 64 },
   });
   const discovery = new DiscoveryService(app.get(ModulesContainer));
   const reflector = app.get(Reflector);

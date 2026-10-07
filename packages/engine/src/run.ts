@@ -549,9 +549,10 @@ export async function runWorkflow(
   }
   // Spec 011, FR-001: sub-nós (modelo, memória, ferramentas) e suas conexões não entram no
   // agendamento; o nó ao qual estão ligados os instancia (`ctx.subNodes`).
+  // Portas efetivas: um nó marcador (spec 015) ligado como ferramenta também é sub-nó.
   const isSubNode = (n: WorkflowNode) => {
     const t = registry.get(n.type);
-    return t !== undefined && isSubNodeType(t);
+    return t !== undefined && isSubNodeType(resolveNodePorts(t, n));
   };
   const subNodeIds = new Set(def.nodes.filter(isSubNode).map((n) => n.id));
   const scoped: WorkflowDefinition = {

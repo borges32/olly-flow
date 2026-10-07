@@ -97,6 +97,7 @@ export async function startTestContext(
       requireAuth: false,
     },
     code: { timeoutMs: 30_000, memoryMb: 128 },
+    workflowImport: { maxBytes: 5 * 1024 * 1024, maxNodes: 500, maxDepth: 64 },
     auth: {
       idpEnabled: true,
       sessionIdleMs: 8 * 3_600_000,
