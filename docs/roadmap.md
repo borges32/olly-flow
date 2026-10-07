@@ -23,7 +23,7 @@
 | 013 | [hardening-go-live](../specs/013-hardening-go-live/spec.md) | 4 — Hardening | Pentest, documentação, execução paralela ao N8N, go-live | 012 | Aprovada | 🚀 Go-live |
 | 014 | [primeiro-usuario](../specs/014-primeiro-usuario/spec.md) | 1 — MVP (apoio à UX) | Primeiro usuário, usuários locais e login pelo IdP opcional (desativado por padrão) | 002, 009 | Implementada ([relatório](../specs/014-primeiro-usuario/report.md)) — validação da Segurança pendente | |
 | 015 | [exportar-importar-json](../specs/015-exportar-importar-json/spec.md) | 4 — Hardening (apoio à migração e à IA) | Baixar e importar workflows em JSON no formato do N8N, copiar e colar nós como JSON, documentação do formato para modelos de IA ([docs/nos/workflow-json.md](nos/workflow-json.md)) | 002, 009, 011 | Implementada ([relatório](../specs/015-exportar-importar-json/report.md)) — SC-004 (IA) e workflows reais da POC pendentes | |
-| 016 | [nos-bridge-agentix](../specs/016-nos-bridge-agentix/spec.md) | 4 — Hardening (integrações institucionais) | Nós Bridge Chat Model (gateway interno de IA, token de curta duração) e Agentix (agentes e workflows do Agentix), com importação dos nós customizados do N8N | 004, 011, 015 | Planejada (esclarecida; plano e tarefas aguardando revisão humana) | |
+| 016 | [nos-bridge-agentix](../specs/016-nos-bridge-agentix/spec.md) | 4 — Hardening (integrações institucionais) | Nós Bridge Chat Model (gateway interno de IA, token de curta duração) e Agentix (agentes e workflows do Agentix), com importação dos nós customizados do N8N | 004, 011, 015 | Planejada (esclarecida e com pré-requisitos respondidos; plano e tarefas aguardando revisão humana) | |
 
 As specs estão organizadas por escopo, não por calendário. A referência original era de 13 sprints de 2 semanas com uma equipe de 4 pessoas. Com implementação por agente de IA, o ritmo depende principalmente das revisões humanas entre specs.
 
@@ -49,7 +49,7 @@ Entre cada spec, antes de iniciar a próxima:
 | 013 | Relatório do pentest; data e janela do go-live; aprovação de riscos aceitos | Segurança + Gestão |
 | 014 | ~~Decidir a relação com a NFR-G03~~ (usuário local como padrão e IdP opcional, 06/10/2026); validação da Segurança para o login local (pontos em aberto respondidos em 06/10/2026) | PO + Segurança |
 | 015 | ~~Responder aos pontos em aberto~~ (respondidos em 07/10/2026); exportar **todos** os workflows da POC para `fixtures/n8n/`; lista dos 10 pedidos de referência do SC-004 | PO + Segurança |
-| 016 | ~~Responder aos pontos em aberto~~ (respondidos em 07/10/2026); revisar plano e tarefas; ADR-0008 com a decisão sobre a Bridge como provedor; acesso de homologação à Bridge e ao Agentix (usuário de serviço e chave); liberação de rede e CA interna; workflows da POC com esses nós em `fixtures/n8n/` | Gestão + Segurança + Infra + PO |
+| 016 | ~~Responder aos pontos em aberto~~, ~~ADR-0008~~ (Bridge como modelo de chat customizado) e ~~liberação de rede~~ (sem restrição de endereço interno para os dois nós), respondidos em 07/10/2026; revisar plano e tarefas; workflows da POC com esses nós em `fixtures/n8n/` (confirmados, a entregar); acesso de homologação à Bridge e ao Agentix (usuário de serviço e chave), para o SC-006 | Gestão + Segurança + Infra + PO |
 | Pós 013 | Deploy em produção, treinamento, reteste do pentest, hypercare, desligamento do N8N | Infra + PO + Segurança |
 
 ## Decisões pendentes

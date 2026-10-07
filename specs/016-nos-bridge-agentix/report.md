@@ -46,7 +46,12 @@ Decisões do PO em 07/10/2026, registradas no histórico da spec:
 - **Agentix como ferramenta do Agent:** fora do escopo.
 - **Modelos da Bridge:** sem lista de modelos; o modelo é texto livre.
 
-As decisões técnicas estão no [plano](plan.md#decisões-técnicas): nó próprio para a Bridge, mesmos nomes de credencial do N8N, token em memória por processo, TLS desligável sem perder o anti-SSRF.
+Pré-requisitos respondidos pelo PO em 07/10/2026:
+- **ADR-0008:** a Bridge entra como um modelo de chat customizado, e não como um novo fornecedor da lista da ADR (nota acrescentada à ADR).
+- **Rede:** os nós Bridge e Agentix não têm restrição de endereço interno. Para não conflitar com a constituição (Art. III.5, toda chamada de saída pelo filtro anti-SSRF), o plano mantém as chamadas no filtro, com a opção `allowPrivateNetworks` liberando as redes privadas só para esses dois nós; loopback, link-local e metadados da nuvem continuam barrados.
+- **Fixtures:** o PO fornecerá os workflows da POC com os dois nós.
+
+As decisões técnicas estão no [plano](plan.md#decisões-técnicas): nó próprio para a Bridge, mesmos nomes de credencial do N8N, token em memória por processo, TLS desligável e redes privadas liberadas sem sair do anti-SSRF.
 
 ## Desvios da spec/plano
 
@@ -59,13 +64,14 @@ Nenhuma prevista: o plano usa o LangChain (`@langchain/openai`) e o `undici`, qu
 ## Pendências, bloqueios e riscos
 
 **Pré-requisitos humanos:**
-- **ADR-0008:** decidir sobre a Bridge como provedor de LLM aprovado (a ADR cita OpenAI, Claude e Google).
-- **Acessos:** homologação da Bridge (usuário de serviço) e do Agentix (chave), para o SC-006.
-- **Rede:** liberação dos endereços internos na allowlist da instalação.
-- **Fixtures:** workflows da POC com os dois nós, exportados em `fixtures/n8n/`.
+- ~~ADR-0008~~ e ~~rede~~: resolvidos em 07/10/2026.
+- **Revisão do plano e das tarefas:** leva a spec a `Aprovada`.
+- **Fixtures:** workflows da POC com os dois nós, exportados em `fixtures/n8n/` (confirmados pelo PO; ainda não entregues). Sem eles, o SC-005 é verificado com um workflow sintético.
+- **Acessos:** homologação da Bridge (usuário de serviço) e do Agentix (chave), para o SC-006 (validação manual; não bloqueia a implementação).
 
 **Riscos:**
 - **Verificação TLS desligada:** aceito pelo PO; mitigações no [plano](plan.md#riscos).
+- **Redes privadas sem allowlist:** aceito pelo PO; quem gerencia credenciais pode apontar os dois nós para outros serviços internos. Mitigações no [plano](plan.md#riscos); recomenda-se revisão de Segurança.
 - **Workers ocupados:** a espera do Agentix ocupa um worker durante a sessão.
 
 ## Como demonstrar

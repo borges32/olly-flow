@@ -16,19 +16,19 @@ Marque `- [x]` ao concluir. Não pule fases: cada fase depende da anterior.
 
 ## Fase 2 — Fundação (bloqueia as histórias)
 
-- [ ] T010 `HttpGuard`: opção `insecureTls` com um segundo agente e o mesmo `lookup` validado, com testes (HTTPS autoassinado; anti-SSRF mantido) (FR-002, FR-008, FR-013) → plan §2
-- [ ] T011 `AiGateway.fetchFor({ insecureTls })` na API; provedor `bridge` em `ChatModelProvider` → plan §2, §3
+- [ ] T010 `HttpGuard`: opções `insecureTls` e `allowPrivateNetworks`, com um agente por combinação e o mesmo `lookup` validado, com testes (HTTPS autoassinado; redes privadas aceitas; loopback, link-local e metadados da nuvem barrados; regra da spec 004 inalterada sem a opção) (FR-002, FR-008, FR-013) → plan §2
+- [ ] T011 `AiGateway.fetchFor({ insecureTls, allowPrivateNetworks })` na API; provedor `bridge` em `ChatModelProvider` → plan §2, §3
 
 ## Fase 3 — HU-1: Bridge Chat Model (P1)
 
 - [ ] T020 [P] Gerenciador do token: cache por credencial, `exp`/margem/padrão de 20 min, logins unificados, invalidação, com testes (FR-004, NFR-001) → plan §3
-- [ ] T021 `fetch` da Bridge: Bearer, `model` fora do corpo, novo login e repetição em 401/403, com testes (FR-003, FR-005) → plan §3
+- [ ] T021 `fetch` da Bridge: Bearer, `model` fora do corpo, novo login e repetição em 401/403, chamadas com `allowPrivateNetworks`, com testes (FR-003, FR-005, FR-013) → plan §3
 - [ ] T022 Nó `ai.bridgeChatModel` e teste da credencial (login), com testes de unidade contra a Bridge simulada (streaming e uso de tokens) (FR-001, FR-002, FR-006) → plan §1, §3
 - [ ] T023 Integração: Agent com a Bridge simulada pela API (ferramenta, uso registrado, limite mensal, sem lista de modelos, expiração e 401 numa execução, sentinelas) (FR-001, FR-006, FR-014, SC-001, SC-002, SC-004)
 
 ## Fase 4 — HU-2: Agentix (P1)
 
-- [ ] T030 Nó `ai.agentix`: invoke, espera interrompível, mensagens, saídas, erros por estado e por tempo, erros de consulta, com testes de unidade (FR-007, FR-009, FR-010, FR-011) → plan §4
+- [ ] T030 Nó `ai.agentix`: invoke, espera interrompível, mensagens, saídas, erros por estado e por tempo, erros de consulta, chamadas com `allowPrivateNetworks`, com testes de unidade (FR-007, FR-009, FR-010, FR-011, FR-013) → plan §4
 - [ ] T031 Integração: execução pela fila com o Agentix simulado, "continuar" por item, cancelamento durante a espera, sentinela da chave (FR-009, FR-010, FR-011, FR-014, SC-003, SC-004)
 
 ## Fase 5 — HU-3: Migração do N8N (P1)
@@ -38,7 +38,7 @@ Marque `- [x]` ao concluir. Não pule fases: cada fase depende da anterior.
 ## Fase 6 — Editor e documentação
 
 - [ ] T050 [P] Ícones dos nós no editor → plan §6
-- [ ] T051 Documentação: `docs/nos/ai.bridgeChatModel.md`, `docs/nos/ai.agentix.md`, catálogo e credenciais em `docs/nos/workflow-json.md`, `docs/credenciais.md` (TLS e allowlist), `docs/importacao-n8n.md` (FR-015)
+- [ ] T051 Documentação: `docs/nos/ai.bridgeChatModel.md`, `docs/nos/ai.agentix.md`, catálogo e credenciais em `docs/nos/workflow-json.md`, `docs/credenciais.md` (TLS e endereços internos sem allowlist para os dois nós), `docs/importacao-n8n.md` (FR-015)
 
 ## Fase 7 — Verificação e relatório
 

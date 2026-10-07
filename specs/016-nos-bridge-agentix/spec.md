@@ -70,8 +70,8 @@ Como **editor**, quero importar workflows do N8N que usam os nós customizados, 
 
 **Cenários de aceite:**
 1. **Dado** um workflow do N8N com o Bridge Chat Model ligado a um AI Agent e um nó Agentix, **quando** importo, **então** os dois nós são convertidos com os mesmos parâmetros e as conexões, e as credenciais Bridge e Agentix aparecem na lista de credenciais a cadastrar.
-3. **Dado** um Agentix ligado como ferramenta de um AI Agent no N8N, **quando** importo, **então** ele vira um nó marcador (o uso como ferramenta está fora do escopo).
 2. **Dado** os tipos dos nós customizados com o prefixo da instalação (por exemplo, `CUSTOM.agentix`) ou o do pacote, **quando** importo, **então** os dois são reconhecidos.
+3. **Dado** um Agentix ligado como ferramenta de um AI Agent no N8N, **quando** importo, **então** ele vira um nó marcador (o uso como ferramenta está fora do escopo).
 
 ### Casos de borda
 
@@ -83,12 +83,12 @@ Como **editor**, quero importar workflows do N8N que usam os nós customizados, 
 - **Falha transitória na consulta da sessão:** tolerada até um número configurável de erros seguidos; depois, o nó falha.
 - **Payload ou constantes que não são um objeto JSON:** erro no item, com o nome do parâmetro.
 - **Agentix sem `session_id` na resposta da criação:** erro no item, com a resposta recebida.
-- **Serviço em endereço interno:** a proteção anti-SSRF bloqueia endereços internos não liberados; a mensagem orienta a liberação pela instalação. Desligar a verificação do certificado não desliga a proteção anti-SSRF.
+- **Serviço em endereço interno:** a Bridge e o Agentix ficam na rede interna, então os dois nós acessam endereços de rede privada sem liberação da instalação. O filtro de rede continua barrando, também para eles, a própria máquina (loopback), os endereços link-local (inclusive o de metadados da nuvem) e os protocolos diferentes de HTTP e HTTPS. Desligar a verificação do certificado não muda essas regras.
 - **Modelo inexistente na Bridge:** o nome do modelo não é validado pela plataforma; o erro da Bridge (por exemplo, 404) volta na execução, com o status e um trecho da resposta.
 
 ## Requisitos funcionais
 
-- **FR-001**: DEVE existir o nó **Bridge Chat Model**, um sub-nó de modelo de chat ligável à entrada de modelo do Agent, com os parâmetros:
+- **FR-001**: DEVE existir o nó **Bridge Chat Model**, um sub-nó de **modelo de chat customizado** (ADR-0008) ligável à entrada de modelo do Agent, com os parâmetros:
   - **modelo** (obrigatório): texto livre com o apelido enviado no endereço, sem lista de modelos;
   - **streaming** (padrão ligado);
   - **opções:** temperatura, top P, máximo de tokens, número de respostas, sequências de parada, usuário final, tempo limite, novas tentativas, pedir o uso de tokens no streaming (padrão desligado) e enviar o modelo também no corpo (padrão desligado).
@@ -123,7 +123,7 @@ Como **editor**, quero importar workflows do N8N que usam os nós customizados, 
 - **FR-010**: Os estados `FAILED`, `CANCELLED` e `REJECTED`, o tempo limite e o excesso de erros de consulta DEVEM fazer o item falhar com uma mensagem que cita a sessão e o motivo. O tratamento de erro do nó ("parar", "continuar" ou "saída de erro") DEVE valer por item.
 - **FR-011**: A espera pela sessão DEVE ser interrompida quando a execução for cancelada ou atingir o tempo limite do nó ou do workflow.
 - **FR-012**: A importação do N8N (spec 015) DEVE converter o Bridge Chat Model, o Agentix e as credenciais `bridgeApi` e `agentixApi` para os nós e tipos de credencial desta spec. Os tipos com o prefixo `CUSTOM.` e com o do pacote DEVEM ser reconhecidos como tipos do N8N. O Agentix usado como ferramenta de um AI Agent DEVE virar nó marcador.
-- **FR-013**: Os nós DEVEM respeitar a proteção anti-SSRF da plataforma (endereços internos só com liberação da instalação), inclusive com a verificação do certificado desligada.
+- **FR-013**: As chamadas dos dois nós (e o teste da credencial Bridge) DEVEM aceitar endereços de rede privada sem liberação da instalação. Elas DEVEM continuar passando pelo filtro anti-SSRF da plataforma, que segue barrando loopback, link-local (inclusive o endereço de metadados da nuvem), endereços reservados e protocolos diferentes de HTTP e HTTPS, inclusive com a verificação do certificado desligada. Os demais nós mantêm a regra atual (endereços internos só com liberação).
 - **FR-014**: Senha, chave de API e token NÃO DEVEM aparecer em logs, respostas da API, dados de execução, auditoria ou telemetria.
 - **FR-015**: A documentação DEVE incluir uma página para cada nó novo em `docs/nos/`, e os dois tipos DEVEM entrar na documentação do formato JSON (spec 015, FR-021).
 
@@ -142,7 +142,7 @@ Como **editor**, quero importar workflows do N8N que usam os nós customizados, 
 
 ## Critérios de sucesso
 
-- **SC-001**: Com a Bridge simulada, um Agent com o Bridge Chat Model conclui uma conversa com chamada de ferramenta. Verificam-se o endereço com o modelo, o token, a ausência de `model` no corpo, o streaming e o uso de tokens registrado, também com um servidor de certificado autoassinado e a verificação desligada.
+- **SC-001**: Com a Bridge simulada, um Agent com o Bridge Chat Model conclui uma conversa com chamada de ferramenta. Verificam-se o endereço com o modelo, o token, a ausência de `model` no corpo, o streaming e o uso de tokens registrado, também com um servidor de certificado autoassinado e a verificação desligada, e com o serviço num endereço de rede privada sem liberação da instalação.
 - **SC-002**: Com a Bridge simulada, uma execução que atravessa a expiração do token e uma resposta 401 termina com sucesso, com um login por ciclo.
 - **SC-003**: Com o Agentix simulado, o nó cobre: as duas saídas, a espera desligada, os três estados de falha, o tempo limite, a falha transitória tolerada e a não tolerada, a chave inválida e o "continuar" por item.
 - **SC-004**: Nenhuma senha, chave ou token aparece em logs, respostas, dados de execução, auditoria ou telemetria (busca por valores sentinela).
@@ -160,10 +160,10 @@ Como **editor**, quero importar workflows do N8N que usam os nós customizados, 
 
 ## Pré-requisitos humanos
 
-- **ADR-0008:** decisão institucional sobre a **Bridge como provedor de LLM aprovado** (a ADR hoje cita OpenAI, Claude e Google).
-- **Acesso de homologação** à Bridge e ao Agentix, com o usuário de serviço da Bridge e uma chave do Agentix, para o SC-006.
-- **Rede:** liberação dos endereços internos da Bridge e do Agentix na allowlist da instalação.
-- **Workflows da POC** que usam os dois nós, exportados em `fixtures/n8n/`, para o SC-005.
+- ~~**ADR-0008:** decisão sobre a Bridge como provedor de LLM~~ — resolvido em 07/10/2026: a Bridge entra como um **modelo de chat customizado** (ver o histórico).
+- ~~**Rede:** liberação dos endereços internos na allowlist~~ — resolvido em 07/10/2026: os dois nós não têm restrição de endereço interno (FR-013).
+- **Workflows da POC** que usam os dois nós, exportados em `fixtures/n8n/`, para o SC-005: o PO confirmou que serão fornecidos; ainda não estão no repositório.
+- **Acesso de homologação** à Bridge e ao Agentix, com o usuário de serviço da Bridge e uma chave do Agentix, para o SC-006 (validação manual; não bloqueia a implementação).
 
 ## Pontos em aberto
 
@@ -175,3 +175,4 @@ Como **editor**, quero importar workflows do N8N que usam os nós customizados, 
 |---|---|---|
 | 07/10/2026 | Criação, a partir da análise do projeto `Bridge-Chat-Model` (nós customizados do N8N) | Pedido do PO |
 | 07/10/2026 | Esclarecimentos do PO: (1) cada credencial permite desligar a verificação do certificado TLS (FR-002, FR-008; risco aceito); (2) sem endereços padrão: o usuário informa todos (FR-002, FR-008); (3) a espera do Agentix fica dentro do nó, ocupando o worker, com o tempo limite padrão de 600 s configurável no nó (FR-007, FR-009); (4) o Agentix não entra como ferramenta do Agent: HU-3 removida e a antiga HU-4 virou HU-3; FR-012 anterior removido e FRs renumerados; (5) a Bridge não usa lista de modelos: o modelo é texto livre (FR-001, FR-006) | Decisão humana |
+| 07/10/2026 | Pré-requisitos respondidos pelo PO: (1) ADR-0008: a Bridge entra como um modelo de chat customizado, e não como um novo fornecedor da lista da ADR; (2) rede: os nós Bridge e Agentix não têm restrição de endereço interno. FR-013, o caso de borda "Serviço em endereço interno" e o SC-001 foram reescritos. As chamadas continuam pelo filtro anti-SSRF (constituição, Art. III.5), que segue barrando loopback, link-local e metadados da nuvem; (3) fixtures: o PO fornecerá os workflows da POC com os dois nós | Decisão humana |
