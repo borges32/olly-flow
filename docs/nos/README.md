@@ -1,5 +1,7 @@
 # Nós do Olly Flow
 
+**Formato JSON do workflow** (estrutura, conexões, índices das portas e catálogo de todos os nós, para pessoas e modelos de IA): [workflow-json.md](workflow-json.md).
+
 Cada nó vive em `packages/nodes/src/<categoria>/<nome>/` (`definition.ts`, `execute.ts`, testes) e é registrado em `packages/nodes/src/builtin.ts`. O registro (`NodeRegistry`) recusa nós com definição inválida, e o teste do registro valida todos os nós da plataforma.
 
 | Tipo | Nó | Spec | Página |

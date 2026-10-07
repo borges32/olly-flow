@@ -22,6 +22,7 @@
 | 012 | [observabilidade-importador-homologacao](../specs/012-observabilidade-importador-homologacao/spec.md) | 4 — Hardening | Telemetria OpenTelemetry (OTLP para o coletor), importador N8N, escopo do pentest | 011 | Em implementação (HU-1; importador e pentest pendentes) | |
 | 013 | [hardening-go-live](../specs/013-hardening-go-live/spec.md) | 4 — Hardening | Pentest, documentação, execução paralela ao N8N, go-live | 012 | Aprovada | 🚀 Go-live |
 | 014 | [primeiro-usuario](../specs/014-primeiro-usuario/spec.md) | 1 — MVP (apoio à UX) | Primeiro usuário, usuários locais e login pelo IdP opcional (desativado por padrão) | 002, 009 | Implementada ([relatório](../specs/014-primeiro-usuario/report.md)) — validação da Segurança pendente | |
+| 015 | [exportar-importar-json](../specs/015-exportar-importar-json/spec.md) | 4 — Hardening (apoio à migração e à IA) | Baixar e importar workflows em JSON no formato do N8N, copiar e colar nós como JSON, documentação do formato para modelos de IA ([docs/nos/workflow-json.md](nos/workflow-json.md)) | 002, 009, 011 | Rascunho (5 pontos em aberto) | |
 
 As specs estão organizadas por escopo, não por calendário. A referência original era de 13 sprints de 2 semanas com uma equipe de 4 pessoas. Com implementação por agente de IA, o ritmo depende principalmente das revisões humanas entre specs.
 
@@ -46,6 +47,7 @@ Entre cada spec, antes de iniciar a próxima:
 | 012 | Exportar **todos** os workflows da POC; agendar pentest; endereço e autenticação do coletor OTel institucional | PO + Segurança + Infra |
 | 013 | Relatório do pentest; data e janela do go-live; aprovação de riscos aceitos | Segurança + Gestão |
 | 014 | ~~Decidir a relação com a NFR-G03~~ (usuário local como padrão e IdP opcional, 06/10/2026); validação da Segurança para o login local (pontos em aberto respondidos em 06/10/2026) | PO + Segurança |
+| 015 | Responder aos pontos em aberto da spec (tipos no arquivo, dados fixados, relação com o importador do N8N, tipos desconhecidos, quem pode baixar); lista dos 10 pedidos de referência do SC-004 | PO + Segurança |
 | Pós 013 | Deploy em produção, treinamento, reteste do pentest, hypercare, desligamento do N8N | Infra + PO + Segurança |
 
 ## Decisões pendentes
