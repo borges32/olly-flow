@@ -1,7 +1,7 @@
 import type { McpServerOption } from '@olly/shared-types';
 
 export interface McpOptions {
-  options: { value: string; label: string }[] | undefined;
+  options: { value: string; label: string; description?: string }[] | undefined;
   hint: string | undefined;
 }
 
@@ -31,7 +31,11 @@ export function mcpLoadOptions(
     };
   }
   return {
-    options: server.tools.map((t) => ({ value: t.name, label: t.name })),
+    options: server.tools.map((t) => ({
+      value: t.name,
+      label: t.name,
+      ...(t.description && { description: t.description }),
+    })),
     hint:
       server.tools.length === 0
         ? 'Nenhuma tool liberada para este projeto. As tools são negadas por padrão: a administração as libera em Administração › MCP (clique no servidor, marque "Liberada" e salve).'

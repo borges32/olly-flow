@@ -359,7 +359,10 @@ export function createAgentToolNodes(deps: {
       toolNames: {
         type: 'array',
         title: 'Tools escolhidas',
+        description: 'Só as tools liberadas para o projeto.',
         default: [],
+        // Seleção múltipla com as tools do servidor (grava `[{ name }]`).
+        'x-load-options': 'mcpTools',
         items: {
           type: 'object',
           properties: { name: { type: 'string', title: 'Tool', minLength: 1 } },

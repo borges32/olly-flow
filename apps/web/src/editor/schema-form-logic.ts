@@ -116,3 +116,50 @@ export function rangeMessage(schema: ParamSchema, value: unknown): string | unde
   }
   return undefined;
 }
+
+/**
+ * Lista com `x-load-options` vira seleção múltipla: cada item `{ [chave]: valor }` guarda uma opção
+ * escolhida (ex.: `toolNames: [{ name }]` da Ferramenta: MCP). A chave é o primeiro campo
+ * obrigatório do item (ou o primeiro campo).
+ */
+export function multiSelectKey(itemSchema: ParamSchema): string {
+  return itemSchema.required?.[0] ?? Object.keys(itemSchema.properties ?? {})[0] ?? 'value';
+}
+
+/** Valores escolhidos, na ordem gravada e sem repetição. */
+export function selectedValues(value: unknown, key: string): string[] {
+  if (!Array.isArray(value)) return [];
+  const out: string[] = [];
+  for (const item of value as unknown[]) {
+    const v =
+      item !== null && typeof item === 'object' ? (item as Record<string, unknown>)[key] : item;
+    if (typeof v === 'string' && v && !out.includes(v)) out.push(v);
+  }
+  return out;
+}
+
+/** Marca ou desmarca uma opção, devolvendo a lista no formato gravado. */
+export function toggleSelected(
+  value: unknown,
+  key: string,
+  option: string,
+): Record<string, string>[] {
+  const current = selectedValues(value, key);
+  const next = current.includes(option)
+    ? current.filter((v) => v !== option)
+    : [...current, option];
+  return next.map((v) => ({ [key]: v }));
+}
+
+/** Filtra as opções pelo texto digitado (nome ou descrição, sem diferença de maiúsculas). */
+export function filterOptions<T extends { label: string; description?: string }>(
+  options: readonly T[],
+  search: string,
+): T[] {
+  const term = search.trim().toLowerCase();
+  if (!term) return [...options];
+  return options.filter(
+    (o) =>
+      o.label.toLowerCase().includes(term) || (o.description ?? '').toLowerCase().includes(term),
+  );
+}

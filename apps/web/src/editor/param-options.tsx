@@ -25,6 +25,8 @@ export const ParamOptionsContext = createContext<ParamOptionsSourceContext | nul
 export interface LoadedOption {
   value: string;
   label: string;
+  /** Texto de apoio na seleção múltipla (ex.: descrição da tool MCP). */
+  description?: string;
 }
 
 const text = (v: unknown) => (typeof v === 'string' ? v : '');
@@ -34,7 +36,12 @@ const POSTGRES: readonly string[] = ['postgresSchemas', 'postgresTables', 'postg
  * Opções de campos `x-load-options`: catálogo do banco da credencial do nó (spec 004, FR-016) ou
  * servidores e tools MCP liberados no projeto (spec 010, FR-009).
  */
-export function useLoadOptions(source: LoadOptionsSource | undefined) {
+export function useLoadOptions(source: LoadOptionsSource | undefined): {
+  options: LoadedOption[] | undefined;
+  loading: boolean;
+  error: Error | null;
+  hint: string | undefined;
+} {
   const api = useApi();
   const ctx = useContext(ParamOptionsContext);
   const credentialId = ctx?.credentialId;

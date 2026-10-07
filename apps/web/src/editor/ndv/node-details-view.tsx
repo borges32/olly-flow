@@ -228,9 +228,13 @@ export function NodeDetailsView({
           onFocusOutside={(e) => {
             e.preventDefault();
           }}
-          // Esc no editor de código fecha as sugestões do Monaco, não o painel (spec 005).
+          // Esc no editor de código fecha as sugestões do Monaco, não o painel (spec 005); numa
+          // seleção múltipla aberta, fecha só a lista.
           onEscapeKeyDown={(e) => {
-            if (e.target instanceof Element && e.target.closest('.monaco-editor'))
+            if (
+              e.target instanceof Element &&
+              e.target.closest('.monaco-editor, [data-multiselect-open]')
+            )
               e.preventDefault();
           }}
           className="fixed inset-4 z-50 flex flex-col overflow-hidden rounded-lg border bg-background shadow-lg"

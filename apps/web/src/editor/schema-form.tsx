@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { insertExpression, scalarText } from './expression-utils';
+import { MultiSelectField } from './multi-select-field';
 import { FIELD_MIME, useExpressionHelpers } from './ndv/expression-context';
 import { ExpressionInput } from './ndv/expression-input';
 import { useLoadOptions, useMcpToolSchema } from './param-options';
@@ -396,6 +397,20 @@ function Field({ name, path, schema, value, readOnly, onChange }: FieldProps) {
       );
     case 'array': {
       const itemSchema = asSchema(schema.items as JSONSchema7Definition | undefined);
+      if (schema['x-load-options']) {
+        return (
+          <MultiSelectField
+            label={label}
+            testId={testId}
+            schema={schema}
+            itemSchema={itemSchema}
+            value={value}
+            readOnly={readOnly}
+            onChange={onChange}
+            description={description}
+          />
+        );
+      }
       const items = Array.isArray(value) ? (value as Record<string, unknown>[]) : [];
       return (
         <fieldset className="grid gap-2">

@@ -3,10 +3,14 @@ import { describe, expect, it } from 'vitest';
 import {
   asSchema,
   fieldKind,
+  filterOptions,
   isFieldVisible,
   mcpArgumentsSchema,
+  multiSelectKey,
   newArrayItem,
   rangeMessage,
+  selectedValues,
+  toggleSelected,
   type ParamSchema,
 } from './schema-form-logic';
 
@@ -98,5 +102,40 @@ describe('spec 007 — FR-001: faixa dos campos numéricos', () => {
     expect(rangeMessage(entradas, 10)).toBeUndefined();
     expect(rangeMessage(entradas, undefined)).toBeUndefined();
     expect(rangeMessage(entradas, '={{ 20 }}')).toBeUndefined();
+  });
+});
+
+describe('spec 011 — FR-007: seleção múltipla das tools MCP (`x-load-options` em lista)', () => {
+  const item: ParamSchema = {
+    type: 'object',
+    properties: { name: { type: 'string' } },
+    required: ['name'],
+  };
+
+  it('grava as escolhidas no formato da lista (`[{ name }]`), marcando e desmarcando', () => {
+    const key = multiSelectKey(item);
+    expect(key).toBe('name');
+    const one = toggleSelected([], key, 'soma');
+    expect(one).toEqual([{ name: 'soma' }]);
+    const two = toggleSelected(one, key, 'subtrai');
+    expect(two).toEqual([{ name: 'soma' }, { name: 'subtrai' }]);
+    expect(toggleSelected(two, key, 'soma')).toEqual([{ name: 'subtrai' }]);
+  });
+
+  it('lê valores gravados antes (itens vazios ou repetidos são ignorados)', () => {
+    expect(selectedValues([{ name: 'soma' }, { name: '' }, { name: 'soma' }, {}], 'name')).toEqual([
+      'soma',
+    ]);
+    expect(selectedValues(undefined, 'name')).toEqual([]);
+  });
+
+  it('filtra as opções pelo nome ou pela descrição', () => {
+    const options = [
+      { value: 'soma', label: 'soma', description: 'Soma dois números' },
+      { value: 'clima', label: 'clima', description: 'Previsão do tempo' },
+    ];
+    expect(filterOptions(options, 'NÚMEROS').map((o) => o.value)).toEqual(['soma']);
+    expect(filterOptions(options, 'cli').map((o) => o.value)).toEqual(['clima']);
+    expect(filterOptions(options, '  ')).toHaveLength(2);
   });
 });

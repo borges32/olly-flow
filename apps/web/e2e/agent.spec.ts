@@ -171,6 +171,46 @@ test.describe('spec 011 — HU-1: agente no editor', () => {
   });
 });
 
+test.describe('spec 011 — FR-007: tools MCP escolhidas na lista', () => {
+  test('FR-007: "selected" mostra as tools liberadas com descrição e grava as escolhidas', async ({
+    page,
+  }) => {
+    const credentialId = await fakeModel([{ content: 'ok' }]);
+    const wf = await createWorkflow(
+      editor,
+      projectId,
+      `Tools MCP E2E ${suffix}`,
+      agentDefinition(credentialId, 'Oi'),
+    );
+    await loginViaUi(page, 'editor', `/workflows/${wf.id}`);
+    await page.getByTestId('node-Ferramentas MCP').dblclick();
+    await page.getByTestId('param-tools').selectOption('selected');
+    const field = page.getByTestId('param-toolNames');
+    await field.click();
+    const options = page.getByTestId('param-toolNames-option');
+    await expect(options).toHaveCount(2);
+    await expect(options.filter({ hasText: 'soma' })).toContainText('Soma dois números.');
+    await options.filter({ hasText: 'soma' }).click();
+    await expect(options.filter({ hasText: 'soma' })).toHaveAttribute('aria-selected', 'true');
+    // Busca pelo nome; Esc fecha só a lista, não o painel.
+    await page.getByRole('combobox', { name: 'Tools escolhidas' }).fill('apagar');
+    await expect(options).toHaveCount(1);
+    await page.keyboard.press('Escape');
+    await expect(options).toHaveCount(0);
+    await expect(page.getByTestId('ndv')).toBeVisible();
+    await expect(page.getByTestId('param-toolNames-chip')).toHaveText(['soma']);
+
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Control+s');
+    await expect(page.getByText('Workflow salvo')).toBeVisible();
+    const saved = (await editor.call('GET', `/workflows/${wf.id}`)).body as {
+      definition: WorkflowDefinition;
+    };
+    const tools = saved.definition.nodes.find((n) => n.id === 'tools');
+    expect(tools?.params).toMatchObject({ tools: 'selected', toolNames: [{ name: 'soma' }] });
+  });
+});
+
 test.describe('spec 011 — HU-2/SC-003: aprovação humana', () => {
   test('FR-010/FR-011: a ação destrutiva espera; o executor aprova em Aprovações', async ({
     page,
