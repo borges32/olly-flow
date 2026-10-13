@@ -18,7 +18,9 @@ Invoca um **agente ou workflow do Agentix**, a plataforma interna de agentes, e 
 | `entityVersion` | Versão da entidade (`entity_version`). Obrigatório |
 | `bundle` | Bundle que contém a entidade. Obrigatório |
 | `bundleVersion` | Versão do bundle (enviada como `version`). Obrigatório |
-| `payload` | Entrada do agente: objeto JSON (texto ou expressão). Padrão `{"pergunta": ""}` |
+| `payloadMode` | Como montar a entrada do agente (payload): `fields` (padrão nos nós novos) ou `json` |
+| `payloadFields` | Com `fields`: lista de propriedades `{ name, value }`. O valor é um texto fixo ou uma expressão (ex.: `={{ $json.pergunta }}`); uma expressão que devolve número, booleano, objeto ou lista mantém o tipo. O nó monta o payload com todas as propriedades, na ordem (nome repetido: vale o último). Padrão: `pergunta` vazia |
+| `payload` | Com `json`: o objeto JSON inteiro (texto ou expressão). Padrão `{"pergunta": ""}`. Um Agentix criado antes do modo de propriedades (sem `payloadMode`) continua no `json` |
 | `constants` | Constantes do agente: objeto JSON. Padrão `{}` |
 | `waitForCompletion` | Espera o fim da sessão (padrão ligado). Desligado: devolve na hora a resposta da criação, com o `session_id` |
 | `output` | Com espera: `finalAnswer` (só a resposta final) ou `allMessages` (todas as mensagens) |
@@ -56,7 +58,8 @@ Invoca um **agente ou workflow do Agentix**, a plataforma interna de agentes, e 
   - tempo limite: cita o último estado e como aumentar o tempo;
   - falha transitória na consulta: tolerada até `maxPollErrors` erros seguidos;
   - resposta fora de 2xx: `Chamada ao Agentix falhou: <método> <endereço> respondeu <status> (<motivo>)`, com o `detail` do Agentix e o endereço chamado (sem a chave). Em 401 e 403, a mensagem pede para conferir a chave e a URL base;
-  - payload ou constantes que não sejam um objeto JSON: erro no item, citando o parâmetro.
+  - payload ou constantes que não sejam um objeto JSON: erro no item, citando o parâmetro;
+  - propriedade do payload sem nome: erro no item, citando a posição (`propriedade #2 sem nome`).
 - **Tratamento de erro por item:** "continuar" emite `{ error }` no lugar do item que falhou e segue com os demais; "saída de erro" desvia o item para a porta `error`.
 - **Rede (FR-013):** as chamadas passam pelo filtro anti-SSRF, mas **aceitam endereços de rede privada sem a allowlist**. Loopback, link-local (inclusive o endereço de metadados da nuvem) e protocolos diferentes de HTTP e HTTPS continuam barrados.
 - **TLS (FR-008):** `allowUnauthorizedCerts` vale só para as chamadas desta credencial.
@@ -84,7 +87,11 @@ O Agentix (ou um gateway na frente dele) recusou a chamada. A mensagem mostra o 
     "entityVersion": "0.1.0",
     "bundle": "olly-gerador-kb",
     "bundleVersion": "0.1.0.dev10",
-    "payload": "={{ { pergunta: $json.pergunta } }}",
+    "payloadMode": "fields",
+    "payloadFields": [
+      { "name": "pergunta", "value": "={{ $json.pergunta }}" },
+      { "name": "idioma", "value": "pt-BR" }
+    ],
     "constants": "{}",
     "waitForCompletion": true,
     "output": "finalAnswer",

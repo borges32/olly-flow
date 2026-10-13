@@ -74,6 +74,30 @@ function jsonObjectParam(ctx: NodeContext, name: string, itemIndex: number): Jso
   throw new NodeParameterError(name, 'deve ser um objeto JSON');
 }
 
+/**
+ * Spec 016 (13/10/2026): payload montado com as propriedades da lista, na ordem (nome no
+ * payload e valor). O valor é o que a expressão devolve (número, booleano, objeto e lista mantêm o
+ * tipo); texto fixo fica como texto. Nome repetido: vale o último.
+ */
+function payloadFromFields(ctx: NodeContext, itemIndex: number): Json {
+  const raw = ctx.getParam('payloadFields', itemIndex);
+  if (raw === undefined || raw === null) return {};
+  if (!Array.isArray(raw)) throw new NodeParameterError('payloadFields', 'deve ser uma lista');
+  const payload: Json = {};
+  raw.forEach((entry: unknown, position) => {
+    const { name, value } = (isObject(entry) ? entry : {}) as { name?: unknown; value?: unknown };
+    const key = typeof name === 'string' ? name.trim() : '';
+    if (!key) {
+      throw new NodeParameterError(
+        'payloadFields',
+        `propriedade #${String(position + 1)} sem nome`,
+      );
+    }
+    payload[key] = value ?? '';
+  });
+  return payload;
+}
+
 function requiredText(ctx: NodeContext, name: string, itemIndex: number): string {
   const value = ctx.getParam(name, itemIndex);
   const text = typeof value === 'number' ? String(value) : typeof value === 'string' ? value : '';
@@ -284,7 +308,10 @@ async function runSession(ctx: NodeContext, request: Request, itemIndex: number)
     entity_version: requiredText(ctx, 'entityVersion', itemIndex),
     bundle: requiredText(ctx, 'bundle', itemIndex),
     version: requiredText(ctx, 'bundleVersion', itemIndex),
-    payload: jsonObjectParam(ctx, 'payload', itemIndex),
+    payload:
+      ctx.getParam('payloadMode', itemIndex) === 'fields'
+        ? payloadFromFields(ctx, itemIndex)
+        : jsonObjectParam(ctx, 'payload', itemIndex),
     constants: jsonObjectParam(ctx, 'constants', itemIndex),
   };
   const invoked = await request('POST', 'sessions/invoke', body);
@@ -391,7 +418,33 @@ const paramsSchema: JSONSchema7 = {
       description: 'Versão do bundle (version).',
       default: '',
     },
+    payloadMode: {
+      type: 'string',
+      title: 'Modo do payload',
+      description:
+        '`fields`: uma lista de propriedades (nome e valor); `json`: o objeto JSON inteiro.',
+      enum: ['fields', 'json'],
+      default: 'fields',
+    },
+    payloadFields: {
+      type: 'array',
+      title: 'Propriedades do payload',
+      description:
+        'Cada propriedade vira um campo do payload. O valor é um texto fixo ou uma expressão, ex.: {{ $json.pergunta }}; uma expressão que devolve número, booleano, objeto ou lista mantém o tipo.',
+      default: [{ name: 'pergunta', value: '' }],
+      items: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', title: 'Nome', default: '' },
+          value: { type: 'string', title: 'Valor', default: '' },
+        },
+        required: ['name'],
+        additionalProperties: false,
+      },
+      'x-display-options': { show: { payloadMode: ['fields'] } },
+    } as JSONSchema7,
     payload: {
+      'x-display-options': { show: { payloadMode: ['json'] } },
       type: 'string',
       title: 'Payload',
       description:

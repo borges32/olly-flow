@@ -86,7 +86,10 @@
   - **Parâmetros:**
     - `entityType` (`agent` | `workflow`, padrão `agent`);
     - `entityName`, `entityVersion`, `bundle` e `bundleVersion` (obrigatórios);
-    - `payload` e `constants` (texto JSON ou expressão que produz um objeto; padrões `{"pergunta": ""}` e `{}`);
+    - `payloadMode` (`fields` | `json`; padrão `fields` nos nós novos);
+    - `payloadFields` (lista de `{ name, value }`, padrão `[{ name: 'pergunta', value: '' }]`, visível com `fields`): o objeto é montado com as propriedades na ordem; o valor resolvido mantém o tipo da expressão; nome vazio gera `NodeParameterError('payloadFields', 'propriedade #n sem nome')`;
+    - `payload` (texto JSON ou expressão que produz um objeto, visível com `json`) e `constants` (padrões `{"pergunta": ""}` e `{}`);
+    - **nós existentes:** um Agentix sem `payloadMode` é lido como `json` (`migrateLegacyDefinition`, junto com a migração da spec 018), para o formulário e a execução continuarem iguais;
     - `waitForCompletion` (padrão `true`);
     - `output` (`finalAnswer` | `allMessages`, visível com espera);
     - `options`: `pollIntervalSeconds` (padrão 3, mínimo 0,1), `timeoutSeconds` (padrão 600, 0 = sem limite próprio), `maxPollErrors` (padrão 3) e `includeSession` (padrão `false`), visíveis com espera.
@@ -112,7 +115,7 @@
   | Tipo do N8N | Nó do Olly Flow | Parâmetros |
   |---|---|---|
   | `CUSTOM.bridgeChatModel`, `n8n-nodes-bridge-chat-model.bridgeChatModel` | `ai.bridgeChatModel` | `model` e `stream`; `options.*`, com `maxTokens: -1` → 0 e `timeout` → `timeoutMs` |
-  | `CUSTOM.agentix`, `n8n-nodes-bridge-chat-model.agentix` | `ai.agentix` | Mesmos nomes; `options.pollInterval` → `pollIntervalSeconds`, `options.timeout` → `timeoutSeconds`; `payload` e `constants` em objeto viram texto JSON |
+  | `CUSTOM.agentix`, `n8n-nodes-bridge-chat-model.agentix` | `ai.agentix` | Mesmos nomes; `options.pollInterval` → `pollIntervalSeconds`, `options.timeout` → `timeoutSeconds`; `payload` e `constants` em objeto viram texto JSON; `payloadMode` (padrão `fields` na v1.1, `json` na v1) e `payloadFields.field[]` → `payloadFields` (padrão `[{ pergunta: '' }]` quando omitido na v1.1) |
 
 - **Credenciais:** `bridgeApi` → `bridgeApi` e `agentixApi` → `agentixApi`.
 - **Agentix como ferramenta:** o Agentix ligado por `ai_tool` (ou o tipo `…agentixTool`) vira marcador, com o motivo "uso como ferramenta fora do escopo (spec 016)".
@@ -188,3 +191,4 @@ Nenhuma variável nova. Os endereços internos da Bridge e do Agentix **não** p
 | 07/10/2026 | Implementação: ícone do Agentix `bot-message-square` (o `bot` já é do Agent); servidores simulados exportados por `@olly/nodes` (`startBridgeMock`, `startAgentixMock`, como o modelo simulado da spec 011) com um certificado autoassinado só de teste; `BridgeTokenManager.invalidate` descarta só o token recusado | Implementação |
 | 07/10/2026 | Correção do Agentix (erro 403 em dev): `User-Agent` próprio, `agentixBaseUrl`, `status` da criação, mensagens de 401/403 com o endereço e o motivo; simulador no formato do exemplo da API (`/v2/api`, `status` na criação, 403 sem chave) | Correção de bug |
 | 07/10/2026 | Correção da Bridge (erro 403 em dev): cabeçalhos iguais ao exemplo (`User-Agent` próprio, sem `x-stainless-*`), `bridgeBaseUrl`, mensagem do 401/403 persistente; `contentText` do Agent junta os blocos de texto; simulador no formato do exemplo da Bridge | Correção de bug |
+| 13/10/2026 | §4 e §5: payload do Agentix por lista de propriedades (`payloadMode`, `payloadFields`), migração dos nós existentes para `json` e conversão da v1.1 do nó customizado | Melhoria pedida pelo PO |

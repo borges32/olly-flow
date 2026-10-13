@@ -1206,8 +1206,18 @@ const jsonText = (v: unknown, fallback: string): string =>
       ? JSON.stringify(v, null, 2)
       : str(v);
 
-const convertAgentix: Converter = (_node, p) => {
+const convertAgentix: Converter = (_node, p, version) => {
   const o = isObject(p.options) ? p.options : {};
+  // Agentix 1.1 (13/10/2026): payload por lista de propriedades, padrão na 1.1; a 1 fica no JSON.
+  const payloadMode =
+    str(p.payloadMode) === 'fields' || str(p.payloadMode) === 'json'
+      ? str(p.payloadMode)
+      : version >= 1.1
+        ? 'fields'
+        : 'json';
+  const fields = isObject(p.payloadFields)
+    ? collection(p.payloadFields, 'field').map((f) => ({ name: str(f.name), value: f.value ?? '' }))
+    : [{ name: 'pergunta', value: '' }];
   return ok(
     'ai.agentix',
     {
@@ -1216,6 +1226,8 @@ const convertAgentix: Converter = (_node, p) => {
       entityVersion: str(p.entityVersion),
       bundle: str(p.bundle),
       bundleVersion: str(p.bundleVersion),
+      payloadMode,
+      payloadFields: fields,
       payload: jsonText(p.payload, '{\n  "pergunta": ""\n}'),
       constants: jsonText(p.constants, '{}'),
       waitForCompletion: p.waitForCompletion !== false,

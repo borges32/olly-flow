@@ -52,7 +52,7 @@ A importação é feita pela API (`POST /api/v1/projects/:id/workflows/import`, 
 | `toolWorkflow` | `tool.workflow` | O workflow precisa ser escolhido de novo |
 | `mcpClientTool` | `tool.mcp` | Escolha o servidor do catálogo. Na ADR-0001 a tabela citava `ai.mcpClient`, mas no N8N este nó é uma ferramenta do Agent |
 | `bridgeChatModel` (customizado, spec 016) | `ai.bridgeChatModel` | Tipos `CUSTOM.bridgeChatModel` e `n8n-nodes-bridge-chat-model.bridgeChatModel`. `maxTokens: -1` vira 0 e `timeout` vira `timeoutMs`; modelo omitido vira `gemini-2.5-flash` (o padrão do nó no N8N). Credencial `bridgeApi` |
-| `agentix` (customizado, spec 016) | `ai.agentix` | Tipos `CUSTOM.agentix` e `n8n-nodes-bridge-chat-model.agentix`. `pollInterval` e `timeout` viram `pollIntervalSeconds` e `timeoutSeconds`. Credencial `agentixApi`. **Usado como ferramenta de um AI Agent** (`…agentixTool` ou ligado por `ai_tool`): marcador, fora do escopo |
+| `agentix` (customizado, spec 016) | `ai.agentix` | Tipos `CUSTOM.agentix` e `n8n-nodes-bridge-chat-model.agentix`. `pollInterval` e `timeout` viram `pollIntervalSeconds` e `timeoutSeconds`. Na versão 1.1, o modo do payload e as propriedades (`payloadFields.field`) viram `payloadMode` e `payloadFields`; na versão 1, o payload é o JSON. Credencial `agentixApi`. **Usado como ferramenta de um AI Agent** (`…agentixTool` ou ligado por `ai_tool`): marcador, fora do escopo |
 
 - **Descartados:** `stickyNote` (com nota no relatório).
 - **Nós customizados:** os tipos com o prefixo `CUSTOM.` (nós customizados instalados no N8N) são reconhecidos como tipos do N8N; os que não têm conversão viram marcadores.

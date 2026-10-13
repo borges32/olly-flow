@@ -389,3 +389,55 @@ describe('spec 016 — HU-2: Agentix', () => {
     expect(extractMessages('nada')).toEqual([]);
   });
 });
+
+describe('spec 016 — FR-007 (13/10/2026): payload por lista de propriedades', () => {
+  it('FR-007: o payload é montado com as propriedades, na ordem, mantendo o tipo do valor resolvido', async () => {
+    const { mock: m } = await run({
+      payloadMode: 'fields',
+      payload: '{ ignorado',
+      payloadFields: [
+        { name: 'pergunta', value: 'Qual é a capital?' },
+        // Valores já resolvidos pelo motor: uma expressão pode devolver número, booleano, objeto.
+        { name: 'quantidade', value: 3 },
+        { name: 'urgente', value: true },
+        { name: ' contexto ', value: { cliente: 'Ana' } },
+        { name: 'pergunta', value: 'Qual é a capital do Brasil?' },
+      ],
+    });
+    expect(m.invokes[0]?.payload).toEqual({
+      pergunta: 'Qual é a capital do Brasil?',
+      quantidade: 3,
+      urgente: true,
+      contexto: { cliente: 'Ana' },
+    });
+  });
+
+  it('FR-007: lista vazia gera payload vazio; propriedade sem nome falha citando a posição', async () => {
+    const empty = await run({ payloadMode: 'fields', payloadFields: [] });
+    expect(empty.mock.invokes[0]?.payload).toEqual({});
+    await empty.mock.close();
+    const error = await run({
+      payloadMode: 'fields',
+      payloadFields: [
+        { name: 'ok', value: '1' },
+        { name: '  ', value: 'x' },
+      ],
+    }).catch((e: unknown) => e as Error);
+    expect(error).toBeInstanceOf(NodeParameterError);
+    expect((error as Error).message).toBe('Parâmetro "payloadFields": propriedade #2 sem nome');
+  });
+
+  it('FR-007: no modo JSON (e nos nós sem o modo, criados antes) vale o payload em JSON', async () => {
+    const json = await run({ payloadMode: 'json', payloadFields: [{ name: 'x', value: 'y' }] });
+    expect(json.mock.invokes[0]?.payload).toEqual({ pergunta: 'Qual é a capital?' });
+    await json.mock.close();
+    const legacy = await run({});
+    expect(legacy.mock.invokes[0]?.payload).toEqual({ pergunta: 'Qual é a capital?' });
+  });
+
+  it('FR-007: novos nós começam no modo campos, com a propriedade "pergunta"', () => {
+    const props = node.paramsSchema.properties ?? {};
+    expect(props.payloadMode).toMatchObject({ default: 'fields', enum: ['fields', 'json'] });
+    expect(props.payloadFields).toMatchObject({ default: [{ name: 'pergunta', value: '' }] });
+  });
+});

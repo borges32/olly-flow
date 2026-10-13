@@ -82,6 +82,7 @@ Como **editor**, quero importar workflows do N8N que usam os nós customizados, 
 - **Respostas embrulhadas:** a lista de mensagens pode vir pura ou dentro de `messages` ou `items`; as três formas são aceitas.
 - **Falha transitória na consulta da sessão:** tolerada até um número configurável de erros seguidos; depois, o nó falha.
 - **Payload ou constantes que não são um objeto JSON:** erro no item, com o nome do parâmetro.
+- **Propriedade do payload sem nome** (modo campos): erro no item, citando a posição da propriedade. Nomes repetidos: vale o último.
 - **Agentix sem `session_id` na resposta da criação:** erro no item, com a resposta recebida.
 - **Criação já recusada:** a resposta da criação traz o campo `status`. Se ele for `REJECTED`, `FAILED` ou `CANCELLED`, o item falha sem consultar a sessão.
 - **URL base colada com o endpoint** (por exemplo, `…/v2/api/sessions/invoke`): o nó usa a raiz da API.
@@ -113,7 +114,10 @@ Como **editor**, quero importar workflows do N8N que usam os nós customizados, 
   - passos do agente e aprovação de ferramentas.
 - **FR-007**: DEVE existir o nó **Agentix**, com entrada e saída principais, e os parâmetros:
   - tipo da entidade (agente ou workflow), nome, versão, bundle e versão do bundle (obrigatórios);
-  - payload e constantes (objetos JSON, com expressão);
+  - **payload**, definido de duas formas (modo do payload):
+    - **campos** (padrão nos nós novos): uma lista de propriedades, cada uma com o nome no payload e o valor (texto fixo ou expressão). O nó monta o objeto com todas as propriedades, na ordem; uma expressão que devolve número, booleano, objeto ou lista mantém o tipo;
+    - **JSON:** o objeto JSON inteiro, com expressão. É o modo dos nós criados antes desta mudança, que continuam funcionando sem alteração;
+  - constantes (objeto JSON, com expressão);
   - esperar o fim (padrão ligado);
   - saída ("resposta final" ou "todas as mensagens");
   - opções: intervalo da consulta (padrão 3 s), **tempo limite configurável no nó** (padrão 600 s; 0 = sem limite próprio, valendo os limites do nó e do workflow), erros de consulta seguidos tolerados (padrão 3) e incluir os detalhes da sessão.
@@ -128,7 +132,7 @@ Como **editor**, quero importar workflows do N8N que usam os nós customizados, 
   3. montar a saída escolhida, incluindo a sessão final (com o uso de tokens) quando a opção estiver ligada.
 - **FR-010**: Os estados `FAILED`, `CANCELLED` e `REJECTED`, o tempo limite e o excesso de erros de consulta DEVEM fazer o item falhar com uma mensagem que cita a sessão e o motivo. O tratamento de erro do nó ("parar", "continuar" ou "saída de erro") DEVE valer por item.
 - **FR-011**: A espera pela sessão DEVE ser interrompida quando a execução for cancelada ou atingir o tempo limite do nó ou do workflow.
-- **FR-012**: A importação do N8N (spec 015) DEVE converter o Bridge Chat Model, o Agentix e as credenciais `bridgeApi` e `agentixApi` para os nós e tipos de credencial desta spec. Os tipos com o prefixo `CUSTOM.` e com o do pacote DEVEM ser reconhecidos como tipos do N8N. O Agentix usado como ferramenta de um AI Agent DEVE virar nó marcador.
+- **FR-012**: A importação do N8N (spec 015) DEVE converter o Bridge Chat Model, o Agentix e as credenciais `bridgeApi` e `agentixApi` para os nós e tipos de credencial desta spec. Os tipos com o prefixo `CUSTOM.` e com o do pacote DEVEM ser reconhecidos como tipos do N8N. O Agentix usado como ferramenta de um AI Agent DEVE virar nó marcador. O modo do payload e a lista de propriedades do nó customizado (versão 1.1) DEVEM ser convertidos; na versão 1, o modo é o JSON.
 - **FR-013**: As chamadas dos dois nós (e o teste da credencial Bridge) DEVEM aceitar endereços de rede privada sem liberação da instalação. Elas DEVEM continuar passando pelo filtro anti-SSRF da plataforma, que segue barrando loopback, link-local (inclusive o endereço de metadados da nuvem), endereços reservados e protocolos diferentes de HTTP e HTTPS, inclusive com a verificação do certificado desligada. Os demais nós mantêm a regra atual (endereços internos só com liberação).
 - **FR-014**: Senha, chave de API e token NÃO DEVEM aparecer em logs, respostas da API, dados de execução, auditoria ou telemetria.
 - **FR-015**: A documentação DEVE incluir uma página para cada nó novo em `docs/nos/`, e os dois tipos DEVEM entrar na documentação do formato JSON (spec 015, FR-021).
@@ -186,3 +190,4 @@ Como **editor**, quero importar workflows do N8N que usam os nós customizados, 
 | 07/10/2026 | Implementação concluída; status `Implementada` (ver [report.md](report.md)) | Implementação |
 | 07/10/2026 | Correção da Bridge após erro 403 em dev, a partir do exemplo da Bridge (`prompt/Prompt N8N.md`): casos de borda "recusa persistente (401/403)", "URL base colada com o endpoint" e "campos extras na resposta" | Correção de bug |
 | 07/10/2026 | Correção do Agentix após erro 403 em dev, a partir do exemplo da API (`prompt/Agentix`): casos de borda "criação já recusada" (`status` na criação), "URL base colada com o endpoint" e "recusa da chamada (401/403)" | Correção de bug |
+| 13/10/2026 | Payload do Agentix por lista de propriedades (nome e valor, texto fixo ou expressão), como no nó customizado de referência (`Bridge-Chat-Model`, Agentix 1.1): modo do payload "campos" (padrão nos nós novos) ou "JSON" (nós existentes, migrados na leitura); caso de borda da propriedade sem nome; FR-007 e FR-012 | Melhoria pedida pelo PO |

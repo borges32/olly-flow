@@ -147,6 +147,38 @@ describe('spec 016 — HU-2: Agentix numa execução pela fila', () => {
     ]);
   });
 
+  it('FR-007 (13/10/2026): payload por propriedades com expressões resolvidas pelo motor; nós antigos ficam no JSON', async () => {
+    const definition = workflow([{ entidade: 'conversor', pergunta: 'Capital?', n: 2 }]);
+    const ax = definition.nodes.find((n) => n.id === 'ax');
+    if (ax) {
+      ax.params = {
+        ...ax.params,
+        payloadMode: 'fields',
+        payloadFields: [
+          { name: 'pergunta', value: '={{ $json.pergunta }}' },
+          { name: 'tentativas', value: '={{ $json.n * 2 }}' },
+          { name: 'origem', value: 'olly' },
+        ],
+      };
+    }
+    const before = agentix.invokes.length;
+    const detail = await waitForStatus(
+      editor,
+      await startTestRun(editor, await createWorkflow(editor, project.id, definition)),
+    );
+    expect(detail.status).toBe('success');
+    expect(agentix.invokes[before]?.payload).toEqual({
+      pergunta: 'Capital?',
+      tentativas: 4,
+      origem: 'olly',
+    });
+    // Um Agentix salvo sem o modo (antes desta mudança) é lido no modo JSON.
+    const legacy = await createWorkflow(editor, project.id, workflow([{ entidade: 'conversor' }]));
+    expect(legacy.definition.nodes.find((n) => n.id === 'ax')?.params).toMatchObject({
+      payloadMode: 'json',
+    });
+  });
+
   it('FR-010: com "parar", a sessão que falha faz a execução falhar com o estado', async () => {
     const wf = await createWorkflow(
       editor,

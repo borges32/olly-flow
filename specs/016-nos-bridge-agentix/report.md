@@ -103,6 +103,24 @@ Foram entregues:
 - **Ícone do Agentix:** `bot-message-square` em vez de `bot`, que já é o ícone do Agent. Registrado no histórico do plano.
 - Os demais detalhes de implementação (servidores simulados exportados, invalidação só do token recusado) foram registrados no histórico do plano. Spec e plano estão alinhados ao código.
 
+## Melhoria (13/10/2026): payload do Agentix por lista de propriedades
+
+Pedido do PO, seguindo o nó customizado de referência (`Bridge-Chat-Model`, Agentix 1.1). Escrever o payload em JSON dificultava o uso de expressões.
+
+- **Modo do payload (`payloadMode`):**
+  - **campos (`fields`, padrão nos nós novos):** uma lista de propriedades (`payloadFields`), cada uma com o nome no payload e o valor, que pode ser texto fixo ou expressão. O nó monta o objeto com todas as propriedades, na ordem;
+  - **JSON (`json`):** o editor anterior.
+- **Tipo do valor:** uma expressão que devolve número, booleano, objeto ou lista mantém o tipo no payload.
+- **Propriedade sem nome:** o item falha, citando a posição.
+- **Nós existentes:** um Agentix salvo antes não tem `payloadMode` e é lido como `json` (`migrateLegacyAgentixPayload`, somada à migração da spec 018 em `migrateLegacyDefinition`). O formulário e a execução continuam iguais.
+- **Importação do N8N:** a versão 1.1 do nó customizado traz o modo e as propriedades; a versão 1 fica no JSON.
+- **Spec e plano:** atualizados antes do código (FR-007, FR-012 e o caso de borda da propriedade sem nome).
+- **Testes:**
+  - `agentix.test.ts` › "spec 016 — FR-007 (13/10/2026)…" (4 casos);
+  - `legacy-definition.test.ts`;
+  - `n8n.test.ts` › "FR-012 (13/10/2026)…";
+  - `agentix.int.test.ts` › "FR-007 (13/10/2026)…": as expressões são resolvidas pelo motor, por exemplo `{{ $json.n * 2 }}` chega como número.
+
 ## Correção após a implementação: erro 403 da Bridge em dev
 
 Relatado pelo PO ao testar em dev. O erro não mostrava a causa. Comparando a chamada real do nó (capturada num servidor local) com o exemplo da Bridge (`Bridge-Chat-Model/prompt/Prompt N8N.md`), o corpo já estava igual ao curl do exemplo. Os cabeçalhos não estavam, e foram corrigidos junto com os demais pontos:

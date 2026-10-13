@@ -1,4 +1,4 @@
-import { migrateLegacyOutputParser } from './legacy-output-parser.js';
+import { migrateLegacyDefinition } from './legacy-definition.js';
 import { resolveNodePorts, type PortedType } from './ports.js';
 import {
   isSubNodeType,
@@ -846,8 +846,8 @@ export function fromWorkflowFile(
     }
   }
 
-  // Spec 018, FR-006: arquivos antigos (JSON Schema dentro do nó) chegam com o sub-nó.
-  const { definition } = migrateLegacyOutputParser<WorkflowDefinition>({
+  // Formatos antigos (spec 018: JSON Schema dentro do nó; spec 016: payload do Agentix).
+  const { definition } = migrateLegacyDefinition<WorkflowDefinition>({
     nodes,
     edges,
     settings: options.fragment ? {} : settingsFromFile(input.settings, issues),

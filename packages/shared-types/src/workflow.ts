@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { migrateLegacyOutputParser } from './legacy-output-parser.js';
+import { migrateLegacyDefinition } from './legacy-definition.js';
 
 /** Referência a um binário guardado no object storage; o conteúdo nunca trafega no item. */
 export interface BinaryRef {
@@ -198,11 +198,11 @@ export const workflowDefinitionShapeSchema = z.object({
 }) satisfies z.ZodType<WorkflowDefinition>;
 
 /**
- * Spec 018, FR-006: definição recebida pela API, com o formato antigo do output parser (JSON
- * Schema dentro do Agent ou do Basic LLM Chain) migrado para o sub-nó.
+ * Definição recebida pela API, com os formatos antigos migrados (`migrateLegacyDefinition`: output
+ * parser da spec 018 e payload do Agentix da spec 016).
  */
 export const workflowDefinitionInputSchema = workflowDefinitionShapeSchema.transform(
-  (def) => migrateLegacyOutputParser(def).definition,
+  (def) => migrateLegacyDefinition(def).definition,
 );
 
 export const workflowDefinitionSchema = workflowDefinitionShapeSchema.superRefine((def, ctx) => {

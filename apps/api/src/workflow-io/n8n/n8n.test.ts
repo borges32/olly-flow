@@ -569,9 +569,52 @@ describe('spec 016 — FR-012/SC-005: nós customizados Bridge e Agentix', () =>
     expect(byName('Bridge')?.params).toMatchObject({ model: 'gemini-2.5-flash', stream: true });
     expect(byName('Agentix')?.params).toMatchObject({
       entityType: 'agent',
+      // Agentix 1: o payload é o JSON.
+      payloadMode: 'json',
       payload: JSON.stringify({ pergunta: 'objeto' }, null, 2),
       options: { pollIntervalSeconds: 3, timeoutSeconds: 600 },
     });
+  });
+
+  it('FR-012 (13/10/2026): Agentix 1.1 traz o modo e a lista de propriedades do payload', () => {
+    const { byName, validation } = importN8n({
+      nodes: [
+        node(
+          'Campos',
+          'CUSTOM.agentix',
+          {
+            entityName: 'x',
+            entityVersion: '1',
+            bundle: 'b',
+            bundleVersion: '1',
+            payloadFields: {
+              field: [
+                { name: 'pergunta', value: '={{ $json.pergunta }}' },
+                { name: 'idioma', value: 'pt' },
+              ],
+            },
+          },
+          { typeVersion: 1.1 },
+        ),
+        // Padrões omitidos pelo N8N na 1.1: modo campos com a propriedade "pergunta".
+        node('Padrão', 'CUSTOM.agentix', {}, { typeVersion: 1.1 }),
+        node('Json', 'CUSTOM.agentix', { payloadMode: 'json' }, { typeVersion: 1.1 }),
+      ],
+      connections: {},
+    });
+    expect(validation.errors).toEqual([]);
+    expect(byName('Campos')?.params).toMatchObject({
+      payloadMode: 'fields',
+      payloadFields: [
+        { name: 'pergunta', value: '={{ $json.pergunta }}' },
+        { name: 'idioma', value: 'pt' },
+      ],
+    });
+    expect(byName('Padrão')?.params).toMatchObject({
+      payloadMode: 'fields',
+      payloadFields: [{ name: 'pergunta', value: '' }],
+    });
+    expect(byName('Json')?.params).toMatchObject({ payloadMode: 'json' });
   });
 
   it('FR-012: o Agentix como ferramenta de um AI Agent vira marcador', () => {

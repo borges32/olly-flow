@@ -721,7 +721,9 @@ Invoca um agente ou workflow do Agentix e espera a resposta dentro do nó (uma s
 |---|---|---|---|
 | `entityType` | `agent` \| `workflow` | `agent` | Tipo da entidade |
 | `entityName`, `entityVersion`, `bundle`, `bundleVersion` | texto | `""` | **Obrigatórios** |
-| `payload` | texto (objeto JSON) | `{"pergunta": ""}` | Aceita expressão, como `={{ { pergunta: $json.pergunta } }}` |
+| `payloadMode` | `fields` \| `json` | `fields` (nós novos) | Sem o parâmetro (arquivos antigos), vale `json` |
+| `payloadFields` | lista de `{ name, value }` | `[{ "name": "pergunta", "value": "" }]` | Com `fields`: cada propriedade vira um campo do payload; `value` aceita expressão, como `={{ $json.pergunta }}` |
+| `payload` | texto (objeto JSON) | `{"pergunta": ""}` | Com `json`. Aceita expressão, como `={{ { pergunta: $json.pergunta } }}` |
 | `constants` | texto (objeto JSON) | `{}` | |
 | `waitForCompletion` | booleano | `true` | `false`: devolve a resposta da criação (com `session_id`) sem esperar |
 | `output` | `finalAnswer` \| `allMessages` | `finalAnswer` | Saída: `{ session_id, state, output }` ou `{ session_id, state, messages }` |

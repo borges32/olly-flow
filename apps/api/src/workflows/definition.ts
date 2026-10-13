@@ -1,9 +1,9 @@
-import { migrateLegacyOutputParser, type WorkflowDefinition } from '@olly/shared-types';
+import { migrateLegacyDefinition, type WorkflowDefinition } from '@olly/shared-types';
 
 /**
- * Definição lida do banco (rascunho, versões, execuções), com o formato antigo do output parser
- * migrado (spec 018, FR-006). As linhas gravadas não mudam: as versões publicadas são imutáveis.
+ * Definição lida do banco (rascunho, versões, execuções), com os formatos antigos migrados
+ * (output parser da spec 018; payload do Agentix da spec 016). As linhas gravadas não mudam: as versões publicadas são imutáveis.
  */
 export function readDefinition(raw: unknown): WorkflowDefinition {
-  return migrateLegacyOutputParser(raw as WorkflowDefinition).definition;
+  return migrateLegacyDefinition(raw as WorkflowDefinition).definition;
 }

@@ -321,5 +321,5 @@ Página: [output-parsers.md](../nos/output-parsers.md).
 - **`ai.agent` e `ai.chainLlm`:** `hasOutputParser` substitui `outputParser` e `schema`. `dynamicPorts: { kind: 'aiRootInputs' }` acrescenta `ai_outputParser` (e o `ai_fallbackModel` do Basic LLM Chain).
 - **`OutputParserSupply`** (`@olly/nodes`): `formatInstructions()`, `parse(texto, { signal, hooks })` e `fixWithRootModel`. `OutputParserError` traz os problemas.
 - **Sub-nós de sub-nós:** o motor entrega `subNodes` aos sub-nós, com o limite `MAX_SUBNODE_DEPTH` (5).
-- **Formato antigo:** `migrateLegacyOutputParser` (`@olly/shared-types`) migra o JSON Schema dentro do nó para o sub-nó. Na API, roda pelo `workflowDefinitionInputSchema` (entradas) e pelo `readDefinition` (leituras do banco); na importação, por `fromWorkflowFile`.
+- **Formatos antigos:** `migrateLegacyDefinition` (`@olly/shared-types`) junta `migrateLegacyOutputParser` (JSON Schema dentro do nó → sub-nó) e `migrateLegacyAgentixPayload` (Agentix sem `payloadMode` → `json`; spec 016, 13/10/2026). Na API, roda pelo `workflowDefinitionInputSchema` (entradas) e pelo `readDefinition` (leituras do banco); na importação, por `fromWorkflowFile`.
 - Sem rotas, tabelas, permissões ou variáveis novas.
