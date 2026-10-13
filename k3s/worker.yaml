@@ -1,0 +1,84 @@
+# Worker de execuções (spec 006): consome a fila do Redis e executa os workflows; também roda o
+# job diário de manutenção (spec 009). Escala horizontalmente (`oc scale`). Ao receber SIGTERM,
+# espera as execuções em andamento por até OLLY_WORKER_SHUTDOWN_TIMEOUT (60 s).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: olly-flow-worker
+  labels:
+    app.kubernetes.io/name: olly-flow-worker
+    app.kubernetes.io/component: worker
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: olly-flow-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: olly-flow-worker
+        app.kubernetes.io/component: worker
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 70
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: olly-flow-worker
+          image: olly-flow-worker
+          imagePullPolicy: Always
+          ports:
+            # /health e /metrics, só internos (sem Service).
+            - name: health
+              containerPort: 3101
+          envFrom:
+            - configMapRef:
+                name: olly-flow-config
+            - secretRef:
+                name: olly-flow-secrets
+          startupProbe:
+            httpGet:
+              path: /health
+              port: health
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: health
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            tcpSocket:
+              port: health
+            periodSeconds: 20
+            failureThreshold: 3
+          # Código JS e expressões rodam em isolates (128 MB cada, por padrão) dentro do worker:
+          # ajuste a memória junto com OLLY_WORKER_CONCURRENCY.
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: '2'
+              memory: 2Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ['ALL']
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 512Mi

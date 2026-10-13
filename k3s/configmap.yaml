@@ -1,0 +1,57 @@
+# Configuração não sensível da API, do worker e do db-init. Os segredos ficam no Secret
+# `olly-flow-secrets` (ver secret.example.yaml). Referência completa: apps/api/src/config/config.ts.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: olly-flow-config
+data:
+  NODE_ENV: production
+  LOG_LEVEL: info
+  API_PORT: '3000'
+  OLLY_WORKER_PORT: '3101'
+  OLLY_TIMEZONE: America/Sao_Paulo
+
+  # Endereço público (Route do frontend): links do workflow de erro e dos webhooks.
+  OLLY_PUBLIC_URL: https://olly-flow.apps.CLUSTER.DOMINIO
+
+  # A API fica atrás do nginx do frontend e do router do OpenShift (IP real para a allowlist do
+  # webhook). A Route substitui o X-Forwarded-For recebido do cliente (ver web.yaml).
+  OLLY_TRUST_PROXY: 'true'
+
+  # Spec 014: login local; o IdP institucional (ADR-0005) é opcional. Com 'true', defina também
+  # OIDC_ISSUER_URL, OIDC_AUDIENCE e, se preciso, OIDC_DISCOVERY_URL e OIDC_ADMIN_GROUP.
+  OLLY_IDP_ENABLED: 'false'
+
+  # Spec 009: com 'vault', a chave das credenciais vem do Vault institucional (ADR-0007).
+  # Com 'env', vem de OLLY_MASTER_KEY (Secret).
+  OLLY_KEY_PROVIDER: env
+  # OLLY_VAULT_ADDR: https://vault.INSTITUCIONAL
+  # OLLY_VAULT_AUTH: kubernetes
+  # OLLY_VAULT_K8S_ROLE: olly-flow
+
+  # Object storage dos binários e dos dados grandes de execução (S3 compatível). Padrão: o MinIO
+  # do próprio namespace (minio.yaml); com um S3 institucional, troque o endereço.
+  S3_ENDPOINT: http://olly-flow-minio:9000
+  S3_REGION: us-east-1
+  S3_BUCKET: olly
+
+  # Spec 005: webhooks de produção exigem autenticação.
+  OLLY_REQUIRE_WEBHOOK_AUTH: 'true'
+  OLLY_WEBHOOK_RATE_LIMIT_PER_MIN: '120'
+
+  # Spec 006: fila, workers e cotas.
+  OLLY_WORKER_CONCURRENCY: '20'
+  OLLY_WORKER_SHUTDOWN_TIMEOUT: '60'
+  OLLY_PROJECT_MAX_CONCURRENT: '20'
+  OLLY_DEFAULT_WORKFLOW_TIMEOUT: '300'
+
+  # Destinos internos liberados para HTTP/MCP (anti-SSRF), separados por vírgula.
+  OLLY_HTTP_ALLOWLIST: ''
+
+  # Spec 011: prazo da aprovação humana do Agent.
+  OLLY_APPROVAL_TIMEOUT_HOURS: '24'
+
+  # Spec 012: telemetria OpenTelemetry (vazio = desligada).
+  OTEL_EXPORTER_OTLP_ENDPOINT: ''
+  OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+  OTEL_RESOURCE_ATTRIBUTES: deployment.environment=homologacao

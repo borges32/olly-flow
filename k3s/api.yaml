@@ -1,0 +1,99 @@
+# API (NestJS + Fastify): REST, WebSocket dos eventos de execução e webhooks. Sem estado local:
+# escala horizontalmente (os eventos chegam a todas as instâncias pelo Redis, e o navegador usa
+# só WebSocket, sem precisar de sessão fixa).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: olly-flow-api
+  labels:
+    app.kubernetes.io/name: olly-flow-api
+    app.kubernetes.io/component: api
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: olly-flow-api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: olly-flow-api
+        app.kubernetes.io/component: api
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: olly-flow-api
+          image: olly-flow-api
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: olly-flow-config
+            - secretRef:
+                name: olly-flow-secrets
+          # Até o db-init aplicar as migrations, a API pode reiniciar algumas vezes.
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+            failureThreshold: 60
+          # /health responde 503 com o banco ou o Redis fora: tira a instância do balanceamento,
+          # sem reiniciá-la (a liveness só confere que o processo atende na porta).
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 20
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: '1'
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ['ALL']
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: olly-flow-api
+  labels:
+    app.kubernetes.io/name: olly-flow-api
+    app.kubernetes.io/component: api
+spec:
+  selector:
+    app.kubernetes.io/name: olly-flow-api
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http

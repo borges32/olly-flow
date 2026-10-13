@@ -1,0 +1,59 @@
+# nginx do frontend no OpenShift: mesma configuração de infra/docker/nginx.conf, com duas
+# diferenças exigidas pelo SCC `restricted-v2` e pela rede do cluster:
+#   - escuta na porta 8080 (sem root, o container não abre portas abaixo de 1024);
+#   - a API é o Service `olly-flow-api` (sem o resolver 127.0.0.11, que só existe no Docker).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: olly-flow-web-nginx
+data:
+  default.conf: |
+    server {
+      listen 8080;
+      root /usr/share/nginx/html;
+
+      location /api/ {
+        proxy_pass http://olly-flow-api:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+        proxy_set_header X-Request-Id $request_id;
+      }
+
+      # Eventos de execução em tempo real (socket.io, só WebSocket, spec 003).
+      location /socket.io/ {
+        proxy_pass http://olly-flow-api:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_read_timeout 1h;
+      }
+
+      location = /health {
+        proxy_pass http://olly-flow-api:3000;
+      }
+
+      # Webhooks de produção e de teste (spec 005). Corpo até o limite da API (OLLY_WEBHOOK_MAX_BODY)
+      # e espera da resposta síncrona (OLLY_WEBHOOK_RESPONSE_TIMEOUT). O router substitui o
+      # X-Forwarded-For do cliente (anotação na Route); aqui só acrescenta o endereço do router.
+      location ~ ^/webhook(-test)?/ {
+        proxy_pass http://olly-flow-api:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Request-Id $request_id;
+        client_max_body_size 16m;
+        proxy_read_timeout 130s;
+      }
+
+      location /assets/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+      }
+
+      # Rotas do React Router (ex.: /workflows/:id) servem o index.html.
+      location / {
+        try_files $uri /index.html;
+        add_header Cache-Control "no-cache";
+      }
+    }

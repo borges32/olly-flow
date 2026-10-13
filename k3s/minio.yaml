@@ -1,0 +1,142 @@
+# Object storage S3 compatível (MinIO) para os binários e os dados grandes das execuções, com a
+# mesma imagem e a mesma criação do bucket do docker-compose (build da Chainguard, ver o report da
+# spec 001). Uma réplica com volume persistente: sem alta disponibilidade. Com um S3 institucional,
+# remova este arquivo do kustomization.yaml e aponte S3_ENDPOINT para ele.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: olly-flow-minio-data
+  labels:
+    app.kubernetes.io/name: olly-flow-minio
+    app.kubernetes.io/component: object-storage
+spec:
+  accessModes: ['ReadWriteOnce']
+  # Sem storageClassName: usa a classe padrão do cluster (no ARO, managed-csi).
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: olly-flow-minio
+  labels:
+    app.kubernetes.io/name: olly-flow-minio
+    app.kubernetes.io/component: object-storage
+spec:
+  replicas: 1
+  # Volume ReadWriteOnce: o pod antigo precisa sair antes de o novo montar.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: olly-flow-minio
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: olly-flow-minio
+        app.kubernetes.io/component: object-storage
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: olly-flow-minio
+          image: olly-flow-minio
+          imagePullPolicy: Always
+          # Como no docker-compose: sobe o servidor e cria o bucket com o `mc` (idempotente). O
+          # arquivo /tmp/bucket-ready marca o bucket pronto (readiness).
+          command: ['sh', '-c']
+          args:
+            - >-
+              rm -f /tmp/bucket-ready;
+              minio server /data --console-address :9001 & pid=$!;
+              trap 'kill -TERM $pid' TERM INT;
+              until mc alias set local http://127.0.0.1:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null 2>&1; do sleep 1; done;
+              mc mb --ignore-existing "local/$S3_BUCKET" && touch /tmp/bucket-ready;
+              wait $pid
+          env:
+            # Mesmas chaves que a API e o worker usam para acessar o S3.
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: olly-flow-secrets
+                  key: S3_ACCESS_KEY
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: olly-flow-secrets
+                  key: S3_SECRET_KEY
+            - name: S3_BUCKET
+              valueFrom:
+                configMapKeyRef:
+                  name: olly-flow-config
+                  key: S3_BUCKET
+            # O UID aleatório do OpenShift não tem diretório pessoal gravável: config do `mc` em /tmp.
+            - name: HOME
+              value: /tmp
+            - name: MC_CONFIG_DIR
+              value: /tmp/.mc
+          ports:
+            - name: s3
+              containerPort: 9000
+            - name: console
+              containerPort: 9001
+          readinessProbe:
+            exec:
+              command: ['test', '-f', '/tmp/bucket-ready']
+            periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /minio/health/live
+              port: s3
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: '1'
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ['ALL']
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: olly-flow-minio-data
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+---
+# Só interno: a API e o worker acessam por http://olly-flow-minio:9000. O console (9001) não tem
+# Route; para administrar: oc port-forward svc/olly-flow-minio 9001:9001.
+apiVersion: v1
+kind: Service
+metadata:
+  name: olly-flow-minio
+  labels:
+    app.kubernetes.io/name: olly-flow-minio
+    app.kubernetes.io/component: object-storage
+spec:
+  selector:
+    app.kubernetes.io/name: olly-flow-minio
+  ports:
+    - name: s3
+      port: 9000
+      targetPort: s3
+    - name: console
+      port: 9001
+      targetPort: console

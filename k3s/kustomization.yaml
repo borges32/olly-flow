@@ -1,0 +1,44 @@
+# Olly Flow no OpenShift (ARO, ADR-0006): API, worker, frontend e inicialização do banco.
+# Aplicar (depois de criar o Secret, ver README.md):
+#   oc apply -k k3s/
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: olly-flow
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: olly-flow
+    includeSelectors: false
+
+resources:
+  - configmap.yaml
+  - web-nginx-configmap.yaml
+  - redis.yaml
+  - minio.yaml
+  - db-init.yaml
+  - api.yaml
+  - worker.yaml
+  - web.yaml
+
+# Imagens publicadas no registry interno do OpenShift (ou no registry institucional). Troque o
+# endereço e fixe a versão (tag ou digest) a cada implantação.
+images:
+  - name: olly-flow-api
+    newName: image-registry.openshift-image-registry.svc:5000/olly-flow/olly-flow-api
+    newTag: latest
+  - name: olly-flow-db-init
+    newName: image-registry.openshift-image-registry.svc:5000/olly-flow/olly-flow-db-init
+    newTag: latest
+  - name: olly-flow-worker
+    newName: image-registry.openshift-image-registry.svc:5000/olly-flow/olly-flow-worker
+    newTag: latest
+  - name: olly-flow-redis
+    newName: image-registry.openshift-image-registry.svc:5000/olly-flow/olly-flow-redis
+    newTag: latest
+  - name: olly-flow-minio
+    newName: image-registry.openshift-image-registry.svc:5000/olly-flow/olly-flow-minio
+    newTag: latest
+  - name: olly-flow-web
+    newName: image-registry.openshift-image-registry.svc:5000/olly-flow/olly-flow-web
+    newTag: latest

@@ -52,6 +52,7 @@
 │   ├── n8n/                 # Workflows da POC: workflow.json, input.json, expected.json, notes.md
 │   └── olly/                # Equivalentes no formato Olly Flow
 ├── security/sandbox/        # Bateria de testes de escape (spec 008)
+├── k3s/                     # Manifestos do OpenShift (ADR-0006): api, worker, web, db-init (Kustomize)
 ├── docker-compose.yml
 └── docs/
     ├── produto/  arquitetura/  adr/  roadmap.md

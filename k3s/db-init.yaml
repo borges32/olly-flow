@@ -1,0 +1,65 @@
+# Migrations e seed do banco (equivale ao serviço `db-init` do docker-compose). Aplica as
+# migrations pendentes e o seed e continua vigiando a cada 10 s (infra/docker/db-keeper.sh):
+# fica pronto (readiness) quando o schema está em dia. Uma réplica só.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: olly-flow-db-init
+  labels:
+    app.kubernetes.io/name: olly-flow-db-init
+    app.kubernetes.io/component: database-migrations
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: olly-flow-db-init
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: olly-flow-db-init
+        app.kubernetes.io/component: database-migrations
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: olly-flow-db-init
+          image: olly-flow-db-init
+          imagePullPolicy: Always
+          command: ['db-keeper']
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: olly-flow-secrets
+                  key: DATABASE_URL
+            - name: INTERVAL
+              value: '10'
+          readinessProbe:
+            exec:
+              command: ['test', '-f', '/tmp/ready']
+            periodSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ['ALL']
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 16Mi

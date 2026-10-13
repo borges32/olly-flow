@@ -1,0 +1,128 @@
+# Frontend (SPA no nginx) e proxy da API na mesma origem: /api, /socket.io, /health e os webhooks
+# (/webhook, /webhook-test) vão para o Service `olly-flow-api`. É a única entrada externa (Route).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: olly-flow-web
+  labels:
+    app.kubernetes.io/name: olly-flow-web
+    app.kubernetes.io/component: web
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: olly-flow-web
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: olly-flow-web
+        app.kubernetes.io/component: web
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: olly-flow-web
+          image: olly-flow-web
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ['ALL']
+          # O nginx da imagem grava cache, pid e temporários: diretórios graváveis em memória,
+          # porque o OpenShift roda o container com um UID aleatório e o disco só leitura.
+          volumeMounts:
+            - name: nginx-conf
+              mountPath: /etc/nginx/conf.d
+              readOnly: true
+            - name: nginx-cache
+              mountPath: /var/cache/nginx
+            - name: nginx-run
+              mountPath: /run
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: nginx-conf
+          configMap:
+            name: olly-flow-web-nginx
+        - name: nginx-cache
+          emptyDir:
+            sizeLimit: 128Mi
+        - name: nginx-run
+          emptyDir:
+            sizeLimit: 1Mi
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: olly-flow-web
+  labels:
+    app.kubernetes.io/name: olly-flow-web
+    app.kubernetes.io/component: web
+spec:
+  selector:
+    app.kubernetes.io/name: olly-flow-web
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+# Entrada pública com TLS terminado no router (certificado padrão do cluster ou o informado em
+# spec.tls). Troque o host pelo domínio do ambiente (mesmo valor de OLLY_PUBLIC_URL).
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: olly-flow
+  labels:
+    app.kubernetes.io/name: olly-flow-web
+    app.kubernetes.io/component: web
+  annotations:
+    # Webhooks síncronos esperam até 120 s (OLLY_WEBHOOK_RESPONSE_TIMEOUT); o padrão do router é 30 s.
+    haproxy.router.openshift.io/timeout: 130s
+    # WebSocket dos eventos de execução: conexão longa.
+    haproxy.router.openshift.io/timeout-tunnel: 1h
+    # O router troca o X-Forwarded-For enviado pelo cliente pelo IP real (allowlist de IP do
+    # webhook, spec 005), em vez de acrescentar a um valor que o cliente poderia forjar.
+    haproxy.router.openshift.io/set-forwarded-headers: replace
+spec:
+  host: olly-flow.apps.CLUSTER.DOMINIO
+  to:
+    kind: Service
+    name: olly-flow-web
+    weight: 100
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+  wildcardPolicy: None
