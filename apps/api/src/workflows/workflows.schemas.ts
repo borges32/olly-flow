@@ -1,11 +1,11 @@
-import { workflowDefinitionShapeSchema } from '@olly/shared-types';
+import { workflowDefinitionInputSchema } from '@olly/shared-types';
 import { z } from 'zod';
 
 const name = z.string().trim().min(1).max(200);
 
 export const createWorkflowSchema = z.object({
   name,
-  definition: workflowDefinitionShapeSchema.optional(),
+  definition: workflowDefinitionInputSchema.optional(),
 });
 
 /** Spec 009, FR-009: mensagem opcional ao salvar, obrigatória ao publicar. */
@@ -13,7 +13,7 @@ export const versionMessage = z.string().trim().min(1).max(500);
 
 export const saveWorkflowSchema = z.object({
   name: name.optional(),
-  definition: workflowDefinitionShapeSchema,
+  definition: workflowDefinitionInputSchema,
   baseVersion: z.number().int().min(1),
   message: versionMessage.optional(),
 });

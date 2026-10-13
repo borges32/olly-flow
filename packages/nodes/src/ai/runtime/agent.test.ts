@@ -6,7 +6,10 @@ import {
   type AgentHooks,
   type AgentRunInput,
 } from './agent.js';
+import { fakeContext } from '../../test-support/context.js';
+import { structuredOutputParserNode } from '../output-parsers/definitions.js';
 import { FakeScriptedChatModel, type FakeModelStep } from './fake-model.js';
+import type { OutputParserSupply } from './output-parser.js';
 import { fromAISchema } from './from-ai.js';
 import type { AgentTool } from './types.js';
 import { wrapToolResult } from './untrusted.js';
@@ -118,28 +121,42 @@ describe('spec 011 — FR-003/FR-005/FR-006: laço do agente', () => {
   });
 });
 
-describe('spec 011 — FR-004/SC-007: resposta estruturada', () => {
+describe('spec 011 — FR-004/SC-007: resposta estruturada (Structured Output Parser, spec 018)', () => {
   const schema = {
     type: 'object',
     required: ['nome', 'idade'],
     properties: { nome: { type: 'string' }, idade: { type: 'number' } },
   };
+  /** Structured Output Parser com a correção automática (o comportamento do SC-007). */
+  const parser = async () =>
+    (await structuredOutputParserNode.supplyData?.(
+      fakeContext({
+        params: { schemaType: 'manual', inputSchema: JSON.stringify(schema), autoFix: true },
+      }),
+      0,
+    )) as OutputParserSupply;
 
   it('SC-007: resposta inválida é corrigida pelo modelo', async () => {
     const { run, model } = input(
       [{ content: 'Maria, 30 anos' }, { content: '```json\n{"nome": "Maria", "idade": 30}\n```' }],
-      { outputSchema: schema },
+      { outputParser: await parser() },
     );
     const result = await run();
     expect(result.kind === 'done' && result.output).toEqual({ nome: 'Maria', idade: 30 });
-    expect(JSON.stringify(model.calls[1]?.at(-1)?.content)).toContain('não segue o JSON Schema');
+    expect(JSON.stringify(model.calls[1]?.at(-1)?.content)).toContain(
+      'não segue o formato exigido',
+    );
+    // FR-002 (spec 018): as instruções de formato vão no pedido.
+    expect(JSON.stringify(model.calls[0]?.at(-1)?.content)).toContain('JSON Schema');
   });
 
   it('SC-007: falha depois de 2 correções', async () => {
-    const { run } = input([{ content: '{"nome": 1}', repeat: true }], { outputSchema: schema });
+    const { run } = input([{ content: '{"nome": 1}', repeat: true }], {
+      outputParser: await parser(),
+    });
     await expect(run()).rejects.toBeInstanceOf(AgentOutputParseError);
     await expect(
-      input([{ content: '{"nome": 1}', repeat: true }], { outputSchema: schema }).run(),
+      input([{ content: '{"nome": 1}', repeat: true }], { outputParser: await parser() }).run(),
     ).rejects.toThrow('após 2 correções');
   });
 });

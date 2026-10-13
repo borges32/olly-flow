@@ -145,6 +145,8 @@ export const portsOf = (type: NodeDefinition, node: WorkflowNode) => resolveNode
 
 /** Paralelismo padrão entre nós prontos (`settings.maxParallel`, spec 006). */
 export const DEFAULT_MAX_PARALLEL = 8;
+/** Spec 018: profundidade máxima de sub-nós ligados a sub-nós (ex.: Auto-fixing em cadeia). */
+export const MAX_SUBNODE_DEPTH = 5;
 
 /**
  * Padrão de `maxParallel` quando o workflow não define: `OLLY_DEFAULT_MAX_PARALLEL` (ex.: `1`
@@ -703,11 +705,21 @@ export async function runWorkflow(
       items: Item[],
       signal: AbortSignal,
       runIndex: number,
+      /**
+       * Spec 018: sub-nós de sub-nós (o Auto-fixing lê o próprio modelo e parser). As expressões
+       * continuam vendo os itens do nó raiz; a cadeia é limitada a 5 níveis.
+       */
+      depth = 0,
+      scopeNodeId: string = parent.id,
     ): NodeContext['subNodes'] =>
-    async (kind: SubNodeKind, itemIndex: number): Promise<SubNodeSupply[]> => {
+    async (
+      kind: SubNodeKind,
+      itemIndex: number,
+      filter: { port?: string } = {},
+    ): Promise<SubNodeSupply[]> => {
       const ports = new Set(
         portsOf(parentType, parent)
-          .inputs.filter((p) => p.kind === kind)
+          .inputs.filter((p) => p.kind === kind && (!filter.port || p.name === filter.port))
           .map((p) => p.name),
       );
       const sources = def.edges
@@ -726,7 +738,7 @@ export async function runWorkflow(
           state,
           sub,
           items,
-          expressionScope(parent.id),
+          expressionScope(scopeNodeId),
           options.evaluator,
         );
         const subCtx = createContext({
@@ -743,7 +755,15 @@ export async function runWorkflow(
           loop: undefined,
           runIndex,
           resume: undefined,
-          subNodes: () => Promise.resolve([]),
+          subNodes:
+            depth >= MAX_SUBNODE_DEPTH
+              ? () =>
+                  Promise.reject(
+                    new WorkflowRunError(
+                      `Nó "${sub.name}": sub-nós encadeados demais (limite: ${String(MAX_SUBNODE_DEPTH)})`,
+                    ),
+                  )
+              : subNodesFor(sub, subType, items, signal, runIndex, depth + 1, scopeNodeId),
           withFromAI: withFromAIFor(sub, items),
         });
         supplies.push({

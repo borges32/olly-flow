@@ -1,8 +1,8 @@
-import { itemSchema, workflowDefinitionShapeSchema } from '@olly/shared-types';
+import { itemSchema, workflowDefinitionInputSchema } from '@olly/shared-types';
 import { z } from 'zod';
 
 export const testRunSchema = z.object({
-  definition: workflowDefinitionShapeSchema,
+  definition: workflowDefinitionInputSchema,
   pinData: z.record(z.string(), z.array(itemSchema)).optional(),
   destinationNodeId: z.string().min(1).optional(),
   reuse: z.record(z.string().min(1), z.uuid()).optional(),
@@ -10,7 +10,7 @@ export const testRunSchema = z.object({
 export type TestRunBody = z.infer<typeof testRunSchema>;
 
 export const previewSchema = z.object({
-  definition: workflowDefinitionShapeSchema,
+  definition: workflowDefinitionInputSchema,
   nodeId: z.string().min(1),
   expression: z.string().max(10_000),
   executionId: z.uuid().optional(),

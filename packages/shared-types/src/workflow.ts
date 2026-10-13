@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { migrateLegacyOutputParser } from './legacy-output-parser.js';
 
 /** Referência a um binário guardado no object storage; o conteúdo nunca trafega no item. */
 export interface BinaryRef {
@@ -18,7 +19,7 @@ export interface Item {
 /** Porta -> itens: `{ main }`, `{ true, false }`, `{ output0.. }`, `{ error }`. */
 export type NodeOutput = Record<string, Item[]>;
 
-export type PortKind = 'main' | 'ai_languageModel' | 'ai_memory' | 'ai_tool';
+export type PortKind = 'main' | 'ai_languageModel' | 'ai_memory' | 'ai_tool' | 'ai_outputParser';
 
 export interface PortDef {
   name: string;
@@ -30,7 +31,13 @@ export interface PortDef {
 }
 
 /** Spec 011, FR-001: portas de sub-nós (modelo, memória, ferramentas) ligadas à base do Agent. */
-export const SUBNODE_PORT_KINDS = ['ai_languageModel', 'ai_memory', 'ai_tool'] as const;
+/** Spec 018: `ai_outputParser` (output parsers do Agent, do Basic LLM Chain e do Auto-fixing). */
+export const SUBNODE_PORT_KINDS = [
+  'ai_languageModel',
+  'ai_memory',
+  'ai_tool',
+  'ai_outputParser',
+] as const;
 export type SubNodePortKind = (typeof SUBNODE_PORT_KINDS)[number];
 
 /** Sub-nó: todas as saídas são de um tipo `ai_*` (não entra no fluxo principal). */
@@ -128,7 +135,7 @@ export const nodeOutputSchema = z.record(
 export const portDefSchema = z.object({
   name: nonEmpty,
   displayName: z.string().optional(),
-  kind: z.enum(['main', 'ai_languageModel', 'ai_memory', 'ai_tool']),
+  kind: z.enum(['main', 'ai_languageModel', 'ai_memory', 'ai_tool', 'ai_outputParser']),
   required: z.boolean().optional(),
 }) satisfies z.ZodType<PortDef>;
 
@@ -189,6 +196,14 @@ export const workflowDefinitionShapeSchema = z.object({
   settings: workflowSettingsSchema,
   pinData: z.record(z.string(), z.array(itemSchema)).optional(),
 }) satisfies z.ZodType<WorkflowDefinition>;
+
+/**
+ * Spec 018, FR-006: definição recebida pela API, com o formato antigo do output parser (JSON
+ * Schema dentro do Agent ou do Basic LLM Chain) migrado para o sub-nó.
+ */
+export const workflowDefinitionInputSchema = workflowDefinitionShapeSchema.transform(
+  (def) => migrateLegacyOutputParser(def).definition,
+);
 
 export const workflowDefinitionSchema = workflowDefinitionShapeSchema.superRefine((def, ctx) => {
   const ids = new Set<string>();

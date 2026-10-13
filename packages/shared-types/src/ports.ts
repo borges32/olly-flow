@@ -14,7 +14,18 @@ export type DynamicPorts =
    * `params.ports` (`{ inputs, outputs }`, listas de tipos de conexão) copiadas das conexões
    * originais; sem elas, uma entrada e uma saída `main`.
    */
-  | { kind: 'placeholder' };
+  | { kind: 'placeholder' }
+  /**
+   * Entradas opcionais dos nós de IA (Agent, Basic LLM Chain), pelos parâmetros:
+   * `needsFallback` → modelo reserva (`ai_fallbackModel`, tipo `ai_languageModel`; spec 017,
+   * FR-011); `hasOutputParser` → `ai_outputParser` (spec 018, FR-001).
+   */
+  | { kind: 'aiRootInputs' };
+
+/** Entrada do modelo reserva (spec 017). */
+export const FALLBACK_MODEL_PORT = 'ai_fallbackModel';
+/** Entrada do output parser (spec 018). */
+export const OUTPUT_PARSER_PORT = 'ai_outputParser';
 
 /** Porta de erro (spec 007, FR-013): existe quando `settings.onError = 'errorOutput'`. */
 export const ERROR_PORT = 'error';
@@ -82,11 +93,43 @@ export function resolveNodePorts(
     inputs = ins.map((kind, i) => ({ name: `in${String(i)}`, kind }));
     outputs = outs.map((kind, i) => ({ name: `out${String(i)}`, kind }));
   }
+  if (type.dynamicPorts?.kind === 'aiRootInputs') {
+    if (node.params.needsFallback === true) {
+      inputs = [
+        ...inputs,
+        {
+          name: FALLBACK_MODEL_PORT,
+          displayName: 'Modelo reserva',
+          kind: 'ai_languageModel',
+          required: true,
+          maxConnections: 1,
+        },
+      ];
+    }
+    if (node.params.hasOutputParser === true) {
+      inputs = [
+        ...inputs,
+        {
+          name: OUTPUT_PARSER_PORT,
+          displayName: 'Output Parser',
+          kind: 'ai_outputParser',
+          required: true,
+          maxConnections: 1,
+        },
+      ];
+    }
+  }
   if (node.settings?.onError === 'errorOutput' && !outputs.some((p) => p.name === ERROR_PORT)) {
     outputs = [...outputs, { name: ERROR_PORT, displayName: 'Erro', kind: 'main' }];
   }
   return { inputs, outputs };
 }
 
-const PORT_KINDS: readonly string[] = ['main', 'ai_languageModel', 'ai_memory', 'ai_tool'];
+const PORT_KINDS: readonly string[] = [
+  'main',
+  'ai_languageModel',
+  'ai_memory',
+  'ai_tool',
+  'ai_outputParser',
+];
 const isPortKind = (v: unknown): v is PortKind => typeof v === 'string' && PORT_KINDS.includes(v);

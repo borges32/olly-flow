@@ -12,6 +12,7 @@ import { APP_CONFIG, type AppConfig } from '../config/config.js';
 import { createRedisConnection } from '../core/redis.js';
 import { DB, REDIS } from '../core/tokens.js';
 import { matchPath, specificity } from './paths.js';
+import { readDefinition } from '../workflows/definition.js';
 
 /** Rota de produção: caminho + método → workflow publicado e nó de webhook. */
 export interface WebhookRoute {
@@ -135,7 +136,7 @@ export class WebhookRegistry implements OnModuleInit, OnApplicationShutdown {
       .where('w.deleted_at', 'is', null)
       .execute();
     return rows.flatMap((r) => {
-      const definition = r.definition as WorkflowDefinition;
+      const definition = readDefinition(r.definition);
       const node = definition.nodes.find((n) => n.id === r.node_id);
       if (!node || r.published_version === null) return [];
       return [

@@ -1,12 +1,12 @@
 import type { Logger } from '@nestjs/common';
 import type { Db } from '@olly/db';
-import type { WorkflowDefinition } from '@olly/shared-types';
 import type { ExecutionEventSink } from '../executions/execution-events.service.js';
 import type { ErrorWorkflowTrigger } from '../executions/error-workflow.js';
 import type { ExecutionError } from '../executions/execution-job.js';
 import type { ResultPublisher } from '../executions/result-bus.js';
 import { WORKER_LOST_MESSAGE } from './constants.js';
 import type { ProjectQuota } from './quota.js';
+import { readDefinition } from '../workflows/definition.js';
 
 export interface WorkerLostDeps {
   db: Db;
@@ -65,7 +65,7 @@ export async function markWorkerLost(
         projectId: row.project_id,
         mode: row.mode,
         triggerType: row.trigger_type,
-        definition: row.definition as WorkflowDefinition,
+        definition: readDefinition(row.definition),
         error,
       });
     }

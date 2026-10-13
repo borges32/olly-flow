@@ -227,7 +227,12 @@ export interface NodeContext {
    * Spec 011, FR-001: o que os sub-nós ligados à porta do tipo `kind` fornecem para o item
    * (modelo, memória, ferramentas), na ordem das conexões.
    */
-  subNodes(kind: SubNodeKind, itemIndex: number): Promise<SubNodeSupply[]>;
+  subNodes(
+    kind: SubNodeKind,
+    itemIndex: number,
+    /** Spec 017: só as conexões desta entrada (ex.: o modelo reserva). */
+    options?: { port?: string },
+  ): Promise<SubNodeSupply[]>;
   /**
    * Spec 011, FR-007: parâmetros deste nó resolvidos com os valores de `$fromAI()` (sub-nó de
    * ferramenta, na chamada feita pelo modelo).
@@ -240,7 +245,7 @@ export interface NodeContext {
   ai(): AiGateway;
 }
 
-export type SubNodeKind = 'ai_languageModel' | 'ai_memory' | 'ai_tool';
+export type SubNodeKind = 'ai_languageModel' | 'ai_memory' | 'ai_tool' | 'ai_outputParser';
 
 /** O que um sub-nó fornece, com o nó de origem. */
 export interface SubNodeSupply {

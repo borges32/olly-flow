@@ -31,6 +31,7 @@ import type {
   ListWorkflowsQuery,
   SaveWorkflowBody,
 } from './workflows.schemas.js';
+import { readDefinition } from './definition.js';
 
 const EMPTY_DEFINITION: WorkflowDefinition = { nodes: [], edges: [], settings: {} };
 
@@ -124,7 +125,7 @@ export class WorkflowsService {
     if (row?.project_id !== projectId) {
       throw fail('Workflow de erro não encontrado neste projeto');
     }
-    const nodes = (row.definition as WorkflowDefinition).nodes;
+    const nodes = readDefinition(row.definition).nodes;
     if (!nodes.some((n) => n.type === 'trigger.error')) {
       throw fail('O workflow de erro precisa começar por um nó "Gatilho de erro"');
     }
@@ -238,7 +239,7 @@ export class WorkflowsService {
       .where('workflows.deleted_at', 'is', null)
       .executeTakeFirst();
     if (!row) throw new NotFoundError('Workflow não encontrado');
-    const definition = row.definition as WorkflowDefinition;
+    const definition = readDefinition(row.definition);
     return {
       id: row.id,
       projectId: row.project_id,
@@ -388,7 +389,7 @@ export class WorkflowsService {
       createdBy: row.created_by,
       createdByName: row.created_by_name,
       message: row.message,
-      definition: row.definition as WorkflowDefinition,
+      definition: readDefinition(row.definition),
     };
   }
 

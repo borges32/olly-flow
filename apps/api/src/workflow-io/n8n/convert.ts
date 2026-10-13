@@ -10,6 +10,7 @@ import {
   type WorkflowFileNode,
 } from '@olly/shared-types';
 import { AGENTIX_TOOL_REASON, CONVERTERS, DROPPED_TYPES, type N8nNode } from './converters.js';
+
 import { isObject, list, num, str, type Params } from './helpers.js';
 
 export interface N8nConversion {
@@ -20,7 +21,14 @@ export interface N8nConversion {
 
 // Spec 016: `CUSTOM.` é o prefixo dos nós customizados instalados no N8N.
 const N8N_TYPE = /^(n8n-nodes-|@n8n\/|@[\w.-]+\/n8n-nodes-|CUSTOM\.)/;
-const PORT_KINDS: readonly string[] = ['main', 'ai_languageModel', 'ai_memory', 'ai_tool'];
+// Spec 018: `ai_outputParser` (output parsers) é mantido.
+const PORT_KINDS: readonly string[] = [
+  'main',
+  'ai_languageModel',
+  'ai_memory',
+  'ai_tool',
+  'ai_outputParser',
+];
 const isPortKind = (v: string): v is PortKind => PORT_KINDS.includes(v);
 
 /** Variáveis das expressões que o Olly Flow suporta (spec 003); as demais vão para revisão. */
@@ -155,8 +163,40 @@ export function convertN8n(input: unknown): N8nConversion {
       .map(([from]) => from),
   );
 
+  // Spec 018, FR-010: pendências dos output parsers, a partir das conexões do N8N.
+  const parserTargets = new Map<string, string[]>();
+  for (const [from, byKind] of Object.entries(rawConnections)) {
+    if (!isObject(byKind)) continue;
+    for (const target of list(byKind.ai_outputParser).flatMap((t) => list(t).filter(isObject))) {
+      parserTargets.set(from, [...(parserTargets.get(from) ?? []), str(target.node)]);
+    }
+  }
+  const incoming = (name: string, kind: string) =>
+    Object.entries(rawConnections).filter(
+      ([, byKind]) =>
+        isObject(byKind) &&
+        list(byKind[kind]).some((t) => list(t).some((c) => isObject(c) && str(c.node) === name)),
+    ).length;
+  const parserIssues = (node: N8nNode, name: string, type: string): string[] => {
+    const issues: string[] = [];
+    if (node.parameters?.hasOutputParser === true && incoming(name, 'ai_outputParser') === 0)
+      issues.push('"Require Specific Output Format" ligado sem output parser conectado: ligue um');
+    if (type.startsWith('@n8n/n8n-nodes-langchain.outputParser') && !parserTargets.has(name))
+      issues.push(
+        'Output parser sem nó de destino: ligue-o a um Agent, Basic LLM Chain ou Auto-fixing',
+      );
+    if (type === '@n8n/n8n-nodes-langchain.outputParserAutofixing') {
+      if (incoming(name, 'ai_languageModel') === 0)
+        issues.push('Auto-fixing sem modelo de chat conectado');
+      if (incoming(name, 'ai_outputParser') === 0)
+        issues.push('Auto-fixing sem output parser interno conectado');
+    }
+    return issues;
+  };
+
   const nodes: WorkflowFileNode[] = [];
   const dropped = new Set<string>();
+  let stickies = 0;
   const loopNodes = new Set<string>();
   for (const node of rawNodes) {
     const name = str(node.name).trim();
@@ -164,6 +204,7 @@ export function convertN8n(input: unknown): N8nConversion {
     const version = num(node.typeVersion) ?? 1;
     if (DROPPED_TYPES.has(type)) {
       dropped.add(name);
+      stickies++;
       continue;
     }
     const position = Array.isArray(node.position) ? (node.position as [number, number]) : undefined;
@@ -178,6 +219,9 @@ export function convertN8n(input: unknown): N8nConversion {
     let result = converter
       ? converter(node, params, version)
       : { unsupported: `Tipo do N8N sem conversão: ${type}` };
+    if (!('unsupported' in result)) {
+      result = { ...result, warnings: [...result.warnings, ...parserIssues(node, name, type)] };
+    }
     // Spec 016, FR-012: o Agentix ligado como ferramenta de um AI Agent vira marcador.
     if (!('unsupported' in result) && result.type === 'ai.agentix' && toolSources.has(name)) {
       result = { unsupported: AGENTIX_TOOL_REASON };
@@ -241,8 +285,8 @@ export function convertN8n(input: unknown): N8nConversion {
       report.nodes.withWarnings.push({ node: name, from: type, to: result.type, warnings });
     else report.nodes.converted.push({ node: name, from: type, to: result.type });
   }
-  if (dropped.size > 0)
-    report.semanticNotes.push(`Notas (sticky notes) descartadas: ${String(dropped.size)}.`);
+  if (stickies > 0)
+    report.semanticNotes.push(`Notas (sticky notes) descartadas: ${String(stickies)}.`);
 
   // Conexões: as mesmas (os índices do N8N valem no Olly Flow), sem tipos inexistentes aqui.
   const connections: WorkflowFileConnections = {};

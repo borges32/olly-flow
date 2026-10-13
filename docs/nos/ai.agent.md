@@ -18,15 +18,14 @@ Agente que usa um modelo de linguagem com chamada de ferramentas (laço ReAct): 
 | `systemMessage` | Instruções do sistema (padrão: "Você é um assistente útil.") |
 | `maxIterations` | Chamadas ao modelo por item (padrão 10). O teto da instalação (`OLLY_AGENT_MAX_ITERATIONS`, 25) prevalece |
 | `returnIntermediateSteps` | Inclui na saída as ferramentas chamadas e os resultados |
-| `outputParser` | `none` (texto) ou `jsonSchema`: a resposta precisa ser um JSON válido no `schema` |
-| `schema` | JSON Schema da resposta estruturada (`outputParser: jsonSchema`) |
+| `hasOutputParser` | "Exigir formato específico": acrescenta a entrada **Output Parser** (`ai_outputParser`), onde se liga um [output parser](output-parsers.md) (Structured, Auto-fixing ou Item List). A resposta interpretada sai em `output` (spec 018) |
 | `blockToolCallsAfterUntrustedContent` | Depois do primeiro resultado de ferramenta externa (MCP ou HTTP), toda ferramenta com efeito colateral passa a pedir aprovação humana (padrão desligado) |
 
 ## Saída (um item por item de entrada)
 
 ```json
 {
-  "output": "texto da resposta (ou o objeto, com outputParser jsonSchema)",
+  "output": "texto da resposta (ou o valor interpretado pelo output parser)",
   "intermediateSteps": [{ "action": { "tool": "consulta_cliente", "toolInput": { "id": "1" } }, "observation": "..." }],
   "usage": { "inputTokens": 812, "outputTokens": 95, "model": "gpt-4o-mini" }
 }

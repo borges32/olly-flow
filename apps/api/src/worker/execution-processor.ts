@@ -2,7 +2,6 @@ import { ollyMetrics, telemetryEnabled } from '@olly/telemetry';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { Db } from '@olly/db';
 import { ExecutionCancelledError } from '@olly/engine';
-import type { WorkflowDefinition } from '@olly/shared-types';
 import { DelayedError, Queue, Worker, type Job } from 'bullmq';
 import type { Redis } from 'ioredis';
 import { BINARY_STORAGE } from '../binary/binary.module.js';
@@ -26,6 +25,7 @@ import { ApprovalsService } from '../ai/approvals.service.js';
 import { loadPayload } from '../queue/payloads.js';
 import { ProjectQuota } from '../queue/quota.js';
 import { markWorkerLost, type WorkerLostDeps } from '../queue/worker-lost.js';
+import { readDefinition } from '../workflows/definition.js';
 
 /** Pedidos de cancelamento que chegaram antes de a execução começar aqui. */
 const EARLY_CANCEL_TTL_MS = 60_000;
@@ -208,7 +208,7 @@ export class ExecutionProcessor {
           projectId,
           active: execution.active,
         },
-        definition: execution.definition as WorkflowDefinition,
+        definition: readDefinition(execution.definition),
         mode: execution.mode,
         ...payload,
         ...(job.data.trace && { traceContext: job.data.trace }),
@@ -326,7 +326,7 @@ export class ExecutionProcessor {
           projectId,
           active: execution.active,
         },
-        definition: execution.definition as WorkflowDefinition,
+        definition: readDefinition(execution.definition),
         mode: execution.mode,
         ...stored.job,
         resume: { snapshot: stored.engine, values },

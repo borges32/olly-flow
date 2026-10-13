@@ -9,6 +9,7 @@ import {
   type StoredMessage,
 } from '@langchain/core/messages';
 import { Ajv } from 'ajv';
+import { OutputParserError, type OutputParserSupply } from './output-parser.js';
 import type { AgentTool, ChatModelSupply, MemorySupply } from './types.js';
 import { UNTRUSTED_INSTRUCTION, toolResultText, wrapToolResult } from './untrusted.js';
 
@@ -60,10 +61,14 @@ export interface PendingApproval {
 
 export interface AgentHooks {
   beforeModelCall(): Promise<void>;
-  onUsage(usage: { inputTokens: number; outputTokens: number }): Promise<void>;
+  /** `model`: o modelo que respondeu (o do Auto-fixing, nas correções dele; spec 018). */
+  onUsage(
+    usage: { inputTokens: number; outputTokens: number },
+    model?: ChatModelSupply,
+  ): Promise<void>;
   onStep(step: {
     stepIndex: number;
-    kind: 'model' | 'tool' | 'approval' | 'final';
+    kind: 'model' | 'tool' | 'approval' | 'final' | 'error';
     toolName?: string;
     content: unknown;
     inputTokens?: number;
@@ -78,8 +83,8 @@ export interface AgentRunInput {
   systemMessage: string;
   prompt: string;
   maxIterations: number;
-  /** FR-004: valida a resposta final contra este JSON Schema. */
-  outputSchema?: Record<string, unknown>;
+  /** Spec 018, FR-002: interpreta a resposta final (Structured, Auto-fixing ou Item List). */
+  outputParser?: OutputParserSupply;
   /** FR-013: depois de conteúdo externo, ferramentas com efeitos colaterais pedem aprovação. */
   blockAfterUntrusted: boolean;
   toolResultMaxChars: number;
@@ -121,6 +126,18 @@ export const contentText = (message: BaseMessage): string => {
   );
   return texts.every((t) => t !== undefined) ? texts.join('') : JSON.stringify(content);
 };
+
+/**
+ * Pedido de correção da resposta fora do formato (FR-004; Basic LLM Chain, spec 017; com as
+ * instruções do output parser, spec 018).
+ */
+export const correctionPrompt = (problems: string[], instructions: string): string =>
+  `A resposta não segue o formato exigido (${problems.join('; ')}). ` +
+  `Responda de novo somente no formato pedido. ${instructions}`;
+
+/** Spec 018, FR-002: as instruções de formato do parser vão ao fim do pedido, como no N8N. */
+export const withFormatInstructions = (prompt: string, parser?: OutputParserSupply): string =>
+  parser ? `${prompt}\n\n${parser.formatInstructions()}` : prompt;
 
 /** JSON da resposta: aceita o texto puro ou dentro de um bloco ```json. */
 export function extractJson(text: string): unknown {
@@ -174,7 +191,7 @@ export async function runAgent(input: AgentRunInput): Promise<AgentRunResult> {
     messages = [
       new SystemMessage(`${input.systemMessage}\n\n${UNTRUSTED_INSTRUCTION}`),
       ...history,
-      new HumanMessage(input.prompt),
+      new HumanMessage(withFormatInstructions(input.prompt, input.outputParser)),
     ];
     state = {
       messages: [],
@@ -315,25 +332,34 @@ export async function runAgent(input: AgentRunInput): Promise<AgentRunResult> {
     if (toolCalls.length > 0) continue;
 
     const answer = contentText(response);
-    if (input.outputSchema) {
-      const problems = outputProblems(input.outputSchema, answer);
-      if (problems.length > 0) {
+    let output: unknown = answer;
+    if (input.outputParser) {
+      try {
+        output = await input.outputParser.parse(answer, {
+          signal: input.signal,
+          hooks: {
+            beforeModelCall: () => input.hooks.beforeModelCall(),
+            onUsage: (usage, model) => input.hooks.onUsage(usage, model),
+            onStep: (s) => step({ stepIndex: state.stepIndex, ...s }),
+          },
+        });
+      } catch (error) {
+        if (!(error instanceof OutputParserError) || !input.outputParser.fixWithRootModel)
+          throw error;
         if (state.corrections >= MAX_OUTPUT_CORRECTIONS) {
           throw new AgentOutputParseError(
-            `A resposta do agente não seguiu o JSON Schema após ${String(MAX_OUTPUT_CORRECTIONS)} correções: ${problems.join('; ')}`,
+            `A resposta do agente não seguiu o formato do output parser após ${String(MAX_OUTPUT_CORRECTIONS)} correções: ${error.problems.join('; ')}`,
           );
         }
         state.corrections++;
         messages.push(
           new HumanMessage(
-            `A resposta não segue o JSON Schema exigido (${problems.join('; ')}). ` +
-              `Responda de novo somente com um JSON válido para este schema: ${JSON.stringify(input.outputSchema)}`,
+            correctionPrompt(error.problems, input.outputParser.formatInstructions()),
           ),
         );
         continue;
       }
     }
-    const output = input.outputSchema ? extractJson(answer) : answer;
     await step({ stepIndex: state.stepIndex, kind: 'final', content: { output } });
     // FR-009: a memória guarda a pergunta e a resposta final do turno.
     const question = messages[state.turnStart];

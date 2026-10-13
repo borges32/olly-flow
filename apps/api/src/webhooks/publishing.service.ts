@@ -16,6 +16,7 @@ import { CredentialsService } from '../credentials/credentials.service.js';
 import { NODE_REGISTRY } from '../node-types/node-types.module.js';
 import { isValidPath, normalizePath } from './paths.js';
 import { WebhookRegistry } from './webhook-registry.js';
+import { readDefinition } from '../workflows/definition.js';
 
 const UNIQUE_VIOLATION = '23505';
 
@@ -133,7 +134,7 @@ export class PublishingService {
       .where('version', '=', version)
       .executeTakeFirst();
     if (!row) throw new NotFoundError(`Versão ${version} não encontrada`);
-    const definition = row.definition as WorkflowDefinition;
+    const definition = readDefinition(row.definition);
 
     const structure = validateWorkflow(definition, this.registry);
     const hooks = await webhookIssues(

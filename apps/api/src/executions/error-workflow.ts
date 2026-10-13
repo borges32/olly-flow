@@ -5,6 +5,7 @@ import { APP_CONFIG, type AppConfig } from '../config/config.js';
 import { DB } from '../core/tokens.js';
 import { QueueDispatcher } from '../queue/queue-dispatcher.js';
 import type { ExecutionError } from './execution-job.js';
+import { readDefinition } from '../workflows/definition.js';
 
 /** Execução que falhou, candidata a acionar o workflow de erro. */
 export interface FailedExecution {
@@ -68,7 +69,7 @@ export class ErrorWorkflowTrigger {
       this.logger.warn(`Workflow de erro ${targetId} inexistente ou de outro projeto`);
       return null;
     }
-    const definition = target.definition as WorkflowDefinition;
+    const definition = readDefinition(target.definition);
     const trigger = definition.nodes.find((n) => n.type === 'trigger.error');
     if (!trigger) {
       this.logger.warn(`Workflow de erro ${targetId} não tem "Gatilho de erro"`);

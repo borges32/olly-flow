@@ -1,0 +1,4 @@
+{
+  "trigger": "When clicking ‘Test workflow’",
+  "items": [{ "json": { "chamado": "O Wi-Fi do terceiro andar caiu" } }]
+}

@@ -1,4 +1,4 @@
-import type { Item, NodeOutput } from '@olly/shared-types';
+import { OUTPUT_PARSER_PORT, type Item, type NodeOutput } from '@olly/shared-types';
 import {
   NodeParameterError,
   NodeWaitSignal,
@@ -14,6 +14,7 @@ import {
   type AgentState,
   type ApprovalDecision,
 } from '../runtime/agent.js';
+import type { OutputParserSupply } from '../runtime/output-parser.js';
 import type { AgentTool, ChatModelSupply, MemorySupply } from '../runtime/types.js';
 
 /** Limite padrão de iterações (NFR-001). */
@@ -37,19 +38,23 @@ type Outcome =
   | { kind: 'paused'; state: AgentState; approvals: NodeApprovalRequest[] }
   | { kind: 'failed'; error: unknown };
 
-function parseSchema(raw: unknown): Record<string, unknown> {
-  let value: unknown = raw;
-  if (typeof raw === 'string') {
-    try {
-      value = JSON.parse(raw) as unknown;
-    } catch {
-      throw new NodeParameterError('schema', 'JSON Schema inválido');
-    }
+/**
+ * Spec 018, FR-001: com "Exigir formato específico", o output parser ligado à entrada
+ * `ai_outputParser` (exatamente um). Também usado pelo Basic LLM Chain.
+ */
+export async function outputParserOf(
+  ctx: NodeContext,
+  itemIndex: number,
+  label: string,
+): Promise<OutputParserSupply | undefined> {
+  if (ctx.getParam('hasOutputParser', itemIndex) !== true) return undefined;
+  const [parser, ...extra] = await ctx.subNodes('ai_outputParser', itemIndex, {
+    port: OUTPUT_PARSER_PORT,
+  });
+  if (!parser || extra.length > 0) {
+    throw new Error(`Conecte exatamente um output parser à entrada "Output Parser" do ${label}`);
   }
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-    throw new NodeParameterError('schema', 'deve ser um objeto JSON Schema');
-  }
-  return value as Record<string, unknown>;
+  return parser.data as OutputParserSupply;
 }
 
 async function runItem(
@@ -86,10 +91,7 @@ async function runItem(
   }
   const system = ctx.getParam('systemMessage', itemIndex);
   const requested = Number(ctx.getParam('maxIterations', itemIndex)) || DEFAULT_AGENT_ITERATIONS;
-  const outputSchema =
-    ctx.getParam('outputParser', itemIndex) === 'jsonSchema'
-      ? parseSchema(ctx.getParam('schema', itemIndex))
-      : undefined;
+  const outputParser = await outputParserOf(ctx, itemIndex, 'Agent');
   const result = await runAgent({
     model,
     tools,
@@ -98,18 +100,19 @@ async function runItem(
     prompt,
     // NFR-001: o teto global da instalação prevalece.
     maxIterations: Math.max(1, Math.min(requested, ai.limits.maxIterations)),
-    ...(outputSchema && { outputSchema }),
+    ...(outputParser && { outputParser }),
     blockAfterUntrusted: ctx.getParam('blockToolCallsAfterUntrustedContent', itemIndex) === true,
     toolResultMaxChars: ai.limits.toolResultMaxChars,
     signal: ctx.signal,
     ...(resume && { resume }),
     hooks: {
       beforeModelCall: () => ai.beforeModelCall(),
-      onUsage: (usage) =>
+      // Spec 018: as correções do Auto-fixing usam o modelo dele.
+      onUsage: (usage, supply = model) =>
         ai.recordUsage({
           nodeId: ctx.node.id,
-          provider: model.provider,
-          model: model.model,
+          provider: supply.provider,
+          model: supply.model,
           ...usage,
         }),
       onStep: (s) =>
@@ -222,6 +225,8 @@ export const agentNode: NodeDefinition = {
     { name: 'ai_tool', displayName: 'Ferramentas', kind: 'ai_tool' },
   ],
   outputs: [{ name: 'main', kind: 'main' }],
+  // Spec 018: com `hasOutputParser`, a entrada "Output Parser".
+  dynamicPorts: { kind: 'aiRootInputs' },
   paramsSchema: {
     type: 'object',
     properties: {
@@ -257,22 +262,13 @@ export const agentNode: NodeDefinition = {
         title: 'Incluir os passos na saída',
         default: false,
       },
-      outputParser: {
-        type: 'string',
-        title: 'Formato da resposta',
-        description: '`jsonSchema`: a resposta é validada (até 2 pedidos de correção).',
-        enum: ['none', 'jsonSchema'],
-        default: 'none',
+      hasOutputParser: {
+        type: 'boolean',
+        title: 'Exigir formato específico',
+        description:
+          'Acrescenta a entrada "Output Parser": ligue a ela um Structured, Auto-fixing ou Item List Output Parser.',
+        default: false,
       },
-      schema: {
-        type: 'string',
-        title: 'JSON Schema da resposta',
-        default:
-          '{"type":"object","properties":{"resposta":{"type":"string"}},"required":["resposta"]}',
-        'x-multiline': true,
-        'x-no-expression': true,
-        'x-display-options': { show: { outputParser: ['jsonSchema'] } },
-      } as JSONSchema7,
       blockToolCallsAfterUntrustedContent: {
         type: 'boolean',
         title: 'Aprovação após conteúdo externo',

@@ -48,6 +48,7 @@ import { readNodeData } from './node-data.js';
 import { ExecutionDispatcher } from './dispatcher.js';
 import type { ExecutionJob } from './execution-job.js';
 import type { ListExecutionsQuery, PreviewBody, TestRunBody } from './executions.schemas.js';
+import { readDefinition } from '../workflows/definition.js';
 
 const PARTITION_REFRESH_MS = 12 * 60 * 60 * 1000;
 const iso = (d: Date | null) => (d ? d.toISOString() : null);
@@ -294,7 +295,7 @@ export class ExecutionsService implements OnModuleInit, OnModuleDestroy {
           pinData: pinData ?? {},
         }),
       );
-    const savedDef = saved?.definition as WorkflowDefinition | undefined;
+    const savedDef = saved ? readDefinition(saved.definition) : undefined;
     if (
       !savedDef ||
       canonical(body.definition, body.pinData ?? body.definition.pinData) !==
@@ -428,7 +429,7 @@ export class ExecutionsService implements OnModuleInit, OnModuleDestroy {
       finishedAt: iso(execution.finished_at),
       error: execution.error as ExecutionDetail['error'],
       dataRedacted: !canReadData,
-      definition: (execution.definition as WorkflowDefinition | null) ?? null,
+      definition: execution.definition ? readDefinition(execution.definition) : null,
       nodes: await Promise.all(
         nodes.map(async (n) => {
           // Spec 009, FR-013: dados no object storage são lidos de forma transparente.

@@ -1,3 +1,4 @@
+import { migrateLegacyOutputParser } from './legacy-output-parser.js';
 import { resolveNodePorts, type PortedType } from './ports.js';
 import {
   isSubNodeType,
@@ -325,7 +326,13 @@ export function checkUntrusted(value: unknown, maxDepth: number): ImportIssue | 
 const isObject = (v: unknown): v is Record<string, unknown> =>
   v !== null && typeof v === 'object' && !Array.isArray(v);
 const isFiniteNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
-const PORT_KINDS: readonly string[] = ['main', 'ai_languageModel', 'ai_memory', 'ai_tool'];
+const PORT_KINDS: readonly string[] = [
+  'main',
+  'ai_languageModel',
+  'ai_memory',
+  'ai_tool',
+  'ai_outputParser',
+];
 const isPortKind = (v: unknown): v is PortKind => typeof v === 'string' && PORT_KINDS.includes(v);
 const isForeignN8nType = (type: string) =>
   type.startsWith('n8n-nodes-base.') || type.startsWith('@n8n/');
@@ -736,7 +743,13 @@ export function fromWorkflowFile(
     const declared = isObject(node.params.ports) ? node.params.ports : undefined;
     const expand = (m: Map<PortKind, number> | undefined, fallback: PortKind[]): PortKind[] => {
       if (!m || m.size === 0) return fallback;
-      const order: PortKind[] = ['main', 'ai_languageModel', 'ai_memory', 'ai_tool'];
+      const order: PortKind[] = [
+        'main',
+        'ai_languageModel',
+        'ai_memory',
+        'ai_tool',
+        'ai_outputParser',
+      ];
       return order.flatMap((k) => Array.from({ length: Math.min(m.get(k) ?? 0, 50) }, () => k));
     };
     const keep = (v: unknown): PortKind[] | undefined =>
@@ -833,18 +846,19 @@ export function fromWorkflowFile(
     }
   }
 
-  const definition: WorkflowDefinition = {
+  // Spec 018, FR-006: arquivos antigos (JSON Schema dentro do nó) chegam com o sub-nó.
+  const { definition } = migrateLegacyOutputParser<WorkflowDefinition>({
     nodes,
     edges,
     settings: options.fragment ? {} : settingsFromFile(input.settings, issues),
     ...(Object.keys(pinData).length > 0 && { pinData }),
-  };
+  });
   return {
     name: typeof input.name === 'string' ? input.name.trim() : '',
     definition,
     issues,
     credentialRefs,
-    counts: { nodes: nodes.length, connections: edges.length },
+    counts: { nodes: definition.nodes.length, connections: definition.edges.length },
   };
 }
 

@@ -1,4 +1,4 @@
-import { workflowDefinitionShapeSchema } from '@olly/shared-types';
+import { workflowDefinitionInputSchema } from '@olly/shared-types';
 import { z } from 'zod';
 
 /**
@@ -14,7 +14,7 @@ export const importBodySchema = z.object({
 });
 
 export const exportBodySchema = z.object({
-  definition: workflowDefinitionShapeSchema,
+  definition: workflowDefinitionInputSchema,
   name: z.string().trim().min(1).max(200).optional(),
 });
 

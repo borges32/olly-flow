@@ -1,0 +1,135 @@
+{
+  "name": "Exemplo output parsers",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "6f1b5c1e-1d2a-4c55-9b7e-1a0b2c3d4e01",
+      "name": "When clicking ‘Test workflow’",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.chamado }}",
+        "hasOutputParser": true,
+        "options": { "systemMessage": "Classifique o chamado." }
+      },
+      "id": "6f1b5c1e-1d2a-4c55-9b7e-1a0b2c3d4e02",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [300, -120]
+    },
+    {
+      "parameters": {
+        "model": { "__rl": true, "value": "gpt-4o-mini", "mode": "list" },
+        "options": {}
+      },
+      "id": "6f1b5c1e-1d2a-4c55-9b7e-1a0b2c3d4e03",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [200, 100],
+      "credentials": { "openAiApi": { "id": "1", "name": "OpenAi account" } }
+    },
+    {
+      "parameters": { "options": {} },
+      "id": "6f1b5c1e-1d2a-4c55-9b7e-1a0b2c3d4e04",
+      "name": "Auto-fixing Output Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserAutofixing",
+      "typeVersion": 1,
+      "position": [420, 100]
+    },
+    {
+      "parameters": {
+        "model": { "__rl": true, "value": "gpt-4o-mini", "mode": "list" },
+        "options": {}
+      },
+      "id": "6f1b5c1e-1d2a-4c55-9b7e-1a0b2c3d4e05",
+      "name": "OpenAI Chat Model1",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [380, 300],
+      "credentials": { "openAiApi": { "id": "1", "name": "OpenAi account" } }
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"categoria\": \"rede\",\n  \"urgente\": true\n}"
+      },
+      "id": "6f1b5c1e-1d2a-4c55-9b7e-1a0b2c3d4e06",
+      "name": "Structured Output Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [560, 300]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Sugira títulos para: {{ $json.chamado }}",
+        "hasOutputParser": true
+      },
+      "id": "6f1b5c1e-1d2a-4c55-9b7e-1a0b2c3d4e07",
+      "name": "Basic LLM Chain",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "position": [300, 500]
+    },
+    {
+      "parameters": {
+        "model": { "__rl": true, "value": "gpt-4o-mini", "mode": "list" },
+        "options": {}
+      },
+      "id": "6f1b5c1e-1d2a-4c55-9b7e-1a0b2c3d4e08",
+      "name": "OpenAI Chat Model2",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [200, 700],
+      "credentials": { "openAiApi": { "id": "1", "name": "OpenAi account" } }
+    },
+    {
+      "parameters": { "options": { "numberOfItems": 3 } },
+      "id": "6f1b5c1e-1d2a-4c55-9b7e-1a0b2c3d4e09",
+      "name": "Item List Output Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserItemList",
+      "typeVersion": 1,
+      "position": [420, 700]
+    }
+  ],
+  "connections": {
+    "When clicking ‘Test workflow’": {
+      "main": [
+        [
+          { "node": "AI Agent", "type": "main", "index": 0 },
+          { "node": "Basic LLM Chain", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [[{ "node": "AI Agent", "type": "ai_languageModel", "index": 0 }]]
+    },
+    "Auto-fixing Output Parser": {
+      "ai_outputParser": [[{ "node": "AI Agent", "type": "ai_outputParser", "index": 0 }]]
+    },
+    "OpenAI Chat Model1": {
+      "ai_languageModel": [
+        [{ "node": "Auto-fixing Output Parser", "type": "ai_languageModel", "index": 0 }]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [{ "node": "Auto-fixing Output Parser", "type": "ai_outputParser", "index": 0 }]
+      ]
+    },
+    "OpenAI Chat Model2": {
+      "ai_languageModel": [[{ "node": "Basic LLM Chain", "type": "ai_languageModel", "index": 0 }]]
+    },
+    "Item List Output Parser": {
+      "ai_outputParser": [[{ "node": "Basic LLM Chain", "type": "ai_outputParser", "index": 0 }]]
+    }
+  },
+  "pinData": {},
+  "settings": { "executionOrder": "v1" },
+  "meta": { "templateCredsSetupCompleted": true }
+}

@@ -252,3 +252,130 @@ test.describe('spec 011 — HU-2/SC-003: aprovação humana', () => {
     await expect(page.getByTestId('agent-approvals-decided')).toContainText('ok pelo E2E');
   });
 });
+
+test.describe('spec 017 — Basic LLM Chain no editor', () => {
+  test('FR-011/FR-012: entrada do modelo reserva; chamadas no painel com o reserva marcado', async ({
+    page,
+  }) => {
+    // O principal não tem roteiro (falha); o reserva responde.
+    const principal = await fakeModel([]);
+    const reserva = await fakeModel([{ content: 'Resumo pelo reserva' }]);
+    const model = (id: string, name: string, credentialId: string, x: number): WorkflowNode => ({
+      id,
+      type: 'ai.chatModel',
+      name,
+      params: { model: 'fake-model' },
+      credentialId,
+      position: [x, 220],
+    });
+    const wf = await createWorkflow(editor, projectId, `Chain E2E ${suffix}`, {
+      nodes: [
+        { id: 'm', type: 'trigger.manual', name: 'Início', params: {}, position: [0, 0] },
+        {
+          id: 'chain',
+          type: 'ai.chainLlm',
+          name: 'Chain',
+          params: { promptSource: 'define', text: 'Resuma o chamado', needsFallback: true },
+          position: [300, 0],
+        },
+        model('principal', 'Principal', principal, 200),
+        model('reserva', 'Reserva', reserva, 450),
+      ],
+      edges: [
+        { id: 'e', from: 'm', fromPort: 'main', to: 'chain', toPort: 'main' },
+        {
+          id: 'p',
+          from: 'principal',
+          fromPort: 'ai_languageModel',
+          to: 'chain',
+          toPort: 'ai_languageModel',
+        },
+        {
+          id: 'r',
+          from: 'reserva',
+          fromPort: 'ai_languageModel',
+          to: 'chain',
+          toPort: 'ai_fallbackModel',
+        },
+      ],
+      settings: {},
+    });
+    await loginViaUi(page, 'editor', `/workflows/${wf.id}`);
+    const chain = page.getByTestId('node-Chain');
+    await expect(chain.getByTestId('port-ai_fallbackModel')).toHaveAttribute(
+      'title',
+      'Modelo reserva (obrigatório)',
+    );
+    await page.getByRole('button', { name: 'Executar workflow' }).click();
+    await expect(chain.getByTestId('node-status')).toHaveAttribute('data-status', 'success');
+    await chain.dblclick();
+    await expect(page.getByTestId('ndv-output')).toContainText('Resumo pelo reserva');
+    const steps = page.getByTestId('ndv-agent-steps');
+    await expect(steps).toContainText('Chamadas ao modelo (3)');
+    await expect(steps.getByTestId('agent-step-fallback')).toHaveCount(1);
+  });
+});
+
+test.describe('spec 018 — output parsers no editor', () => {
+  test('FR-001/FR-002: "Exigir formato específico" mostra a entrada Output Parser; a saída vem do parser', async ({
+    page,
+  }) => {
+    const credentialId = await fakeModel([{ content: '{"nota": 10}' }]);
+    const wf = await createWorkflow(editor, projectId, `Parser E2E ${suffix}`, {
+      nodes: [
+        { id: 'm', type: 'trigger.manual', name: 'Início', params: {}, position: [0, 0] },
+        {
+          id: 'chain',
+          type: 'ai.chainLlm',
+          name: 'Avaliar',
+          params: { promptSource: 'define', text: 'Dê uma nota', hasOutputParser: true },
+          position: [300, 0],
+        },
+        {
+          id: 'model',
+          type: 'ai.chatModel',
+          name: 'Modelo',
+          params: { model: 'fake-model' },
+          credentialId,
+          position: [200, 220],
+        },
+        {
+          id: 'formato',
+          type: 'outputParser.structured',
+          name: 'Formato',
+          params: { schemaType: 'fromJson', jsonSchemaExample: '{"nota": 1}' },
+          position: [450, 220],
+        },
+      ],
+      edges: [
+        { id: 'e', from: 'm', fromPort: 'main', to: 'chain', toPort: 'main' },
+        {
+          id: 'mod',
+          from: 'model',
+          fromPort: 'ai_languageModel',
+          to: 'chain',
+          toPort: 'ai_languageModel',
+        },
+        {
+          id: 'par',
+          from: 'formato',
+          fromPort: 'ai_outputParser',
+          to: 'chain',
+          toPort: 'ai_outputParser',
+        },
+      ],
+      settings: {},
+    });
+    await loginViaUi(page, 'editor', `/workflows/${wf.id}`);
+    const chain = page.getByTestId('node-Avaliar');
+    await expect(chain.getByTestId('port-ai_outputParser')).toHaveAttribute(
+      'title',
+      'Output Parser (obrigatório)',
+    );
+    await expect(page.getByTestId('node-Formato')).toHaveAttribute('data-subnode', 'true');
+    await page.getByRole('button', { name: 'Executar workflow' }).click();
+    await expect(chain.getByTestId('node-status')).toHaveAttribute('data-status', 'success');
+    await chain.dblclick();
+    await expect(page.getByTestId('ndv-output')).toContainText('nota');
+  });
+});

@@ -1,4 +1,4 @@
-import { workflowDefinitionShapeSchema } from '@olly/shared-types';
+import { workflowDefinitionInputSchema } from '@olly/shared-types';
 import { z } from 'zod';
 
 /** Spec 009, FR-009: a mensagem é obrigatória ao publicar. */
@@ -9,7 +9,7 @@ export const publishSchema = z.object({
 export type PublishBody = z.infer<typeof publishSchema>;
 
 export const listenSchema = z.object({
-  definition: workflowDefinitionShapeSchema,
+  definition: workflowDefinitionInputSchema,
   /** Escuta pelo nó (spec 005, HU-2.1): a execução para neste nó de webhook. */
   destinationNodeId: z.string().min(1).optional(),
 });

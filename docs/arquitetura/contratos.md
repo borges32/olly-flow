@@ -118,6 +118,7 @@ Spec 011:
 | `logic.loopOverItems` | 007 | `ai.agent` | 011 |
 | `placeholder.unsupported` | 015 | `tool.*`, `memory.*` (sub-nós) | 011 |
 | `ai.bridgeChatModel` (sub-nó) | 016 | `ai.agentix` | 016 |
+| `ai.chainLlm` | 017 | `outputParser.*` (sub-nós) | 018 |
 
 ## Permissões RBAC
 
@@ -296,3 +297,29 @@ Páginas dos nós: [ai.bridgeChatModel.md](../nos/ai.bridgeChatModel.md) e [ai.a
 - **Importação do N8N:** tipos `CUSTOM.*` e `n8n-nodes-bridge-chat-model.*`; credenciais `bridgeApi` e `agentixApi` com os mesmos nomes.
 - **Testes:** `startBridgeMock` e `startAgentixMock` (`@olly/nodes`) simulam os serviços (HTTP ou HTTPS autoassinado).
 - Sem rotas, tabelas ou variáveis novas.
+
+## Basic LLM Chain (spec 017)
+
+Página do nó: [ai.chainLlm.md](../nos/ai.chainLlm.md).
+
+- **Tipo de nó:** `ai.chainLlm`. Entradas `main` e `ai_languageModel`; com `params.needsFallback`, a entrada `ai_fallbackModel` (tipo `ai_languageModel`, índice 1 no JSON), por `dynamicPorts: { kind: 'aiRootInputs' }` (spec 018). Saída por item: `{ text }` ou `{ output }`.
+- **`NodeContext.subNodes(kind, itemIndex, { port? })`:** com `port`, só as conexões daquela entrada.
+- **Runtime:** `runChain` (`@olly/nodes`). Usa os mesmos ganchos do Agent (`beforeModelCall`, `recordUsage` com o modelo que respondeu, `recordStep`) e as funções de formato do Agent (`outputProblems`, `extractJson`, `correctionPrompt`).
+- **Passos:** usa a tabela `agent_steps`, a rota `GET /executions/:id/agent-steps` e o evento `agentStep`. O passo `model` traz `messages`, `model`, `provider` e `fallback`; o passo `error` registra a falha do principal antes do reserva.
+- **Importação do N8N:** o `chainLlm` é convertido, e o `outputParserStructured` ligado a um `chainLlm` ou `agent` vira o `schema` do nó.
+- Sem rotas, tabelas, permissões ou variáveis novas.
+
+## Output parsers (spec 018)
+
+Página: [output-parsers.md](../nos/output-parsers.md).
+
+- **Tipo de conexão `ai_outputParser`** (`PortKind`, `SUBNODE_PORT_KINDS`, zod do `Edge`, ordem das portas no arquivo).
+- **Tipos de nó:**
+  - `outputParser.structured` (`schemaType`, `jsonSchemaExample`, `inputSchema`, `autoFix`);
+  - `outputParser.autoFixing` (entradas `ai_languageModel` e `ai_outputParser`; `options.prompt`);
+  - `outputParser.itemList` (`options.numberOfItems`, `options.separator`).
+- **`ai.agent` e `ai.chainLlm`:** `hasOutputParser` substitui `outputParser` e `schema`. `dynamicPorts: { kind: 'aiRootInputs' }` acrescenta `ai_outputParser` (e o `ai_fallbackModel` do Basic LLM Chain).
+- **`OutputParserSupply`** (`@olly/nodes`): `formatInstructions()`, `parse(texto, { signal, hooks })` e `fixWithRootModel`. `OutputParserError` traz os problemas.
+- **Sub-nós de sub-nós:** o motor entrega `subNodes` aos sub-nós, com o limite `MAX_SUBNODE_DEPTH` (5).
+- **Formato antigo:** `migrateLegacyOutputParser` (`@olly/shared-types`) migra o JSON Schema dentro do nó para o sub-nó. Na API, roda pelo `workflowDefinitionInputSchema` (entradas) e pelo `readDefinition` (leituras do banco); na importação, por `fromWorkflowFile`.
+- Sem rotas, tabelas, permissões ou variáveis novas.

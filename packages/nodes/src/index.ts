@@ -76,6 +76,18 @@ export {
   BRIDGE_DEFAULT_TOKEN_TTL_MS,
 } from './ai/bridge/token-manager.js';
 export { createBridgeFetch } from './ai/bridge/bridge-fetch.js';
+export { chainLlmNode, CHAIN_LLM_TYPE } from './ai/chain-llm/definition.js';
+export * from './ai/runtime/chain.js';
+export * from './ai/runtime/output-parser.js';
+export {
+  outputParserNodes,
+  structuredOutputParserNode,
+  autoFixingOutputParserNode,
+  itemListOutputParserNode,
+  parseItemList,
+  DEFAULT_FIX_PROMPT,
+  DEFAULT_JSON_EXAMPLE,
+} from './ai/output-parsers/definitions.js';
 export {
   createAgentixNode,
   extractMessages as extractAgentixMessages,

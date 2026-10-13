@@ -242,7 +242,7 @@ describe('spec 015 — FR-023: conversão dos nós e das conexões do N8N', () =
     });
   });
 
-  it('Agent com modelo, memória e ferramentas; o output parser é descartado com nota', () => {
+  it('Agent com modelo, memória e ferramentas; o Structured Output Parser vira sub-nó (spec 018, FR-008/FR-009)', () => {
     const { result, validation, byName, edge, report } = importN8n({
       nodes: [
         node('Chat', 'n8n-nodes-base.manualTrigger'),
@@ -252,6 +252,7 @@ describe('spec 015 — FR-023: conversão dos nós e das conexões do N8N', () =
           {
             promptType: 'define',
             text: '={{ $json.pergunta }}',
+            hasOutputParser: true,
             options: { systemMessage: 'Seja breve' },
           },
           { typeVersion: 1.7 },
@@ -320,8 +321,17 @@ describe('spec 015 — FR-023: conversão dos nós e das conexões do N8N', () =
       fromPort: 'ai_languageModel',
       toPort: 'ai_languageModel',
     });
-    expect(byName('Parser')).toMatchObject({ type: 'placeholder.unsupported', disabled: true });
-    expect(report.semanticNotes.join(' ')).toContain('ai_outputParser');
+    // Spec 018: o parser chega como sub-nó (exemplo padrão do N8N), ligado à entrada do Agent.
+    expect(byName('Agente')?.params).toMatchObject({ hasOutputParser: true });
+    expect(byName('Parser')).toMatchObject({
+      type: 'outputParser.structured',
+      params: { schemaType: 'fromJson', autoFix: false },
+    });
+    expect(edge('Parser', 'Agente')).toMatchObject({
+      fromPort: 'ai_outputParser',
+      toPort: 'ai_outputParser',
+    });
+    expect(report.semanticNotes.join(' ')).not.toContain('ai_outputParser');
   });
 });
 
@@ -583,5 +593,282 @@ describe('spec 016 — FR-012/SC-005: nós customizados Bridge e Agentix', () =>
       expect.stringContaining('fora do escopo (spec 016)'),
       expect.stringContaining('fora do escopo (spec 016)'),
     ]);
+  });
+});
+
+describe('spec 017 — FR-008/SC-005: Basic LLM Chain do N8N', () => {
+  const ai = (to: string, kind: string, index = 0) => ({ node: to, type: kind, index });
+  const openAi = (name: string) =>
+    node(
+      name,
+      '@n8n/n8n-nodes-langchain.lmChatOpenAi',
+      { model: { __rl: true, value: 'gpt-4o-mini' } },
+      { typeVersion: 1.2, credentials: { openAiApi: { id: '7', name: 'OpenAI' } } },
+    );
+
+  it('FR-008/SC-005: prompt, mensagens, parser estruturado e modelo reserva, sem marcadores', () => {
+    const { result, validation, byName, edge, report, errors } = importN8n({
+      nodes: [
+        node('Início', 'n8n-nodes-base.manualTrigger'),
+        node(
+          'Chain',
+          '@n8n/n8n-nodes-langchain.chainLlm',
+          {
+            promptType: 'define',
+            text: '=Classifique: {{ $json.chamado }}',
+            hasOutputParser: true,
+            needsFallback: true,
+            messages: {
+              messageValues: [
+                { message: 'Você classifica chamados.' },
+                { type: 'HumanMessagePromptTemplate', message: 'Classifique: senha' },
+                { type: 'AIMessagePromptTemplate', message: '{"categoria":"acesso"}' },
+              ],
+            },
+          },
+          { typeVersion: 1.7 },
+        ),
+        openAi('Principal'),
+        openAi('Reserva'),
+        node(
+          'Parser',
+          '@n8n/n8n-nodes-langchain.outputParserStructured',
+          {
+            schemaType: 'manual',
+            inputSchema: '{"type":"object","properties":{"categoria":{"type":"string"}}}',
+          },
+          { typeVersion: 1.2 },
+        ),
+      ],
+      connections: {
+        Início: { main: [[main('Chain')]] },
+        Principal: { ai_languageModel: [[ai('Chain', 'ai_languageModel', 0)]] },
+        Reserva: { ai_languageModel: [[ai('Chain', 'ai_languageModel', 1)]] },
+        Parser: { ai_outputParser: [[ai('Chain', 'ai_outputParser')]] },
+      },
+    });
+    expect(errors).toEqual([]);
+    expect([...result.issues.errors, ...validation.errors]).toEqual([]);
+    expect(report.nodes.unsupported).toEqual([]);
+    // Spec 018: o parser chega como sub-nó, ligado à entrada Output Parser.
+    expect(byName('Parser')).toMatchObject({
+      type: 'outputParser.structured',
+      params: {
+        schemaType: 'manual',
+        inputSchema: '{"type":"object","properties":{"categoria":{"type":"string"}}}',
+      },
+    });
+    expect(edge('Parser', 'Chain')).toMatchObject({ toPort: 'ai_outputParser' });
+    expect(byName('Chain')).toMatchObject({
+      type: 'ai.chainLlm',
+      params: {
+        promptSource: 'define',
+        text: '=Classifique: {{ $json.chamado }}',
+        messages: [
+          { role: 'system', text: 'Você classifica chamados.' },
+          { role: 'user', text: 'Classifique: senha' },
+          { role: 'assistant', text: '{"categoria":"acesso"}' },
+        ],
+        hasOutputParser: true,
+        needsFallback: true,
+      },
+    });
+    // O índice 1 da entrada `ai_languageModel` é o modelo reserva (como no N8N).
+    expect(edge('Principal', 'Chain')).toMatchObject({ toPort: 'ai_languageModel' });
+    expect(edge('Reserva', 'Chain')).toMatchObject({ toPort: 'ai_fallbackModel' });
+    expect(report.nodes.converted.map((n) => n.to)).toContain('ai.chainLlm');
+  });
+
+  it('FR-008: prompt do item, imagens e lotes geram avisos; o Auto-fixing incompleto aparece no relatório (spec 018)', () => {
+    const { byName, report } = importN8n({
+      nodes: [
+        node(
+          'Chain',
+          '@n8n/n8n-nodes-langchain.chainLlm',
+          {
+            hasOutputParser: true,
+            batching: { batchSize: 5 },
+            messages: {
+              messageValues: [
+                { type: 'HumanMessagePromptTemplate', messageType: 'imageUrl', imageUrl: 'x' },
+              ],
+            },
+          },
+          { typeVersion: 1.6 },
+        ),
+        openAi('Modelo'),
+        node('Corretor', '@n8n/n8n-nodes-langchain.outputParserAutofixing'),
+      ],
+      connections: {
+        Modelo: { ai_languageModel: [[ai('Chain', 'ai_languageModel')]] },
+        Corretor: { ai_outputParser: [[ai('Chain', 'ai_outputParser')]] },
+      },
+    });
+    expect(byName('Chain')?.params).toMatchObject({
+      promptSource: 'fromInput',
+      messages: [],
+      hasOutputParser: true,
+    });
+    const warnings = report.nodes.withWarnings.find((w) => w.node === 'Chain')?.warnings ?? [];
+    expect(warnings.join(' ')).toContain('imagem');
+    expect(warnings.join(' ')).toContain('lotes');
+    expect(byName('Corretor')).toMatchObject({ type: 'outputParser.autoFixing' });
+    const fixer = report.nodes.withWarnings.find((w) => w.node === 'Corretor')?.warnings ?? [];
+    expect(fixer).toEqual([
+      'Auto-fixing sem modelo de chat conectado',
+      'Auto-fixing sem output parser interno conectado',
+    ]);
+  });
+});
+
+describe('spec 018 — FR-008/FR-009/FR-010/SC-005: output parsers do N8N', () => {
+  const ai = (to: string, kind: string, index = 0) => ({ node: to, type: kind, index });
+  const openAi = (name: string) =>
+    node(
+      name,
+      '@n8n/n8n-nodes-langchain.lmChatOpenAi',
+      { model: { __rl: true, value: 'gpt-4o-mini' } },
+      { typeVersion: 1.2, credentials: { openAiApi: { id: '7', name: 'OpenAI' } } },
+    );
+
+  it('SC-005/FR-008/FR-009: Agent com Auto-fixing em cadeia e Basic LLM Chain com Item List, sem marcadores', () => {
+    const { result, validation, byName, edge, report, errors } = importN8n({
+      nodes: [
+        node('Início', 'n8n-nodes-base.manualTrigger'),
+        node(
+          'Agente',
+          '@n8n/n8n-nodes-langchain.agent',
+          { promptType: 'define', text: 'oi', hasOutputParser: true },
+          { typeVersion: 1.7 },
+        ),
+        openAi('Modelo'),
+        node('Corretor', '@n8n/n8n-nodes-langchain.outputParserAutofixing', {
+          options: { prompt: 'Corrija: {completion}' },
+        }),
+        openAi('Modelo do corretor'),
+        node(
+          'Formato',
+          '@n8n/n8n-nodes-langchain.outputParserStructured',
+          { schemaType: 'fromJson', jsonSchemaExample: '{"nota": 1}', autoFix: true },
+          { typeVersion: 1.3 },
+        ),
+        node(
+          'Chain',
+          '@n8n/n8n-nodes-langchain.chainLlm',
+          { promptType: 'define', text: 'Ideias', hasOutputParser: true },
+          { typeVersion: 1.7 },
+        ),
+        openAi('Modelo da chain'),
+        node('Lista', '@n8n/n8n-nodes-langchain.outputParserItemList', {
+          options: { numberOfItems: 3, separator: ';' },
+        }),
+      ],
+      connections: {
+        Início: { main: [[main('Agente'), main('Chain')]] },
+        Modelo: { ai_languageModel: [[ai('Agente', 'ai_languageModel')]] },
+        Corretor: { ai_outputParser: [[ai('Agente', 'ai_outputParser')]] },
+        'Modelo do corretor': { ai_languageModel: [[ai('Corretor', 'ai_languageModel')]] },
+        Formato: { ai_outputParser: [[ai('Corretor', 'ai_outputParser')]] },
+        'Modelo da chain': { ai_languageModel: [[ai('Chain', 'ai_languageModel')]] },
+        Lista: { ai_outputParser: [[ai('Chain', 'ai_outputParser')]] },
+      },
+    });
+    expect(errors).toEqual([]);
+    expect([...result.issues.errors, ...validation.errors]).toEqual([]);
+    expect(report.nodes.unsupported).toEqual([]);
+    // Só os avisos dos modelos (liberação em Administração › IA); nenhum de output parser.
+    expect(report.nodes.withWarnings.filter((w) => !w.to.startsWith('ai.chatModel'))).toEqual([]);
+    expect(byName('Agente')?.params).toMatchObject({ hasOutputParser: true });
+    expect(byName('Corretor')).toMatchObject({
+      type: 'outputParser.autoFixing',
+      params: { options: { prompt: 'Corrija: {completion}' } },
+    });
+    expect(byName('Formato')).toMatchObject({
+      type: 'outputParser.structured',
+      params: { schemaType: 'fromJson', jsonSchemaExample: '{"nota": 1}', autoFix: true },
+    });
+    expect(byName('Lista')).toMatchObject({
+      type: 'outputParser.itemList',
+      params: { options: { numberOfItems: 3, separator: ';' } },
+    });
+    // Conexões em cadeia: parser interno e modelo no Auto-fixing; Auto-fixing no Agent.
+    expect(edge('Corretor', 'Agente')).toMatchObject({ toPort: 'ai_outputParser' });
+    expect(edge('Formato', 'Corretor')).toMatchObject({ toPort: 'ai_outputParser' });
+    expect(edge('Modelo do corretor', 'Corretor')).toMatchObject({ toPort: 'ai_languageModel' });
+    expect(edge('Lista', 'Chain')).toMatchObject({ toPort: 'ai_outputParser' });
+    expect(report.semanticNotes.join(' ')).not.toContain('ai_outputParser');
+  });
+
+  it('FR-008: Structured da v1 (JSON Schema no campo `jsonSchema`) vira "JSON Schema"', () => {
+    const { byName } = importN8n({
+      nodes: [
+        node('Formato', '@n8n/n8n-nodes-langchain.outputParserStructured', {
+          jsonSchema: '{"type":"object"}',
+        }),
+      ],
+      connections: {},
+    });
+    expect(byName('Formato')?.params).toMatchObject({
+      schemaType: 'manual',
+      inputSchema: '{"type":"object"}',
+    });
+  });
+
+  it('FR-010: opção sem parser, parser sem destino e exemplo inválido aparecem no relatório e na validação', () => {
+    const { report, validation } = importN8n({
+      nodes: [
+        node(
+          'Chain',
+          '@n8n/n8n-nodes-langchain.chainLlm',
+          { promptType: 'define', text: 'x', hasOutputParser: true },
+          { typeVersion: 1.7 },
+        ),
+        openAi('Modelo'),
+        node('Solto', '@n8n/n8n-nodes-langchain.outputParserStructured', {
+          jsonSchemaExample: '{ruim',
+        }),
+      ],
+      connections: { Modelo: { ai_languageModel: [[ai('Chain', 'ai_languageModel')]] } },
+    });
+    const warningsOf = (name: string) =>
+      report.nodes.withWarnings.find((w) => w.node === name)?.warnings.join(' ') ?? '';
+    expect(warningsOf('Chain')).toContain('sem output parser conectado');
+    expect(warningsOf('Solto')).toContain('sem nó de destino');
+    expect(warningsOf('Solto')).toContain('não é um JSON válido');
+    expect(validation.errors.map((e) => e.message)).toContain(
+      'Nó "Chain": conecte output parser (obrigatório)',
+    );
+  });
+
+  it('FR-006/HU-6: arquivo do Olly Flow no formato antigo (schema no nó) chega com o sub-nó', () => {
+    const result = fromWorkflowFile(
+      {
+        nodes: [
+          {
+            name: 'Chain',
+            type: 'ai.chainLlm',
+            position: [0, 0],
+            parameters: {
+              promptSource: 'define',
+              text: 'x',
+              outputParser: 'jsonSchema',
+              schema: '{"type":"object"}',
+            },
+          },
+        ],
+        connections: {},
+      },
+      { catalog: { get: (t) => registry.get(t) }, newId: randomUUID },
+    );
+    expect(result.issues.errors).toEqual([]);
+    const parser = result.definition.nodes.find((n) => n.type === 'outputParser.structured');
+    expect(parser?.params).toEqual({
+      schemaType: 'manual',
+      inputSchema: '{"type":"object"}',
+      autoFix: true,
+    });
+    expect(result.definition.nodes.find((n) => n.name === 'Chain')?.params).toMatchObject({
+      hasOutputParser: true,
+    });
   });
 });

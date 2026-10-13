@@ -109,6 +109,12 @@ function PinEditor({
  * Painel do nó em três colunas, como o NDV do N8N (FR-017, plan §8): Entrada | Parâmetros |
  * Saída, com dados da última execução de teste, pin data e "Executar este nó" (FR-020).
  */
+
+/** Nós de IA com passos registrados (spec 011; Basic LLM Chain, spec 017) e o título do painel. */
+const STEP_NODE_TYPES: Record<string, string> = {
+  'ai.agent': 'Passos do agente',
+  'ai.chainLlm': 'Chamadas ao modelo',
+};
 export function NodeDetailsView({
   node,
   description,
@@ -408,8 +414,9 @@ export function NodeDetailsView({
                 />
                 <MaskedReuseNotice fields={runOf(node.id)?.maskedFields} />
                 <ConsoleOutput lines={runOf(node.id)?.console} />
-                {node.type === 'ai.agent' && (
+                {STEP_NODE_TYPES[node.type] && (
                   <AgentStepsPanel
+                    title={STEP_NODE_TYPES[node.type]}
                     executionId={runOf(node.id)?.executionId ?? run.executionId ?? undefined}
                     nodeId={node.id}
                     runIndex={runOf(node.id)?.runIndex}

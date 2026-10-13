@@ -1,6 +1,7 @@
 import {
   Bot,
   BotMessageSquare,
+  Braces,
   Brain,
   CircleHelp,
   Code,
@@ -10,6 +11,8 @@ import {
   Globe,
   Hourglass,
   Layers,
+  Link,
+  List,
   LogIn,
   Merge,
   MessageSquare,
@@ -24,6 +27,7 @@ import {
   Waypoints,
   Webhook,
   Workflow,
+  Wrench,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -60,6 +64,12 @@ export const NODE_ICONS: Record<string, LucideIcon> = {
   // Spec 016: Bridge Chat Model e Agentix.
   waypoints: Waypoints,
   'bot-message-square': BotMessageSquare,
+  // Spec 017: Basic LLM Chain.
+  link: Link,
+  // Spec 018: output parsers.
+  braces: Braces,
+  wrench: Wrench,
+  list: List,
 };
 
 /** Ícones conhecidos (o teste garante que todo nó da plataforma tenha o seu). */

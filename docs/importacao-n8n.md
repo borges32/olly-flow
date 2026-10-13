@@ -42,6 +42,10 @@ A importação é feita pela API (`POST /api/v1/projects/:id/workflows/import`, 
 | `wait` (intervalo e data) | `flow.wait` | Retomada por webhook ou formulário: marcador |
 | `@n8n/n8n-nodes-langchain.agent` | `ai.agent` | Output parser não convertido |
 | `lmChatOpenAi`, `lmChatAnthropic`, `lmChatGoogleGemini` | `ai.chatModel` | O modelo precisa estar liberado em Administração › IA |
+| `chainLlm` (1–1.7, spec 017) | `ai.chainLlm` | Prompt, mensagens de texto e modelo reserva (entrada de índice 1). Mensagens com imagem e lotes geram aviso |
+| `outputParserStructured` (1–1.3, spec 018) | `outputParser.structured` | Exemplo JSON ou JSON Schema (o `jsonSchema` da v1 vira "JSON Schema"), `autoFix`. Prompt de correção personalizado gera aviso |
+| `outputParserAutofixing` (spec 018) | `outputParser.autoFixing` | `options.prompt`; o modelo e o parser interno chegam ligados a ele |
+| `outputParserItemList` (spec 018) | `outputParser.itemList` | `numberOfItems` e `separator` |
 | `memoryBufferWindow`, `memoryPostgresChat` | `memory.buffer`, `memory.postgres` | |
 | `toolHttpRequest`, `httpRequestTool` | `tool.httpRequest` | Os `{marcadores}` da ferramenta antiga viram `$fromAI` |
 | `toolCode` (JavaScript) | `tool.code` | A variável `query` é recriada no início do código |
@@ -56,7 +60,7 @@ A importação é feita pela API (`POST /api/v1/projects/:id/workflows/import`, 
 
 ## Conexões, credenciais e expressões
 
-- **Conexões:** mantidas, com os mesmos índices de saída e de entrada (If 0/1, Switch, Merge, saída de erro), exceto o retorno do Loop Over Items. As conexões de tipos que o Olly Flow não tem (`ai_outputParser`, `ai_document`...) são descartadas, com nota.
+- **Conexões:** mantidas, com os mesmos índices de saída e de entrada (If 0/1, Switch, Merge, saída de erro), exceto o retorno do Loop Over Items. As conexões `ai_outputParser` são mantidas (spec 018). O "Require Specific Output Format" do AI Agent e do Basic LLM Chain vira "Exigir formato específico" (`hasOutputParser`). O relatório aponta a opção ligada sem parser, o parser sem destino, o Auto-fixing sem modelo ou sem parser interno e o exemplo JSON inválido. As conexões de tipos que o Olly Flow não tem (`ai_document`...) são descartadas, com nota.
 - **Credenciais:** nunca são importadas.
   - O relatório lista cada credencial (nome, tipo do N8N e tipo equivalente) e os nós que a usam.
   - Se o projeto já tiver uma credencial do tipo equivalente com o mesmo nome, o nó já fica ligado a ela.

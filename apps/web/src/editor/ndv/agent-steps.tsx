@@ -16,6 +16,12 @@ const KIND: Record<AgentStep['kind'], { label: string; icon: typeof Bot }> = {
   error: { label: 'erro', icon: AlertTriangle },
 };
 
+/** Spec 017, FR-011: a chamada foi atendida pelo modelo reserva. */
+const isFallback = (content: unknown) =>
+  typeof content === 'object' &&
+  content !== null &&
+  (content as { fallback?: unknown }).fallback === true;
+
 function preview(content: unknown): string {
   if (content === undefined || content === null) return '';
   const text = typeof content === 'string' ? content : JSON.stringify(content, null, 1);
@@ -32,7 +38,10 @@ export function AgentStepsPanel({
   nodeId,
   runIndex,
   status,
+  title = 'Passos do agente',
 }: {
+  /** Spec 017: o Basic LLM Chain usa o mesmo painel ("Chamadas ao modelo"). */
+  title?: string;
   executionId: string | undefined;
   nodeId: string;
   runIndex: number | undefined;
@@ -74,12 +83,12 @@ export function AgentStepsPanel({
   if (steps.length === 0 && status !== 'waiting') return null;
   return (
     <section
-      aria-label="Passos do agente"
+      aria-label={title}
       data-testid="ndv-agent-steps"
       className="max-h-72 shrink-0 overflow-y-auto border-t"
     >
       <h4 className="sticky top-0 flex items-center gap-2 bg-background px-3 py-1.5 text-xs font-semibold">
-        Passos do agente ({steps.length})
+        {title} ({steps.length})
         {usage && usage.calls > 0 && (
           <span className="ml-auto font-normal text-muted-foreground" data-testid="agent-usage">
             {usage.inputTokens + usage.outputTokens} tokens
@@ -105,6 +114,11 @@ export function AgentStepsPanel({
                 <Icon className="size-3.5 text-muted-foreground" />
                 <Badge variant="outline">{label}</Badge>
                 {s.toolName && <span className="font-mono">{s.toolName}</span>}
+                {isFallback(s.content) && (
+                  <Badge variant="secondary" data-testid="agent-step-fallback">
+                    modelo reserva
+                  </Badge>
+                )}
                 <span className="ml-auto text-muted-foreground">
                   item {s.itemIndex}
                   {tokens > 0 && ` · ${String(tokens)} tokens`}

@@ -841,14 +841,106 @@ const convertWait: Converter = (_node, p) => {
   };
 };
 
+// ---------------------------------------------------------------------------------------------
+// Output parsers (spec 018): sub-nós como no N8N
+// ---------------------------------------------------------------------------------------------
+
+/** Structured Output Parser (1 a 1.3), FR-008. */
+const convertStructuredParser: Converter = (_node, p, version) => {
+  if (!versionIn(version, 1, 1.3)) return unsupportedVersion('outputParserStructured', version);
+  const warnings: string[] = [];
+  // v1 e v1.1 guardavam o JSON Schema em `jsonSchema`.
+  const legacy = str(p.jsonSchema);
+  const manual = str(p.schemaType) === 'manual' || (!p.schemaType && legacy !== '');
+  const example = str(p.jsonSchemaExample);
+  if (!manual && example) {
+    try {
+      JSON.parse(example);
+    } catch {
+      warnings.push('O exemplo JSON do Structured Output Parser não é um JSON válido: corrija-o');
+    }
+  }
+  if (p.customizeRetryPrompt === true)
+    warnings.push(
+      'Prompt de correção personalizado não convertido: a correção automática usa o prompt padrão',
+    );
+  return ok(
+    'outputParser.structured',
+    {
+      schemaType: manual ? 'manual' : 'fromJson',
+      ...(manual
+        ? { inputSchema: str(p.inputSchema) || legacy }
+        : example && { jsonSchemaExample: example }),
+      autoFix: p.autoFix === true,
+    },
+    warnings,
+  );
+};
+
+const convertAutoFixingParser: Converter = (_node, p) => {
+  const options = isObject(p.options) ? p.options : {};
+  return ok('outputParser.autoFixing', {
+    options: str(options.prompt) ? { prompt: str(options.prompt) } : {},
+  });
+};
+
+const convertItemListParser: Converter = (_node, p) => {
+  const options = isObject(p.options) ? p.options : {};
+  return ok('outputParser.itemList', {
+    options: {
+      numberOfItems: num(options.numberOfItems) ?? -1,
+      ...(typeof options.separator === 'string' && { separator: options.separator }),
+    },
+  });
+};
+
+const CHAIN_ROLES: Record<string, string> = {
+  SystemMessagePromptTemplate: 'system',
+  HumanMessagePromptTemplate: 'user',
+  AIMessagePromptTemplate: 'assistant',
+};
+
+/** Spec 017, FR-008: Basic LLM Chain (`chainLlm`, versões 1 a 1.7). */
+const convertChainLlm: Converter = (_node, p, version) => {
+  if (!versionIn(version, 1, 1.7)) return unsupportedVersion('chainLlm', version);
+  const warnings: string[] = [];
+  const define = str(p.promptType, p.prompt !== undefined ? 'define' : 'auto') === 'define';
+  const values = collection(p.messages, 'messageValues');
+  const messages = values.flatMap((m) => {
+    const messageType = str(m.messageType, 'text');
+    if (messageType !== 'text') {
+      warnings.push(`Mensagem com imagem (${messageType}) não convertida: só mensagens de texto`);
+      return [];
+    }
+    return [
+      {
+        role: CHAIN_ROLES[str(m.type, 'SystemMessagePromptTemplate')] ?? 'system',
+        text: str(m.message),
+      },
+    ];
+  });
+  if (p.batching !== undefined)
+    warnings.push('Processamento em lotes não convertido: vale a execução paralela por item');
+  return ok(
+    'ai.chainLlm',
+    {
+      promptSource: define ? 'define' : 'fromInput',
+      ...(define && { text: str(p.text ?? p.prompt) }),
+      messages,
+      // Spec 018, FR-008: "Require Specific Output Format" vira a opção, com o sub-nó ligado.
+      hasOutputParser: p.hasOutputParser === true,
+      needsFallback: p.needsFallback === true,
+    },
+    warnings,
+  );
+};
+
 const convertAgent: Converter = (_node, p) => {
   const warnings: string[] = [];
   const kind = str(p.agent);
   if (kind && kind !== 'toolsAgent' && kind !== 'conversationalAgent')
     warnings.push(`Agente do tipo "${kind}" convertido para o agente com ferramentas`);
   const options = isObject(p.options) ? p.options : {};
-  if (p.hasOutputParser === true)
-    warnings.push('Output parser não convertido: use "Formato da saída: JSON Schema" no Agent');
   const define = str(p.promptType, kind ? 'define' : 'auto') === 'define';
   return ok(
     'ai.agent',
@@ -858,6 +950,8 @@ const convertAgent: Converter = (_node, p) => {
       systemMessage: str(options.systemMessage, 'Você é um assistente útil.'),
       maxIterations: num(options.maxIterations) ?? 10,
       returnIntermediateSteps: options.returnIntermediateSteps === true,
+      // Spec 018, FR-008: "Require Specific Output Format" vira a opção, com o sub-nó ligado.
+      hasOutputParser: p.hasOutputParser === true,
     },
     warnings,
   );
@@ -1174,6 +1268,11 @@ export const CONVERTERS: Record<string, Converter> = {
   'n8n-nodes-base.executeWorkflow': convertExecuteWorkflow,
   'n8n-nodes-base.wait': convertWait,
   '@n8n/n8n-nodes-langchain.agent': convertAgent,
+  '@n8n/n8n-nodes-langchain.chainLlm': convertChainLlm,
+  // Spec 018: output parsers.
+  '@n8n/n8n-nodes-langchain.outputParserStructured': convertStructuredParser,
+  '@n8n/n8n-nodes-langchain.outputParserAutofixing': convertAutoFixingParser,
+  '@n8n/n8n-nodes-langchain.outputParserItemList': convertItemListParser,
   '@n8n/n8n-nodes-langchain.lmChatOpenAi': chatModel('openAiApi', 'openAiCompatible', 'model'),
   '@n8n/n8n-nodes-langchain.lmChatAnthropic': chatModel('anthropicApi', 'anthropic', 'model'),
   '@n8n/n8n-nodes-langchain.lmChatGoogleGemini': chatModel(

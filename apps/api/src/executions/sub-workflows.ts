@@ -7,6 +7,7 @@ import { sql } from 'kysely';
 import { APP_CONFIG, type AppConfig } from '../config/config.js';
 import { DB } from '../core/tokens.js';
 import type { ExecutionJob, ExecutionOutcome } from './execution-job.js';
+import { readDefinition } from '../workflows/definition.js';
 
 /**
  * Fila das filhas sem espera: o `QueueDispatcher`, registrado com este token nos módulos. O
@@ -66,7 +67,7 @@ export class SubWorkflowService {
     if (target.published_version === null || !target.definition) {
       throw new NodeExecutionError(`O workflow "${target.name}" não está publicado`);
     }
-    const trigger = (target.definition as WorkflowDefinition).nodes.find(
+    const trigger = readDefinition(target.definition).nodes.find(
       (n) => n.type === 'trigger.executeWorkflow',
     );
     if (!trigger) {
@@ -113,7 +114,7 @@ export class SubWorkflowService {
         `O workflow "${target.name}" não está publicado: publique-o para usá-lo como sub-workflow`,
       );
     }
-    const definition = target.definition as WorkflowDefinition;
+    const definition = readDefinition(target.definition);
     const trigger = definition.nodes.find((n) => n.type === 'trigger.executeWorkflow');
     if (!trigger) {
       throw new NodeExecutionError(

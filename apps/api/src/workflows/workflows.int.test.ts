@@ -253,6 +253,8 @@ describe('spec 002 — FR-006: catálogo de tipos de nó', () => {
       // Spec 016: Agentix e Bridge Chat Model.
       'ai.agentix',
       'ai.bridgeChatModel',
+      // Spec 017: Basic LLM Chain.
+      'ai.chainLlm',
       'ai.chatModel',
       // Spec 010.
       'ai.mcpClient',
@@ -275,6 +277,10 @@ describe('spec 002 — FR-006: catálogo de tipos de nó', () => {
       // Spec 011: memórias e ferramentas (sub-nós).
       'memory.buffer',
       'memory.postgres',
+      // Spec 018: output parsers.
+      'outputParser.autoFixing',
+      'outputParser.itemList',
+      'outputParser.structured',
       // Spec 015: marcador de nó importado sem suporte.
       'placeholder.unsupported',
       'postgres.query',

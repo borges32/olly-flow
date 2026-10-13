@@ -1,5 +1,7 @@
 import { agentNode } from './ai/agent/definition.js';
 import { createAgentixNode } from './ai/agentix/definition.js';
+import { chainLlmNode } from './ai/chain-llm/definition.js';
+import { outputParserNodes } from './ai/output-parsers/definitions.js';
 import { createBridgeChatModelNode } from './ai/bridge/definition.js';
 import { BridgeTokenManager } from './ai/bridge/token-manager.js';
 import { chatModelNode } from './ai/chat-model/definition.js';
@@ -94,6 +96,10 @@ export function createBuiltinNodes(options: BuiltinNodeOptions = {}): NodeDefini
     // Spec 016: Bridge (modelo de chat customizado) e Agentix.
     createBridgeChatModelNode({ tokens: options.bridgeTokens ?? new BridgeTokenManager() }),
     createAgentixNode({ guard, maxResponseBytes }),
+    // Spec 017: Basic LLM Chain.
+    chainLlmNode,
+    // Spec 018: output parsers.
+    ...outputParserNodes,
   ];
 }
 

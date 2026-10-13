@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| **Status** | Planejada |
+| **Status** | Implementada (pendente: E2E de fps do canvas no ambiente atual; workflows reais da POC) |
 | **Fase** | 4 — Hardening (paridade com o N8N, apoio à migração) |
 | **Depende de** | 011, 015, 016 |
 | **Requisitos de produto** | PR-16 (parcial), PR-17 (parcial) |
@@ -176,3 +176,6 @@ Como **editor**, quero importar workflows do N8N com o Basic LLM Chain, para que
 |---|---|---|
 | 09/10/2026 | Criação | Pedido do PO: nó com a funcionalidade do Basic LLM Chain do N8N |
 | 09/10/2026 | Esclarecimentos do PO: (1) campo da saída `text`, como no N8N (FR-004); (2) formato por JSON Schema no nó, com o objeto em `output` (FR-005); (3) sem imagens nas mensagens (FR-003, fora do escopo); (4) modelo reserva como no N8N (HU-4, FR-011, SC-006); (5) sem processamento em lotes (fora do escopo); (6) passos da execução no painel, como no Agent (HU-5, FR-012, SC-007). A antiga HU-4 (migração) virou HU-6, com o parser estruturado e o reserva | Decisão humana |
+| 09/10/2026 | Plano e tarefas aprovados pelo PO ao pedir a implementação; status `Em implementação` | Decisão humana |
+| 09/10/2026 | Implementação concluída; status `Implementada` (ver [report.md](report.md)) | Implementação |
+| 09/10/2026 | O formato estruturado por JSON Schema no nó será substituído por output parsers como no N8N, com migração automática ([spec 018](../018-output-parsers/spec.md)) | Mudança de escopo pedida pelo PO |

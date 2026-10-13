@@ -74,7 +74,7 @@ Exemplo mínimo: um gatilho manual ligado a um nó que define um campo.
 Termos usados neste documento:
 
 - **Item:** a unidade de dado que trafega entre os nós, `{ "json": { ... }, "binary": { ... } }`. Cada nó recebe uma lista de itens e devolve listas de itens nas suas saídas. É o mesmo modelo do N8N.
-- **Porta:** uma entrada ou saída de um nó. As portas têm um **tipo de conexão**: `main` (fluxo de itens) ou um tipo de sub-nó (`ai_languageModel`, `ai_memory`, `ai_tool`).
+- **Porta:** uma entrada ou saída de um nó. As portas têm um **tipo de conexão**: `main` (fluxo de itens) ou um tipo de sub-nó (`ai_languageModel`, `ai_memory`, `ai_tool`, `ai_outputParser`).
 - **Sub-nó:** um nó que não processa itens. Ele fornece um recurso (modelo, memória ou ferramenta) ao nó **Agent** e se liga às entradas de mesmo tipo do Agent.
 
 ## 2. Envelope
@@ -165,7 +165,7 @@ Nos nós que processam item a item (`data.set`, `http.request`, `postgres.query`
 ```
 
 - A chave de primeiro nível é o **nome** do nó de origem, não o id.
-- A chave de segundo nível é o **tipo de conexão**: `main` para o fluxo de itens; `ai_languageModel`, `ai_memory` ou `ai_tool` para os sub-nós.
+- A chave de segundo nível é o **tipo de conexão**: `main` para o fluxo de itens; `ai_languageModel`, `ai_memory`, `ai_tool` ou `ai_outputParser` para os sub-nós.
 - A lista externa é indexada pelo **número da saída** da origem, contado entre as saídas daquele tipo. A posição 0 é a primeira saída.
 - Cada posição tem a lista de **destinos** daquela saída. Uma saída pode ir para vários nós. Uma saída sem destino é `[]`, e as saídas finais sem destino podem ser omitidas.
 - Em cada destino:
@@ -190,6 +190,7 @@ As portas são numeradas na ordem abaixo, separadamente para entradas e saídas 
 | `logic.loopOverItems` | 0 = entrada, 1 = continuar (retorno do laço) | 0 = concluído, 1 = lote (corpo) |
 | `ai.agent` | 0 | 0 |
 | `ai.agentix` | 0 | 0 |
+| `ai.chainLlm` | 0 | 0 |
 | `placeholder.unsupported` | `in0`, `in1`... de `params.ports.inputs` | `out0`, `out1`... de `params.ports.outputs` |
 
 **Sub-nós e entradas do Agent:**
@@ -197,8 +198,13 @@ As portas são numeradas na ordem abaixo, separadamente para entradas e saídas 
 | Tipo | Saída | Entrada do Agent |
 |---|---|---|
 | `ai.chatModel`, `ai.bridgeChatModel` | `ai_languageModel` 0 | `ai_languageModel` 0: **obrigatória**, exatamente 1 modelo |
+
+**Basic LLM Chain (`ai.chainLlm`):** o modelo chega à entrada `ai_languageModel` de índice 0. Com `needsFallback: true`, o **modelo reserva** chega à mesma entrada com `"index": 1` (como no N8N).
 | `memory.postgres`, `memory.buffer` | `ai_memory` 0 | `ai_memory` 0: opcional, no máximo 1 memória |
 | `tool.mcp`, `tool.httpRequest`, `tool.postgresQuery`, `tool.workflow`, `tool.code` | `ai_tool` 0 | `ai_tool` 0: opcional, quantas ferramentas forem necessárias |
+| `outputParser.structured`, `outputParser.autoFixing`, `outputParser.itemList` | `ai_outputParser` 0 | `ai_outputParser` 0: só com `hasOutputParser: true` no Agent ou no Basic LLM Chain; **obrigatória**, exatamente 1 parser |
+
+**Auto-fixing Output Parser:** recebe o próprio modelo (`ai_languageModel` 0) e o parser interno (`ai_outputParser` 0); a sua saída `ai_outputParser` vai ao Agent ou ao Basic LLM Chain.
 
 **Saída de erro:** com `onError: "continueErrorOutput"`, qualquer nó com saída `main` ganha mais uma saída, depois de todas as outras. Exemplos: `http.request` 1, `logic.if` 2, Switch com 3 regras e saída Padrão 4.
 
@@ -681,8 +687,7 @@ Agente de IA que raciocina e usa ferramentas para responder. Precisa de **um** m
 | `systemMessage` | texto | `Você é um assistente útil.` | Instruções do agente |
 | `maxIterations` | inteiro | 10 | Máximo de ciclos de raciocínio e ferramenta |
 | `returnIntermediateSteps` | booleano | `false` | Inclui os passos na saída |
-| `outputParser` | `none` \| `jsonSchema` | `none` | `jsonSchema`: a resposta deve seguir `schema` |
-| `schema` | texto (JSON Schema) | objeto com `resposta` | Visível com `jsonSchema`. Sem expressão |
+| `hasOutputParser` | booleano | `false` | "Exigir formato específico": acrescenta a entrada `ai_outputParser` ([output parsers](#output-parsers-sub-nós)); a resposta interpretada sai em `output` |
 | `blockToolCallsAfterUntrustedContent` | booleano | `false` | Depois de ler conteúdo externo, bloqueia as ferramentas com efeito colateral |
 
 #### `ai.chatModel` — Modelo de chat (sub-nó)
@@ -721,6 +726,28 @@ Invoca um agente ou workflow do Agentix e espera a resposta dentro do nó (uma s
 | `waitForCompletion` | booleano | `true` | `false`: devolve a resposta da criação (com `session_id`) sem esperar |
 | `output` | `finalAnswer` \| `allMessages` | `finalAnswer` | Saída: `{ session_id, state, output }` ou `{ session_id, state, messages }` |
 | `options` | objeto | `{}` | `pollIntervalSeconds` (3), `timeoutSeconds` (600; 0 = sem limite próprio), `maxPollErrors` (3), `includeSession` (`false`) |
+
+#### `ai.chainLlm` — Basic LLM Chain
+
+Uma chamada ao modelo por item, sem ferramentas nem memória: resumir, classificar, extrair, traduzir. Precisa de **um** modelo (`ai.chatModel` ou `ai.bridgeChatModel`) na entrada `ai_languageModel` 0 e, com `needsFallback`, de outro na entrada `ai_languageModel` 1 (reserva). Saída: `{ "text" }` ou, com um output parser, `{ "output": valor }`. Detalhes: [ai.chainLlm.md](ai.chainLlm.md).
+
+| Parâmetro | Tipo | Padrão | Descrição |
+|---|---|---|---|
+| `promptSource` | `fromInput` \| `define` | `fromInput` | `fromInput`: o campo `chatInput` do item. `define`: o parâmetro `text` |
+| `text` | texto | `""` | Visível com `define`. Normalmente uma expressão |
+| `messages` | lista de `{ role, text }` | `[]` | Mensagens antes do prompt: `role` `system`, `user` ou `assistant` |
+| `hasOutputParser` | booleano | `false` | "Exigir formato específico": acrescenta a entrada `ai_outputParser` ([output parsers](#output-parsers-sub-nós)) |
+| `needsFallback` | booleano | `false` | Acrescenta a entrada do modelo reserva (índice 1) |
+
+#### Output parsers (sub-nós)
+
+Saída `ai_outputParser`, ligada à entrada de mesmo tipo do Agent ou do Basic LLM Chain (com `hasOutputParser: true`), ou do Auto-fixing. Detalhes: [output-parsers.md](output-parsers.md).
+
+| Tipo | Parâmetros | Saída do nó pai |
+|---|---|---|
+| `outputParser.structured` | `schemaType` (`fromJson` \| `manual`), `jsonSchemaExample`, `inputSchema`, `autoFix` (`false`) | `{ "output": objeto }` |
+| `outputParser.autoFixing` | `options.prompt` (com `{instructions}`, `{completion}`, `{error}`). Entradas: `ai_languageModel` e `ai_outputParser` | a do parser interno |
+| `outputParser.itemList` | `options.numberOfItems` (-1 = sem limite), `options.separator` (`\n`) | `{ "output": ["...", "..."] }` |
 
 #### `memory.buffer` e `memory.postgres` — Memória (sub-nós)
 
@@ -1367,6 +1394,82 @@ Repete o corpo três vezes, somando 1 a um contador, e termina com o valor final
 ```
 
 Neste exemplo, três nós não têm `id` nem `typeVersion`, como num JSON escrito à mão ou gerado por IA: a importação os gera.
+
+### 12.7 Basic LLM Chain com output parser e modelo reserva
+
+Classifica cada chamado numa categoria (objeto em `output`). Se o modelo principal falhar, o reserva responde.
+
+<!-- exemplo-completo -->
+```json
+{
+  "name": "Classificar chamados",
+  "nodes": [
+    {
+      "name": "Início",
+      "type": "trigger.manual",
+      "position": [0, 0],
+      "parameters": {}
+    },
+    {
+      "name": "Classificar",
+      "type": "ai.chainLlm",
+      "position": [300, 0],
+      "parameters": {
+        "promptSource": "define",
+        "text": "=Classifique o chamado: {{ $json.descricao }}",
+        "messages": [
+          { "role": "system", "text": "Categorias: acesso, hardware, rede, outros." },
+          { "role": "user", "text": "Classifique o chamado: esqueci minha senha" },
+          { "role": "assistant", "text": "{\"categoria\": \"acesso\"}" }
+        ],
+        "hasOutputParser": true,
+        "needsFallback": true
+      }
+    },
+    {
+      "name": "Formato",
+      "type": "outputParser.structured",
+      "position": [640, 220],
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\"type\":\"object\",\"required\":[\"categoria\"],\"properties\":{\"categoria\":{\"type\":\"string\",\"enum\":[\"acesso\",\"hardware\",\"rede\",\"outros\"]}}}",
+        "autoFix": true
+      }
+    },
+    {
+      "name": "Modelo principal",
+      "type": "ai.chatModel",
+      "position": [200, 220],
+      "parameters": { "model": "gpt-4o-mini" },
+      "credentials": { "openAiCompatible": { "name": "OpenAI" } }
+    },
+    {
+      "name": "Modelo reserva",
+      "type": "ai.chatModel",
+      "position": [420, 220],
+      "parameters": { "model": "gemini-2.5-flash" },
+      "credentials": { "googleGemini": { "name": "Gemini" } }
+    }
+  ],
+  "connections": {
+    "Início": { "main": [[{ "node": "Classificar", "type": "main", "index": 0 }]] },
+    "Modelo principal": {
+      "ai_languageModel": [[{ "node": "Classificar", "type": "ai_languageModel", "index": 0 }]]
+    },
+    "Modelo reserva": {
+      "ai_languageModel": [[{ "node": "Classificar", "type": "ai_languageModel", "index": 1 }]]
+    },
+    "Formato": {
+      "ai_outputParser": [[{ "node": "Classificar", "type": "ai_outputParser", "index": 0 }]]
+    }
+  },
+  "pinData": { "Início": [{ "json": { "descricao": "O Wi-Fi do andar caiu" } }] },
+  "settings": {},
+  "meta": { "ollyFlow": { "formatVersion": 1 } }
+}
+```
+
+A saída de `Classificar` é `{ "output": { "categoria": "rede" } }`.
 
 ## 13. Diferenças em relação ao N8N
 

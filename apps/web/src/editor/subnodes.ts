@@ -10,7 +10,7 @@ import {
 
 type Types = ReadonlyMap<string, NodeDescription>;
 
-/** Porta `ai_*` de sub-nó (modelo, memória, ferramenta), desenhada na vertical (spec 011). */
+/** Porta `ai_*` de sub-nó (modelo, memória, ferramenta, output parser), desenhada na vertical (spec 011). */
 export const isSubNodePort = (port: Pick<PortDef, 'kind'>): boolean =>
   (SUBNODE_PORT_KINDS as readonly string[]).includes(port.kind);
 
@@ -18,6 +18,8 @@ const KIND_LABEL: Record<SubNodePortKind, string> = {
   ai_languageModel: 'modelo',
   ai_memory: 'memória',
   ai_tool: 'ferramenta',
+  // Spec 018.
+  ai_outputParser: 'output parser',
 };
 
 function portOf(

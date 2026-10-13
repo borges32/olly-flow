@@ -34,6 +34,7 @@ import { methodOf, pathOf, webhookNodes } from '../webhooks/publishing.service.j
 import { WorkflowsService } from '../workflows/workflows.service.js';
 import { convertN8n } from './n8n/convert.js';
 import type { ExportBody, ImportBody } from './workflow-io.schemas.js';
+import { readDefinition } from '../workflows/definition.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const isObjectWithNodes = (v: unknown): v is { nodes: unknown[] } =>
@@ -449,7 +450,7 @@ export class WorkflowIoService {
             .where('w.project_id', '=', projectId)
             .where('w.deleted_at', 'is', null)
             .execute();
-    const existing = new Map(found.map((r) => [r.id, r.definition as WorkflowDefinition]));
+    const existing = new Map(found.map((r) => [r.id, readDefinition(r.definition)]));
     for (const { node, value } of calls) {
       if (typeof value === 'string' && value.startsWith('=')) continue;
       if (typeof value !== 'string' || !existing.has(value)) {
