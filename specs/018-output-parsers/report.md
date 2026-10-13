@@ -96,6 +96,10 @@ Nenhum. Testes das specs 011, 015 e 017 que esperavam o schema dentro do nó, ou
 
 Nenhuma.
 
+### Correção posterior (13/10/2026)
+
+Na verificação da spec 019, o `pnpm test` acusou 2 falhas em `tests/fixtures.test.ts` (spec 001, FR-016): a fixture `exemplo-output-parsers` não tinha o `expected.json`, exigido pelo formato das fixtures. A verificação acima não registrou essas falhas. Correção: `expected.json` vazio (`{}`, nenhum nó comparado, porque o caso não executa sem credenciais e as respostas do modelo não são determinísticas), explicado no `notes.md`.
+
 ## Pendências, bloqueios e riscos
 
 - **Testes de tempo:** os dois testes acima (specs 002 e 003) precisam ser confirmados numa máquina livre ou no CI.

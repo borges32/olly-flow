@@ -50,6 +50,7 @@ Regras com expressão regular livre não são aceitas, pelo risco de ReDoS no ca
 ### Efeitos colaterais
 
 - A **execução parcial** do editor (spec 003, FR-020) reaproveita o nó **como ele foi gravado**: se havia campos mascarados (coluna `node_executions.data_masked`), eles chegam mascarados ao nó seguinte, e o editor avisa quais (`maskedFields`, no painel do nó). Ex.: o cabeçalho `postman-token` enviado pelo Postman chega como `***`. Para usar os valores originais, execute o fluxo a partir do gatilho. Dados descartados pela política não são reaproveitados (o nó executa de novo). Exceção ao FR-015 válida só nas execuções de teste (decisão do PO, 06/10/2026).
+- O botão **Baixar** do painel do nó (spec 019) salva os dados como o editor os recebeu: com os campos mascarados e só para quem tem `execution:readData`. Os valores originais nunca são baixados.
 - Os segredos das credenciais continuam sendo trocados por `***` como na spec 004. Além disso, `*authorization*` oculta o cabeçalho inteiro.
 
 ### Custo (NFR-002)

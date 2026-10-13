@@ -1,9 +1,12 @@
 import type { Item } from '@olly/shared-types';
-import { GripVertical } from 'lucide-react';
+import { Download, GripVertical } from 'lucide-react';
 import { useMemo, useState, type DragEvent, type ReactNode } from 'react';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { fieldExpression, inferSchema, scalarText, type SchemaField } from '../expression-utils';
+import { downloadJson } from '../workflow-file-io';
+import { dataFileName, itemsFileContent } from './data-download';
 import { FIELD_MIME } from './expression-context';
 
 export type DragSource = { kind: 'input' } | { kind: 'node'; name: string };
@@ -125,7 +128,10 @@ function SchemaTree({
   );
 }
 
-/** Dados de entrada/saída de um nó em tabela, JSON ou schema (FR-017). */
+/**
+ * Dados de entrada/saída de um nó em tabela, JSON ou schema (FR-017), com o download dos itens
+ * exibidos (spec 019).
+ */
 export function DataPanel({
   title,
   testId,
@@ -136,6 +142,7 @@ export function DataPanel({
   empty,
   header,
   toolbar,
+  downloadName,
 }: {
   title: string;
   testId: string;
@@ -146,6 +153,8 @@ export function DataPanel({
   empty: ReactNode;
   header?: ReactNode;
   toolbar?: ReactNode;
+  /** Partes do nome do arquivo baixado (nó, entrada/saída…); o painel acrescenta a porta. */
+  downloadName?: (string | undefined)[];
 }) {
   const [view, setView] = useState<View>('table');
   const ports = Object.keys(data ?? {});
@@ -212,6 +221,31 @@ export function DataPanel({
             </span>
           )}
           {truncated && <Badge variant="warning">dados truncados</Badge>}
+          {/* Spec 019, FR-001/FR-004: só com itens na saída exibida; mesmos dados do painel. */}
+          {downloadName && current && items.length > 0 && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="ml-auto h-7 px-2 text-xs"
+              data-testid={`${testId}-download`}
+              title={
+                truncated
+                  ? 'Baixar os itens exibidos em JSON (dados truncados na gravação)'
+                  : 'Baixar os itens exibidos em JSON'
+              }
+              onClick={() => {
+                downloadJson(
+                  itemsFileContent(items),
+                  dataFileName([
+                    ...downloadName,
+                    ports.length > 1 ? (portLabels[current] ?? current) : undefined,
+                  ]),
+                );
+              }}
+            >
+              <Download /> Baixar
+            </Button>
+          )}
         </div>
       </header>
       <div className="min-h-0 flex-1 overflow-auto p-3">

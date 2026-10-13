@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import type { WorkflowDefinition } from '@olly/shared-types';
 import { createProject, createWorkflow, loginViaUi, type ApiSession } from './support';
 
@@ -210,5 +211,83 @@ test.describe('spec 003 — execução de teste no editor', () => {
     await expect(page.getByTestId('ndv-output')).toContainText(
       'parâmetro "fields[0].value" do nó "Montar"',
     );
+  });
+});
+
+/** Clica em "Baixar" no painel e devolve o nome e o conteúdo do arquivo (spec 019). */
+async function downloadFrom(
+  page: Page,
+  panel: Locator,
+): Promise<{ name: string; items: Record<string, unknown>[] }> {
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    panel.getByRole('button', { name: 'Baixar' }).click(),
+  ]);
+  return {
+    name: download.suggestedFilename(),
+    items: JSON.parse(await readFile(await download.path(), 'utf8')) as Record<string, unknown>[],
+  };
+}
+
+const jsonView = async (panel: Locator, testId: string) => {
+  await panel.getByRole('tab', { name: 'JSON' }).click();
+  return JSON.parse(await panel.getByTestId(`${testId}-json`).innerText()) as unknown;
+};
+
+test.describe('spec 019 — baixar os dados do nó', () => {
+  test('FR-001/FR-002/FR-003/FR-004/SC-001/SC-002: baixa a entrada e cada saída do If com os itens do painel', async ({
+    page,
+  }) => {
+    const wf = await createWorkflow(admin, projectId, 'Baixar dados', definition);
+    await loginViaUi(page, 'editor', `/workflows/${wf.id}`);
+
+    // FR-004: sem execução, o painel não tem itens e não oferece o download.
+    await page.getByTestId('node-Adulto?').dblclick();
+    await expect(page.getByTestId('ndv-input-download')).toHaveCount(0);
+    await expect(page.getByTestId('ndv-output-download')).toHaveCount(0);
+    await page.keyboard.press('Escape');
+
+    await page.getByRole('button', { name: 'Executar workflow' }).click();
+    await expect(status(page, 'Adulto?')).toHaveAttribute('data-status', 'success');
+    await page.getByTestId('node-Adulto?').dblclick();
+    const input = page.getByTestId('ndv-input');
+    const output = page.getByTestId('ndv-output');
+
+    // SC-001: entrada e cada saída, com os mesmos itens da visão JSON e nomes distintos.
+    const fromInput = await downloadFrom(page, input);
+    expect(fromInput.name).toBe('Adulto_-entrada.json');
+    expect(fromInput.items).toHaveLength(2);
+    expect(fromInput.items).toEqual(await jsonView(input, 'ndv-input'));
+
+    const trueBranch = await downloadFrom(page, output);
+    expect(trueBranch.name).toBe('Adulto_-saida-Verdadeiro.json');
+    expect(trueBranch.items).toEqual([expect.objectContaining({ nomeCompleto: 'Ana Souza' })]);
+    await output.getByRole('tab', { name: 'Falso (1)' }).click();
+    const falseBranch = await downloadFrom(page, output);
+    expect(falseBranch.name).toBe('Adulto_-saida-Falso.json');
+    expect(falseBranch.items).toEqual(await jsonView(output, 'ndv-output'));
+    expect(falseBranch.items).toEqual([expect.objectContaining({ nomeCompleto: 'Bruno Lima' })]);
+
+    // Origem da entrada num nó anterior: o arquivo traz a saída dele.
+    await page.getByLabel('Origem dos dados de entrada').selectOption('m');
+    const fromSource = await downloadFrom(page, input);
+    expect(fromSource.name).toBe('Início-saida.json');
+    expect(fromSource.items).toEqual([
+      { nome: 'Ana', sobrenome: 'Souza', idade: 34 },
+      { nome: 'Bruno', sobrenome: 'Lima', idade: 16 },
+    ]);
+    await page.keyboard.press('Escape');
+
+    // SC-002: o arquivo baixado vira dados fixados sem ajuste, e os fixados também são baixados.
+    await page.getByTestId('node-Montar').dblclick();
+    const montar = await downloadFrom(page, page.getByTestId('ndv-output'));
+    expect(montar.name).toBe('Montar-saida.json');
+    await page.getByRole('button', { name: 'Fixar dados' }).click();
+    await page.getByRole('button', { name: 'Editar' }).click();
+    await page.getByTestId('pin-editor').fill(JSON.stringify(montar.items));
+    await page.getByRole('button', { name: 'Salvar dados fixados' }).click();
+    const pinned = await downloadFrom(page, page.getByTestId('ndv-output'));
+    expect(pinned.name).toBe('Montar-saida-fixada.json');
+    expect(pinned.items).toEqual(montar.items);
   });
 });

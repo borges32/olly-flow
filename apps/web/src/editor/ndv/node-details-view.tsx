@@ -156,6 +156,9 @@ export function NodeDetailsView({
   const [runChoice, setRunChoice] = useState<number | null>(null);
   const selectedRun = runChoice !== null && runs[runChoice] ? runs[runChoice] : run.nodes[node.id];
   const runOf = (id: string) => (id === node.id ? selectedRun : run.nodes[id]);
+  // Spec 019, FR-003: o arquivo baixado indica a execução do laço exibida.
+  const loopRunPart =
+    runs.length > 1 ? `execucao-${(selectedRun?.runIndex ?? runs.length - 1) + 1}` : undefined;
   const ports = description ? resolveNodePorts(description, node) : { inputs: [], outputs: [] };
 
   // Entrada: a registrada na execução ou, se o nó não rodou, o que os pais produziram.
@@ -270,6 +273,9 @@ export function NodeDetailsView({
               testId="ndv-input"
               data={leftData}
               source={dragSource}
+              downloadName={
+                sourceNode ? [sourceNode.name, 'saida'] : [node.name, 'entrada', loopRunPart]
+              }
               truncated={
                 sourceNode ? runOf(sourceNode.id)?.dataTruncated : runOf(node.id)?.dataTruncated
               }
@@ -349,6 +355,11 @@ export function NodeDetailsView({
                   testId="ndv-output"
                   data={outputData}
                   portLabels={portLabels}
+                  downloadName={[
+                    node.name,
+                    pinned ? 'saida-fixada' : 'saida',
+                    pinned ? undefined : loopRunPart,
+                  ]}
                   truncated={!pinned && runOf(node.id)?.dataTruncated}
                   empty={
                     runOf(node.id)?.error ? (

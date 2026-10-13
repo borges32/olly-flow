@@ -98,6 +98,11 @@ Qualquer parâmetro string pode ser uma expressão (`=...`), inclusive dentro de
 - **`pairedItem`:** nós que não informam a origem de cada item recebem-na automaticamente quando ela é inequívoca (um item de entrada, ou mesma quantidade de itens). Nós que filtram ou reordenam (If) devem preenchê-la.
 - **Ramo sem itens:** o nó não executa e propaga "sem dados" para os seguintes.
 - **Nome:** único no workflow. Ao colar, nomes repetidos ganham sufixo numérico (`Definir campos1`).
+- **Baixar os dados (spec 019):** no painel do nó, os dados de **Entrada** e de **Saída** têm o botão **Baixar**, que salva os itens exibidos num arquivo JSON, igual à visão JSON e aceito pelo editor de dados fixados. Detalhes:
+  - **o que vai no arquivo:** a saída e a origem da entrada selecionadas no painel. O botão só aparece quando há itens;
+  - **nome do arquivo:** `<nó>-entrada.json`, `<nó>-saida.json` ou `<nó>-saida-fixada.json`. Acrescenta a saída (`-Verdadeiro`) quando o nó tem mais de uma, e a iteração do laço (`-execucao-2`) quando o nó executou várias vezes. Com a origem num nó anterior, o arquivo é `<anterior>-saida.json`;
+  - **o que fica de fora:** só os dados `json` dos itens vão no arquivo; os binários não;
+  - **dados protegidos:** os valores mascarados e os dados truncados vão como gravados, e sem a permissão `execution:readData` não há o que baixar.
 
 ## Configurações do nó (spec 004)
 

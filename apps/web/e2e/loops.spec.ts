@@ -83,6 +83,12 @@ test.describe('spec 007 — FR-010/FR-016: laços no editor', () => {
     await expect(
       page.getByTestId('ndv-output').getByRole('cell', { name: '0', exact: true }).last(),
     ).toBeVisible();
+    // Spec 019, FR-003: o arquivo baixado indica a iteração exibida.
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByTestId('ndv-output-download').click(),
+    ]);
+    expect(download.suggestedFilename()).toBe('Corpo-saida-execucao-1.json');
     await page.getByRole('button', { name: 'Fechar painel do nó' }).click();
     await expect(page.getByTestId('ndv')).toBeHidden();
 
