@@ -18,7 +18,9 @@
 - [ ] T014 [P] Editor Monaco Python com autocomplete `_*`
 - [ ] T015 Bateria de escape JS + Python (≥ 30 casos) (FR-017, SC-002) → plan §9
 
-## Fase 3 — HU-2: Agendamento (P1)
+## Fase 3 — HU-2: Agendamento (P1) — passou para a spec 020 (13/10/2026)
+
+As tarefas abaixo não fazem mais parte desta spec; ver [specs/020-schedule-trigger/](../020-schedule-trigger/spec.md).
 
 - [ ] T020 `trigger.schedule` com schedulers na publicação/despublicação (FR-007) → plan §3
 - [ ] T021 Validação de cron e prévia das próximas execuções (FR-008)

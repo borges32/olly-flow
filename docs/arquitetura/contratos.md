@@ -106,7 +106,7 @@ Spec 011:
 |---|---|---|---|
 | `trigger.manual` | 002 | `http.request` | 004 |
 | `trigger.webhook` | 005 | `http.respondToWebhook` | 005 |
-| `trigger.schedule` | 008 | `postgres.query` | 004 |
+| `trigger.schedule` | 020 (antes 008) | `postgres.query` | 004 |
 | `trigger.error` | 007 | `postgres.write` | 004 |
 | `trigger.executeWorkflow` | 008 | `code.javascript` | 005 |
 | `data.set` | 002 | `code.python` | 008 |
