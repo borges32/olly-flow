@@ -271,3 +271,76 @@ test.describe('spec 016 — FR-008 (14/10/2026): credencial Agentix com Bearer J
     await expect(page.getByLabel('Chave da API')).toHaveCount(0);
   });
 });
+
+test.describe('spec 022 — nó PostgreSQL único', () => {
+  test('FR-001/FR-003/FR-004: excluir por condição e selecionar pelo editor, com os campos de cada operação', async ({
+    page,
+  }) => {
+    const credentials = (await editor.call('GET', `/projects/${projectId}/credentials`))
+      .body as CredentialSummary[];
+    const credentialId = credentials.find((c) => c.type === 'postgres')?.id ?? '';
+    expect(credentialId).not.toBe('');
+    const tabela = `e2e_pg_${Date.now()}`;
+    // Um comando por chamada: a consulta usa cursor (protocolo estendido).
+    await runSql(credentialId, `CREATE TABLE ${tabela} (id int PRIMARY KEY, nome text)`);
+    await runSql(
+      credentialId,
+      `INSERT INTO ${tabela} VALUES (1, 'Ana'), (2, 'Bruno'), (3, 'Carla')`,
+    );
+    const wf = await createWorkflow(editor, projectId, 'PostgreSQL único', {
+      nodes: [
+        { id: 'm', type: 'trigger.manual', name: 'Início', params: {}, position: [0, 0] },
+        {
+          id: 'd',
+          type: 'postgres.database',
+          name: 'Excluir',
+          params: {
+            operation: 'deleteTable',
+            deleteCommand: 'delete',
+            table: tabela,
+            where: [{ column: 'nome', condition: 'equal', value: 'Bruno' }],
+          },
+          credentialId,
+          position: [260, 0],
+        },
+        {
+          id: 's',
+          type: 'postgres.database',
+          name: 'Buscar',
+          params: {
+            operation: 'select',
+            table: tabela,
+            returnAll: true,
+            sort: [{ column: 'id', direction: 'DESC' }],
+          },
+          credentialId,
+          position: [520, 0],
+        },
+      ],
+      edges: [
+        { id: 'e1', from: 'm', fromPort: 'main', to: 'd', toPort: 'main' },
+        { id: 'e2', from: 'd', fromPort: 'main', to: 's', toPort: 'main' },
+      ],
+      settings: {},
+    });
+    await loginViaUi(page, 'editor', `/workflows/${wf.id}`);
+
+    // FR-001: o painel mostra só os campos da operação escolhida.
+    await page.getByTestId('node-Excluir').dblclick();
+    await expect(page.getByTestId('param-deleteCommand')).toBeVisible();
+    await expect(page.getByTestId('param-query')).toHaveCount(0);
+    await expect(page.getByTestId('param-columns.mappingMode')).toHaveCount(0);
+    await page.keyboard.press('Escape');
+
+    await page.getByRole('button', { name: 'Executar workflow' }).click();
+    await expect(status(page, 'Excluir')).toHaveAttribute('data-status', 'success');
+    await expect(status(page, 'Buscar')).toHaveText(/2 itens/);
+    await page.getByTestId('node-Buscar').dblclick();
+    const output = page.getByTestId('ndv-output');
+    await output.getByRole('tab', { name: 'JSON' }).click();
+    await expect(output.getByTestId('ndv-output-json')).toContainText('"nome": "Carla"');
+    await expect(output.getByTestId('ndv-output-json')).not.toContainText('Bruno');
+    await page.keyboard.press('Escape');
+    await runSql(credentialId, `DROP TABLE IF EXISTS ${tabela}`);
+  });
+});

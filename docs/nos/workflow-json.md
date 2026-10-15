@@ -137,7 +137,7 @@ Um modelo de IA que gera um workflow novo deve omitir o `id` e usar um nome que 
 | `continueRegularOutput` | O nó emite `{ "json": { "error": { "message": "..." } } }` pela saída normal e o fluxo segue |
 | `continueErrorOutput` | O nó ganha uma **saída de erro**, sempre a última ([4.5](#45-saída-de-erro)). Os itens que falharam seguem por ela, com o campo `error` |
 
-Nos nós que processam item a item (`data.set`, `http.request`, `postgres.query`, `postgres.write`), só os itens que falharam vão para o erro. Nos demais, uma falha desvia todos os itens de entrada.
+Nos nós que processam item a item (`data.set`, `http.request`, `postgres.database`), só os itens que falharam vão para o erro. Nos demais, uma falha desvia todos os itens de entrada.
 
 `retryOnFail: true` executa o nó de novo após uma falha, até `maxTries` tentativas, esperando `waitBetweenTries` ms entre elas.
 
@@ -147,7 +147,7 @@ Nos nós que processam item a item (`data.set`, `http.request`, `postgres.query`
 |---|---|---|
 | `ollyFlow.retryBackoff` | `fixed` \| `exponential` | Espera entre as tentativas. `exponential` dobra a espera a cada tentativa. Padrão `fixed` |
 | `ollyFlow.timeoutMs` | número | Aborta o nó depois desse tempo (ms) |
-| `ollyFlow.parallelItems` | `{ "enabled": booleano, "concurrency": número }` | Processa os itens em paralelo, com a concorrência indicada. Só nos tipos `http.request`, `postgres.query` (modo `perItem`) e `postgres.write` |
+| `ollyFlow.parallelItems` | `{ "enabled": booleano, "concurrency": número }` | Processa os itens em paralelo, com a concorrência indicada. Só nos tipos `http.request` e `postgres.database` (na consulta, só no modo `perItem`) |
 
 ## 4. Conexões
 
@@ -181,7 +181,7 @@ As portas são numeradas na ordem abaixo, separadamente para entradas e saídas 
 | Tipo | Entradas (`main`) | Saídas (`main`) |
 |---|---|---|
 | `trigger.manual`, `trigger.webhook`, `trigger.error`, `trigger.executeWorkflow`, `trigger.chat` | nenhuma (`trigger.chat` com `options.loadPreviousSession: "memory"`: a entrada de sub-nó `ai_memory`) | 0 |
-| `data.set`, `data.setVariable`, `code.javascript`, `http.request`, `http.respondToWebhook`, `postgres.query`, `postgres.write`, `ai.mcpClient`, `flow.wait`, `flow.executeWorkflow` | 0 | 0 |
+| `data.set`, `data.setVariable`, `code.javascript`, `http.request`, `http.respondToWebhook`, `postgres.database`, `ai.mcpClient`, `flow.wait`, `flow.executeWorkflow` | 0 | 0 |
 | `logic.if` | 0 | 0 = verdadeiro, 1 = falso |
 | `logic.switch` (modo `rules`) | 0 | uma por regra, na ordem de `rules` (0, 1, 2...); com `options.fallbackOutput: "extra"`, a saída **Padrão** vem depois da última regra |
 | `logic.switch` (modo `expression`) | 0 | de 0 até `numberOutputs - 1` |
@@ -303,7 +303,7 @@ Um parâmetro **texto** que começa com `=` é uma expressão. Dentro dele, os t
 | `$now`, `$today` | Data e hora (Luxon `DateTime`), no fuso da plataforma |
 | `$loop.index` | Dentro de um laço, o número da volta (começa em 0) |
 
-**Campos sem expressão:** os parâmetros marcados com "sem expressão" no catálogo não aceitam valor iniciado por `=`. Exemplos: o SQL do `postgres.query`, o caminho do webhook e os códigos JavaScript.
+**Campos sem expressão:** os parâmetros marcados com "sem expressão" no catálogo não aceitam valor iniciado por `=`. Exemplos: o SQL do `postgres.database`, o caminho do webhook e os códigos JavaScript.
 
 **`$fromAI`:** só nas ferramentas `tool.httpRequest` e `tool.postgresQuery`. `"={{ $fromAI('chave', 'descrição', 'tipo', padrão) }}"` marca um valor que o **modelo de IA** preenche quando chama a ferramenta. O tipo pode ser `string` (padrão), `number`, `boolean` ou `json`. Um argumento com valor padrão é opcional para o modelo. A chave aceita letras, números, `_` e `-`, com até 64 caracteres.
 
@@ -328,7 +328,7 @@ Na importação, a credencial é procurada no projeto de destino: primeiro pelo 
 | `httpHeaderAuth` | idem | Cabeçalho com nome e valor |
 | `httpQueryAuth` | idem | Parâmetro de query com nome e valor |
 | `oauth2ClientCredentials` | idem | OAuth2 com client credentials |
-| `postgres` | `postgres.query`, `postgres.write`, `tool.postgresQuery` | Conexão PostgreSQL. **Obrigatória** |
+| `postgres` | `postgres.database`, `tool.postgresQuery` | Conexão PostgreSQL. **Obrigatória** |
 | `webhookHeaderAuth` | `trigger.webhook` | Com `authentication: "headerAuth"` |
 | `webhookBasicAuth` | `trigger.webhook`, `trigger.chat` | Com `authentication: "basicAuth"` |
 | `webhookHmac` | `trigger.webhook` | Com `authentication: "hmac"` |
@@ -593,43 +593,51 @@ Chama uma API HTTP para cada item. Bloqueia endereços internos (anti-SSRF), a m
 }
 ```
 
-#### `postgres.query` — PostgreSQL: consulta
+#### `postgres.database` — PostgreSQL
 
-Executa SQL **parametrizado**. Cada linha do resultado vira um item. Credencial `postgres` obrigatória.
+Um nó com as operações do "Postgres" do N8N (spec 022). Credencial `postgres` obrigatória. Os tipos antigos `postgres.query` e `postgres.write` são aceitos na importação e convertidos para este nó (consulta → `executeQuery` com `queryOptions`; gravação → a mesma operação, com `writeOptions`).
 
 | Parâmetro | Tipo | Padrão | Descrição |
 |---|---|---|---|
-| `query` | texto | — | **Obrigatório**, sem expressão. Use `$1`, `$2`... para os valores. Nunca monte SQL com dados do item |
-| `queryParameters` | lista de `{ value }` | `[]` | Valores de `$1`, `$2`... na ordem. Aceitam expressão |
-| `mode` | `once` \| `perItem` | `once` | `once`: uma consulta (os parâmetros usam o primeiro item). `perItem`: uma consulta por item |
-| `options.maxRows` | inteiro | 1000 | |
-| `options.statementTimeoutMs` | inteiro | 30 000 | |
+| `operation` | `executeQuery` \| `select` \| `insert` \| `update` \| `upsert` \| `deleteTable` | `insert` | **Obrigatório**. Os campos abaixo valem só para as operações indicadas |
+| `query` | texto | — | `executeQuery`. Sem expressão. Use `$1`, `$2`... para os valores. Nunca monte SQL com dados do item |
+| `queryParameters` | lista de `{ value }` | `[]` | `executeQuery`. Valores de `$1`, `$2`... na ordem. Aceitam expressão |
+| `mode` | `once` \| `perItem` | `once` | `executeQuery`. `once`: uma consulta (os parâmetros usam o primeiro item). `perItem`: uma por item |
+| `queryOptions.maxRows`, `queryOptions.statementTimeoutMs` | inteiro | 1000; 30 000 | `executeQuery` |
+| `schema` | texto | `public` | Todas, menos `executeQuery`. Sem expressão |
+| `table` | texto | — | Todas, menos `executeQuery`. **Obrigatório**, sem expressão |
+| `columns.mappingMode` | `autoMap` \| `defineBelow` | `autoMap` | `insert`, `update`, `upsert`. `autoMap`: os campos do item com nome de coluna. `defineBelow`: a lista `columns.values` |
+| `columns.values` | lista de `{ column, value }` | `[]` | Com `defineBelow`. `column` é sem expressão; `value` aceita expressão |
+| `matchingColumns` | lista de `{ column }` | `[]` | `update`, `upsert`: colunas que identificam o registro |
+| `writeOptions.transaction` | `none` \| `allItems` | `none` | `insert`, `update`, `upsert`. `allItems`: todos os itens numa transação |
+| `writeOptions.batchSize`, `writeOptions.returning`, `writeOptions.skipOnConflict`, `writeOptions.statementTimeoutMs` | | 100; `*`; `false`; 30 000 | `insert`, `update`, `upsert` |
+| `returnAll` | booleano | `false` | `select`: todas as linhas; senão, até `limit` |
+| `limit` | inteiro | 50 | `select`, com `returnAll: false` |
+| `where` | lista de `{ column, condition, value }` | `[]` | `select` e `deleteTable` com `deleteCommand: "delete"`. `condition`: `equal`, `!=`, `LIKE`, `>`, `<`, `>=`, `<=`, `IS NULL`, `IS NOT NULL`. `value` aceita expressão (ignorado nos de nulo). Sem condições, todas as linhas |
+| `combineConditions` | `AND` \| `OR` | `AND` | Como as condições se combinam |
+| `sort` | lista de `{ column, direction }` | `[]` | `select`. `direction`: `ASC` ou `DESC` |
+| `deleteCommand` | `delete` \| `truncate` \| `drop` | `delete` | `deleteTable`. `delete`: exclui as linhas das condições e devolve as excluídas. `truncate`: esvazia a tabela. `drop`: remove a tabela. Os dois últimos rodam uma vez por execução e devolvem `{ "success": true, "command": "..." }` |
+| `deleteOptions.cascade`, `deleteOptions.restartSequences` | booleano | `false` | `truncate`/`drop` em cascata; `truncate` reiniciando as sequências |
+
+Cada linha devolvida (consulta, seleção, exclusão ou `RETURNING`) vira um item. Colunas e tabelas são conferidas no catálogo do banco, e os valores vão só como parâmetros. Com a credencial em modo somente leitura, o banco recusa as operações que escrevem.
 
 ```json
 "parameters": {
+  "operation": "executeQuery",
   "query": "SELECT id, nome FROM clientes WHERE cidade = $1 AND ativo = $2",
   "queryParameters": [{ "value": "={{ $json.cidade }}" }, { "value": "true" }],
   "mode": "perItem"
 }
 ```
 
-#### `postgres.write` — PostgreSQL: gravar
-
-Insere, atualiza ou faz upsert de registros a partir dos itens. Credencial `postgres` obrigatória.
-
-| Parâmetro | Tipo | Padrão | Descrição |
-|---|---|---|---|
-| `operation` | `insert` \| `update` \| `upsert` | `insert` | **Obrigatório** |
-| `schema` | texto | `public` | Sem expressão |
-| `table` | texto | — | **Obrigatório**, sem expressão |
-| `columns.mappingMode` | `autoMap` \| `defineBelow` | `autoMap` | `autoMap`: os campos do item com nome de coluna. `defineBelow`: a lista `columns.values` |
-| `columns.values` | lista de `{ column, value }` | `[]` | Visível com `defineBelow`. `column` é sem expressão; `value` aceita expressão |
-| `matchingColumns` | lista de `{ column }` | `[]` | Visível com `update` e `upsert`: colunas que identificam o registro |
-| `options.transaction` | `none` \| `allItems` | `none` | `allItems`: todos os itens numa transação |
-| `options.batchSize` | inteiro | 100 | |
-| `options.returning` | texto | `*` | Colunas devolvidas |
-| `options.skipOnConflict` | booleano | `false` | No `insert`, ignora as linhas em conflito |
-| `options.statementTimeoutMs` | inteiro | 30 000 | |
+```json
+"parameters": {
+  "operation": "deleteTable",
+  "deleteCommand": "delete",
+  "table": "sessoes",
+  "where": [{ "column": "expira_em", "condition": "<", "value": "={{ $now.toISO() }}" }]
+}
+```
 
 #### `http.respondToWebhook` — Responder ao webhook
 
@@ -1022,7 +1030,7 @@ Busca pedidos numa API, marca a prioridade conforme o valor, junta os ramos e gr
     {
       "id": "3e2af122-7a1b-42f4-a00c-2b11a2c2aab3",
       "name": "Gravar pedidos",
-      "type": "postgres.write",
+      "type": "postgres.database",
       "typeVersion": 1,
       "position": [1300, 80],
       "parameters": {
@@ -1038,7 +1046,7 @@ Busca pedidos numa API, marca a prioridade conforme o valor, junta os ramos e gr
           ]
         },
         "matchingColumns": [{ "column": "id" }],
-        "options": { "transaction": "allItems" }
+        "writeOptions": { "transaction": "allItems" }
       },
       "credentials": { "postgres": { "name": "Banco de pedidos" } }
     }

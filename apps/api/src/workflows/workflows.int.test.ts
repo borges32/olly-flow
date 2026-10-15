@@ -283,8 +283,8 @@ describe('spec 002 — FR-006: catálogo de tipos de nó', () => {
       'outputParser.structured',
       // Spec 015: marcador de nó importado sem suporte.
       'placeholder.unsupported',
-      'postgres.query',
-      'postgres.write',
+      // Spec 022: nó PostgreSQL único (postgres.query e postgres.write migrados na leitura).
+      'postgres.database',
       'tool.code',
       'tool.httpRequest',
       'tool.mcp',

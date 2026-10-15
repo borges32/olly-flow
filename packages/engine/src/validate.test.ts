@@ -104,10 +104,16 @@ describe('spec 002 — FR-004/FR-005: validação estrutural ao salvar', () => {
 });
 
 describe('spec 004 — FR-012: parâmetro sem expressão', () => {
-  it('FR-012: SQL do postgres.query iniciado por "=" é erro ao salvar', () => {
+  it('FR-012: SQL da consulta PostgreSQL iniciado por "=" é erro ao salvar (nó único, spec 022)', () => {
     const def = (query: string): WorkflowDefinition => ({
       nodes: [
-        { id: 'q', type: 'postgres.query', name: 'Consulta', params: { query }, position: [0, 0] },
+        {
+          id: 'q',
+          type: 'postgres.database',
+          name: 'Consulta',
+          params: { operation: 'executeQuery', query },
+          position: [0, 0],
+        },
       ],
       edges: [],
       settings: {},

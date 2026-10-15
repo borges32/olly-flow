@@ -1,5 +1,7 @@
 # PostgreSQL: consulta (`postgres.query`)
 
+> **Substituído pelo nó [PostgreSQL (`postgres.database`)](postgres.database.md) na spec 022 (14/10/2026).** Workflows com este tipo são convertidos automaticamente. O conteúdo abaixo descreve o comportamento, que continua igual no nó único.
+
 Executa SQL parametrizado num banco PostgreSQL; cada linha do resultado vira um item. Equivale à operação *Execute Query* do `n8n-nodes-base.postgres`.
 
 | Item | Valor |

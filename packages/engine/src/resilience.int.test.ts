@@ -40,12 +40,13 @@ const workflow = (query: Partial<WorkflowNode>): WorkflowDefinition => ({
     { id: 'm', type: 'trigger.manual', name: 'Início', params: {}, position: [0, 0] },
     {
       id: 'q',
-      type: 'postgres.query',
+      // Spec 022: nó PostgreSQL único, na operação de consulta.
+      type: 'postgres.database',
       name: 'Consulta',
-      params: {},
       position: [200, 0],
       credentialId: 'cred-1',
       ...query,
+      params: { operation: 'executeQuery', ...query.params },
     },
   ],
   edges: [{ id: 'e', from: 'm', fromPort: 'main', to: 'q', toPort: 'main' }],

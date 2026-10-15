@@ -1,4 +1,5 @@
 import { migrateLegacyDefinition } from './legacy-definition.js';
+import { migrateLegacyPostgresNode } from './legacy-postgres.js';
 import { resolveNodePorts, type PortedType } from './ports.js';
 import {
   isSubNodeType,
@@ -617,7 +618,17 @@ export function fromWorkflowFile(
     let id = typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : '';
     if (!id || usedIds.has(id)) id = options.newId();
     usedIds.add(id);
-    const type = options.catalog.get(raw.type);
+    // Spec 022, FR-008: tipos que mudaram de nome (postgres.query/postgres.write → nó único) são
+    // migrados antes de conferir o catálogo; senão virariam marcadores.
+    const renamed = migrateLegacyPostgresNode({
+      id,
+      name,
+      type: raw.type,
+      params: raw.parameters ?? {},
+      position: [0, 0],
+    });
+    const rawType = renamed.type;
+    const type = options.catalog.get(rawType);
     let node: WorkflowNode;
     if (!type) {
       // FR-016: tipo desconhecido vira marcador desabilitado com o conteúdo original.
@@ -643,12 +654,12 @@ export function fromWorkflowFile(
         });
         return;
       }
-      const params = structuredClone(raw.parameters ?? {});
+      const params = structuredClone(renamed.params);
       node = {
         id,
         name,
-        type: raw.type,
-        params: raw.type === PLACEHOLDER_TYPE ? params : withDefaults(params, type),
+        type: rawType,
+        params: rawType === PLACEHOLDER_TYPE ? params : withDefaults(params, type),
         position: [0, 0],
         ...(raw.disabled === true && { disabled: true }),
       };

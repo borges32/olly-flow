@@ -228,7 +228,9 @@ describe('spec 015 — FR-023: conversão dos nós e das conexões do N8N', () =
       ],
       connections: {},
     });
+    expect(byName('Consulta')?.type).toBe('postgres.database');
     expect(byName('Consulta')?.params).toMatchObject({
+      operation: 'executeQuery',
       query: 'select * from t where id = $1',
       queryParameters: [{ value: '={{ $json.id }}' }],
       mode: 'perItem',
@@ -1058,5 +1060,109 @@ describe('spec 021 — FR-011/FR-012/FR-015/SC-004: Chat Trigger do N8N', () => 
     ]);
     const memory = report.nodes.withWarnings.find((w) => w.node === 'Simple Memory')?.warnings;
     expect(memory).toEqual([expect.stringContaining('memória persistente')]);
+  });
+});
+
+describe('spec 022 — FR-009/SC-004: Postgres do N8N no nó único', () => {
+  const pg = (name: string, parameters: Record<string, unknown>, typeVersion = 2.5) =>
+    node(name, 'n8n-nodes-base.postgres', parameters, {
+      typeVersion,
+      credentials: { postgres: { id: '9', name: 'Banco' } },
+    });
+  const table = {
+    schema: { __rl: true, value: 'public', mode: 'list' },
+    table: { __rl: true, value: 'clientes', mode: 'list' },
+  };
+
+  it('SC-004/FR-009: Select, Delete (os três comandos) e Update importam sem marcadores', () => {
+    const { byName, report, validation } = importN8n({
+      nodes: [
+        pg('Buscar', {
+          operation: 'select',
+          ...table,
+          limit: 10,
+          where: {
+            values: [
+              { column: 'cidade', condition: 'equal', value: '={{ $json.cidade }}' },
+              { column: 'apagado', condition: 'IS NULL' },
+            ],
+          },
+          combineConditions: 'OR',
+          sort: { values: [{ column: 'nome', direction: 'DESC' }] },
+          options: { outputColumns: ['nome'] },
+        }),
+        pg('Excluir', {
+          operation: 'deleteTable',
+          ...table,
+          deleteCommand: 'delete',
+          where: { values: [{ column: 'id', condition: '>=', value: 100 }] },
+        }),
+        pg('Esvaziar', {
+          operation: 'deleteTable',
+          ...table,
+          options: { restartSequences: true, cascade: true },
+        }),
+        pg('Remover', { operation: 'deleteTable', ...table, deleteCommand: 'drop' }),
+        pg('Atualizar', {
+          operation: 'update',
+          ...table,
+          columns: { mappingMode: 'autoMapInputData', value: {}, matchingColumns: ['id'] },
+          options: { queryBatching: 'transaction' },
+        }),
+      ],
+      connections: {},
+    });
+    expect(report.nodes.unsupported).toEqual([]);
+    expect(validation.errors).toEqual([]);
+    expect(byName('Buscar')).toMatchObject({
+      type: 'postgres.database',
+      params: {
+        operation: 'select',
+        schema: 'public',
+        table: 'clientes',
+        returnAll: false,
+        limit: 10,
+        where: [
+          { column: 'cidade', condition: 'equal', value: '={{ $json.cidade }}' },
+          { column: 'apagado', condition: 'IS NULL' },
+        ],
+        combineConditions: 'OR',
+        sort: [{ column: 'nome', direction: 'DESC' }],
+      },
+    });
+    expect(byName('Excluir')?.params).toMatchObject({
+      operation: 'deleteTable',
+      deleteCommand: 'delete',
+      where: [{ column: 'id', condition: '>=', value: '100' }],
+    });
+    // Sem deleteCommand, vale o padrão do N8N (truncate), gravado explicitamente.
+    expect(byName('Esvaziar')?.params).toMatchObject({
+      deleteCommand: 'truncate',
+      deleteOptions: { restartSequences: true, cascade: true },
+    });
+    expect(byName('Remover')?.params).toMatchObject({ deleteCommand: 'drop' });
+    expect(byName('Atualizar')?.params).toMatchObject({
+      operation: 'update',
+      columns: { mappingMode: 'autoMap' },
+      matchingColumns: [{ column: 'id' }],
+      writeOptions: { transaction: 'allItems' },
+    });
+    const buscar = report.nodes.withWarnings.find((w) => w.node === 'Buscar')?.warnings ?? [];
+    expect(buscar).toEqual([expect.stringContaining('Colunas de saída')]);
+  });
+
+  it('FR-009: o Postgres v1 continua só com o Execute Query; as demais operações viram marcador', () => {
+    const { byName, report } = importN8n({
+      nodes: [
+        pg('Consulta v1', { operation: 'executeQuery', query: 'select 1' }, 1),
+        pg('Inserir v1', { operation: 'insert', table: 'clientes', columns: 'id,nome' }, 1),
+      ],
+      connections: {},
+    });
+    expect(byName('Consulta v1')).toMatchObject({
+      type: 'postgres.database',
+      params: { operation: 'executeQuery', query: 'select 1' },
+    });
+    expect(report.nodes.unsupported.map((u) => u.node)).toEqual(['Inserir v1']);
   });
 });

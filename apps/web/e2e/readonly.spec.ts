@@ -22,6 +22,8 @@ test('spec 002 — SC-002/FR-015: visualizador vê o canvas somente leitura e a 
   await expect(page.getByTestId('readonly-badge')).toBeVisible();
   await expect(page.getByTestId('node-palette')).toBeHidden();
   await expect(page.getByRole('button', { name: 'Salvar' })).toBeHidden();
+  // Spec 023, FR-005: sem edição, sem "Organizar".
+  await expect(page.getByRole('button', { name: 'Organizar' })).toBeHidden();
   await expect(page.getByLabel('Nome do workflow')).toBeDisabled();
 
   const setNode = page.getByTestId('node-Definir campos');

@@ -5,6 +5,7 @@ export * from './graph.js';
 export * from './ports.js';
 export * from './legacy-output-parser.js';
 export * from './legacy-definition.js';
+export * from './legacy-postgres.js';
 export * from './governance.js';
 export * from './mcp.js';
 export * from './ai.js';

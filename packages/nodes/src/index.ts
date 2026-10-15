@@ -28,6 +28,10 @@ export {
 } from './postgres/catalog.js';
 export { createPostgresQueryNode } from './postgres/query/definition.js';
 export { createPostgresWriteNode } from './postgres/write/definition.js';
+// Spec 022: nó PostgreSQL único.
+export { createPostgresDatabaseNode, POSTGRES_OPERATIONS } from './postgres/database/definition.js';
+export { CONDITION_OPERATORS } from './postgres/database/conditions.js';
+export { DELETE_COMMANDS } from './postgres/database/operations.js';
 export { codeJavascriptNode, DEFAULT_CODE } from './code/javascript/definition.js';
 export { normalizeItems } from './code/javascript/normalize.js';
 export {

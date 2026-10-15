@@ -81,4 +81,9 @@ export class ColumnCache {
     this.entries.set(key, { columns, at: Date.now() });
     return columns;
   }
+
+  /** Descarta as colunas em cache de uma tabela (ex.: depois de um `DROP TABLE`, spec 022). */
+  invalidate(poolKey: string, schema: string, table: string): void {
+    this.entries.delete(`${poolKey}|${schema}|${table}`);
+  }
 }

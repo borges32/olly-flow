@@ -11,8 +11,7 @@ Cada nó vive em `packages/nodes/src/<categoria>/<nome>/` (`definition.ts`, `exe
 | `data.setVariable` | Definir variável | 003 | [data.setVariable.md](data.setVariable.md) |
 | `logic.if` | Se (If) | 003 | [logic.if.md](logic.if.md) |
 | `http.request` | Requisição HTTP | 004 | [http.request.md](http.request.md) |
-| `postgres.query` | PostgreSQL: consulta | 004 | [postgres.query.md](postgres.query.md) |
-| `postgres.write` | PostgreSQL: gravar | 004 | [postgres.write.md](postgres.write.md) |
+| `postgres.database` | PostgreSQL: executar consulta, selecionar, inserir, atualizar, upsert e excluir (substitui `postgres.query` e `postgres.write`) | 022 (antes 004) | [postgres.database.md](postgres.database.md) |
 | `trigger.webhook` | Webhook | 005 | [trigger.webhook.md](trigger.webhook.md) |
 | `http.respondToWebhook` | Responder ao webhook | 005 | [http.respondToWebhook.md](http.respondToWebhook.md) |
 | `code.javascript` | Código (JavaScript) | 005 | [code.javascript.md](code.javascript.md) |
@@ -38,7 +37,7 @@ Cada nó vive em `packages/nodes/src/<categoria>/<nome>/` (`definition.ts`, `exe
 
 **Sub-nós (spec 011):** nós cujas saídas são todas de um tipo `ai_*` (`ai_languageModel`, `ai_memory`, `ai_tool`). Conectam-se às entradas de mesmo tipo na base do Agent (desenhadas embaixo do nó, com arestas tracejadas), não executam no fluxo principal e fornecem ao nó pai um objeto (`NodeDefinition.supplyData`), lido por `ctx.subNodes(tipo, item)`. `PortDef.maxConnections` limita as conexões de uma entrada (1 modelo, 1 memória).
 
-**Portas dinâmicas (spec 007):** `dynamicPorts` descreve portas calculadas a partir dos parâmetros: `mergeInputs` (Merge), `switchOutputs` (Switch), `aiRootInputs` (entradas opcionais do Agent e do Basic LLM Chain: modelo reserva, spec 017, e output parser, spec 018) ou `chatTriggerInputs` (memória do Chat Trigger com "Carregar sessão anterior", spec 021). A regra fica em `resolveNodePorts` (`@olly/shared-types`), usada pelo motor, pela validação e pelo editor. Com `settings.onError = 'errorOutput'`, qualquer nó ganha a saída `error`: os itens que falharam seguem por ela, com o campo `error`. Nós por item (`data.set`, `http.request`, `postgres.query`, `postgres.write`) desviam só os itens que falharam; nos demais, uma falha desvia todos os itens de entrada.
+**Portas dinâmicas (spec 007):** `dynamicPorts` descreve portas calculadas a partir dos parâmetros: `mergeInputs` (Merge), `switchOutputs` (Switch), `aiRootInputs` (entradas opcionais do Agent e do Basic LLM Chain: modelo reserva, spec 017, e output parser, spec 018) ou `chatTriggerInputs` (memória do Chat Trigger com "Carregar sessão anterior", spec 021). A regra fica em `resolveNodePorts` (`@olly/shared-types`), usada pelo motor, pela validação e pelo editor. Com `settings.onError = 'errorOutput'`, qualquer nó ganha a saída `error`: os itens que falharam seguem por ela, com o campo `error`. Nós por item (`data.set`, `http.request`, `postgres.database`) desviam só os itens que falharam; nos demais, uma falha desvia todos os itens de entrada.
 
 Os nós de integração recebem as dependências da API por `createBuiltinNodes({ httpGuard, httpMaxResponseBytes, pools, bridgeTokens })`: filtro anti-SSRF com a allowlist, limite de resposta, pools Postgres e os tokens da Bridge em memória (spec 016). O `HttpGuard` aceita, por chamada, `insecureTls` (não verificar o certificado) e `allowPrivateNetworks` (redes privadas sem allowlist: Bridge, Agentix e MCP) e `allowLoopback` (loopback sem allowlist, só MCP). Credenciais: [docs/credenciais.md](../credenciais.md). O Cliente MCP (spec 010) usa o `McpGateway` que o motor recebe em `RunOptions.mcp` e entrega em `ctx.mcp()`: a governança (catálogo, políticas, snapshot, registro) fica na API ([docs/mcp-governanca.md](../mcp-governanca.md)).
 
@@ -66,7 +65,7 @@ Use `title` (rótulo), `description` (ajuda abaixo do campo) e `default` (valor 
 | `x-display-options` | Exibição condicional, equivalente ao `displayOptions` do N8N: `{ "show": { "campo": [valores] }, "hide": { "campo": [valores] } }`. Os campos citados são **irmãos** no mesmo objeto. O campo aparece quando todas as condições de `show` batem e nenhuma de `hide`. Um irmão sem valor usa o `default` do seu schema. |
 | `x-secret` | Marca um valor sensível. Nos tipos de credencial, o campo nunca sai da API e é mascarado nos dados de execução (spec 004). |
 | `x-hidden` | Parâmetro aceito, mas não exibido no editor (ex.: aliases legados). |
-| `x-no-expression` | Campo sem modo expressão: o editor não oferece o alternador e o salvamento recusa valor iniciado por `=` (erro `EXPRESSION_NOT_ALLOWED`). Ex.: SQL do `postgres.query` (spec 004). |
+| `x-no-expression` | Campo sem modo expressão: o editor não oferece o alternador e o salvamento recusa valor iniciado por `=` (erro `EXPRESSION_NOT_ALLOWED`). Ex.: SQL do `postgres.database` (spec 004). |
 | `x-multiline` | Área de texto em vez de linha única (spec 004). |
 | `x-code-editor` | Campo editado no editor de código (Monaco), com autocomplete das variáveis e dos nós. Valor: a linguagem (`javascript`) (spec 005). |
 | `x-load-options` | Opções buscadas no catálogo do banco da credencial do nó: `postgresSchemas`, `postgresTables` (do `schema` irmão) ou `postgresColumns` (de `schema` e `table`). Sem credencial, o campo vira texto (spec 004). Spec 010: `mcpServers` (servidores MCP ativos no projeto) e `mcpTools` (tools liberadas do `serverId` irmão). Spec 008: `workflows` (workflows do projeto, para o sub-workflow). Spec 011: `aiModels` (modelos permitidos no projeto). Numa lista (`type: array`), vira seleção múltipla com etiquetas e grava `[{ <primeiro campo obrigatório do item>: valor }]` (ex.: `toolNames` da Ferramenta: MCP). |
@@ -99,6 +98,11 @@ Qualquer parâmetro string pode ser uma expressão (`=...`), inclusive dentro de
 - **`pairedItem`:** nós que não informam a origem de cada item recebem-na automaticamente quando ela é inequívoca (um item de entrada, ou mesma quantidade de itens). Nós que filtram ou reordenam (If) devem preenchê-la.
 - **Ramo sem itens:** o nó não executa e propaga "sem dados" para os seguintes.
 - **Nome:** único no workflow. Ao colar, nomes repetidos ganham sufixo numérico (`Definir campos1`).
+- **Organizar (spec 023):** o botão **Organizar** da barra do editor (atalho **Shift+Alt+T**), como o *Tidy up* do N8N:
+  - **layout:** reposiciona os nós da esquerda para a direita, na ordem das conexões e sem sobreposição. Os ramos do If e do Switch seguem a ordem das saídas;
+  - **sub-nós:** modelo, memória, ferramentas e parsers ficam embaixo do nó pai, lado a lado;
+  - **alcance:** com dois ou mais nós selecionados, só eles (e os sub-nós deles); senão, o workflow inteiro. O canto superior esquerdo fica onde estava;
+  - **desfazer:** Ctrl+Z desfaz num passo. O botão não aparece na tela somente leitura.
 - **Baixar os dados (spec 019):** no painel do nó, os dados de **Entrada** e de **Saída** têm o botão **Baixar**, que salva os itens exibidos num arquivo JSON, igual à visão JSON e aceito pelo editor de dados fixados. Detalhes:
   - **o que vai no arquivo:** a saída e a origem da entrada selecionadas no painel. O botão só aparece quando há itens;
   - **nome do arquivo:** `<nó>-entrada.json`, `<nó>-saida.json` ou `<nó>-saida-fixada.json`. Acrescenta a saída (`-Verdadeiro`) quando o nó tem mais de uma, e a iteração do laço (`-execucao-2`) quando o nó executou várias vezes. Com a origem num nó anterior, o arquivo é `<anterior>-saida.json`;

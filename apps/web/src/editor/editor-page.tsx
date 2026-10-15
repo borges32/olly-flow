@@ -11,7 +11,12 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import type { NodeDescription } from '@olly/nodes';
-import type { ExecutionDetail, WorkflowDetail, WorkflowFile } from '@olly/shared-types';
+import {
+  resolveNodePorts,
+  type ExecutionDetail,
+  type WorkflowDetail,
+  type WorkflowFile,
+} from '@olly/shared-types';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
@@ -25,6 +30,7 @@ import {
   Play,
   Save,
   Square,
+  WandSparkles,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import { Link, useBlocker, useNavigate, useParams, useSearchParams } from 'react-router';
@@ -58,7 +64,8 @@ import { useCancelExecution, useTestRun } from './use-test-run';
 import { WorkflowEdgeView, type OllyFlowEdge } from './workflow-edge';
 import { WorkflowNodeView, type OllyFlowNode } from './workflow-node';
 import { edgeLoopInfo, invalidConnectionReason } from './loops';
-import { connectionRejection, isSubNodeEdge } from './subnodes';
+import { connectionRejection, isSubNodeEdge, isSubNodePort } from './subnodes';
+import { tidyUp } from './tidy-up';
 import { WorkflowSettingsButton } from './workflow-settings';
 import { VersionHistoryPanel, type DiffView } from './version-history';
 import { diffCanvas } from './version-diff';
@@ -523,6 +530,33 @@ export function Editor({
     }
   }, [api, workflow.id, workflow.name]);
 
+  // Spec 023: "Organizar" (Tidy up do N8N): a seleção (2+ nós) ou o workflow inteiro, num só
+  // passo de desfazer, com o resultado enquadrado.
+  const organize = useCallback(() => {
+    const store = useEditorStore.getState();
+    const portsOf = (n: (typeof store.nodes)[number]) => {
+      const type = typesByName.get(n.type);
+      return type ? resolveNodePorts(type, n) : { inputs: [], outputs: [] };
+    };
+    const positions = tidyUp({
+      nodes: store.nodes,
+      edges: store.edges,
+      sizes: measured,
+      isSubNode: (n) => {
+        const outputs = portsOf(n).outputs;
+        return outputs.length > 0 && outputs.every(isSubNodePort);
+      },
+      isSubNodeEdge: (e) => isSubNodeEdge(typesByName, store.nodes, e),
+      inputOrder: (n) => portsOf(n).inputs.map((p) => p.name),
+      outputOrder: (n) => portsOf(n).outputs.map((p) => p.name),
+      selection: store.selection.nodeIds,
+    });
+    store.applyLayout(positions);
+    requestAnimationFrame(() => {
+      void flow.fitView({ padding: 0.3, maxZoom: 1, duration: 200 });
+    });
+  }, [typesByName, measured, flow]);
+
   // Atalhos (FR-008). Dentro de campos de texto só o Ctrl+S vale.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -543,6 +577,12 @@ export function Editor({
         return;
       }
       if (locked) return;
+      // Spec 023: Shift+Alt+T, como no N8N (pelo código da tecla: no Mac, Alt muda o caractere).
+      if (e.shiftKey && e.altKey && e.code === 'KeyT') {
+        e.preventDefault();
+        organize();
+        return;
+      }
       if (mod && key === 'z') {
         e.preventDefault();
         if (e.shiftKey) store.redo();
@@ -571,7 +611,7 @@ export function Editor({
     return () => {
       window.removeEventListener('keydown', onKeyDown);
     };
-  }, [save, locked, ensureVisible, typesByName, credentials]);
+  }, [save, locked, ensureVisible, typesByName, credentials, organize]);
 
   // Alterações não salvas: confirma antes de sair (FR-008).
   useEffect(() => {
@@ -701,6 +741,17 @@ export function Editor({
             title="Versões, comparação e restauração"
           >
             <History /> Histórico
+          </Button>
+        )}
+        {!locked && (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={organize}
+            disabled={nodes.length < 2}
+            title="Organizar os nós da esquerda para a direita; com 2 ou mais selecionados, só eles (Shift+Alt+T)"
+          >
+            <WandSparkles /> Organizar
           </Button>
         )}
         <Button

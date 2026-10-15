@@ -1,3 +1,4 @@
+import { POSTGRES_NODE_TYPE } from '@olly/shared-types';
 import { randomUUID } from 'node:crypto';
 import {
   collection,
@@ -613,12 +614,37 @@ const convertHttpRequest: Converter = (node, p, v) => {
   return ok('http.request', params, warnings, credentials);
 };
 
+/** Opções do Postgres do N8N sem equivalente no Olly Flow (spec 022, FR-009). */
+const PG_UNSUPPORTED_OPTIONS: Record<string, string> = {
+  outputColumns: '"Colunas de saída" não convertidas: a operação devolve todas as colunas (*)',
+  largeNumbersOutput:
+    '"Números grandes" não convertido: o valor segue o tipo do driver do PostgreSQL',
+  replaceEmptyStrings: '"Substituir strings vazias por NULL" não convertido',
+};
+
+const pgConditions = (p: Params) =>
+  collection(p.where, 'values').map((c) => ({
+    column: rl(c.column) || str(c.column),
+    condition: str(c.condition, 'equal'),
+    ...(c.value !== undefined && {
+      value: typeof c.value === 'string' ? c.value : JSON.stringify(c.value),
+    }),
+  }));
+
+/**
+ * Postgres do N8N → nó PostgreSQL único (spec 022, FR-009): Execute Query (também na v1),
+ * Select, Insert, Update, Upsert e Delete (2.x), com as opções sem equivalente como pendências.
+ */
 const convertPostgres: Converter = (node, p, v) => {
   const warnings: string[] = [];
-  const operation = str(p.operation, v >= 2 ? 'insert' : 'insert');
+  const operation = str(p.operation, 'insert');
   const credentials = { postgres: 'postgres' };
+  const options = isObject(p.options) ? p.options : {};
+  for (const [key, message] of Object.entries(PG_UNSUPPORTED_OPTIONS)) {
+    if (options[key] !== undefined && options[key] !== false && options[key] !== '')
+      warnings.push(message);
+  }
   if (operation === 'executeQuery') {
-    const options = isObject(p.options) ? p.options : {};
     const replacement = str(options.queryReplacement ?? p.additionalFields);
     const values = replacement
       ? replacement.startsWith('=') && !replacement.includes(',')
@@ -631,8 +657,9 @@ const convertPostgres: Converter = (node, p, v) => {
       );
     }
     return ok(
-      'postgres.query',
+      POSTGRES_NODE_TYPE,
       {
+        operation: 'executeQuery',
         query: str(p.query),
         queryParameters: values.map((value) => ({ value })),
         mode: values.length > 0 ? 'perItem' : 'once',
@@ -642,33 +669,78 @@ const convertPostgres: Converter = (node, p, v) => {
     );
   }
   if (v < 2) return unsupportedVersion(node.type, v);
+  const table = { schema: rl(p.schema) || 'public', table: rl(p.table) };
   if (operation === 'insert' || operation === 'update' || operation === 'upsert') {
     const columns = isObject(p.columns) ? p.columns : {};
     const defineBelow = str(columns.mappingMode, 'defineBelow') === 'defineBelow';
     const value = isObject(columns.value) ? columns.value : {};
-    const options = isObject(p.options) ? p.options : {};
-    const params: Params = {
-      operation,
-      schema: rl(p.schema) || 'public',
-      table: rl(p.table),
-      columns: defineBelow
-        ? {
-            mappingMode: 'defineBelow',
-            values: Object.entries(value).map(([column, v2]) => ({
-              column,
-              value: typeof v2 === 'string' ? v2 : JSON.stringify(v2 ?? ''),
-            })),
-          }
-        : { mappingMode: 'autoMap', values: [] },
-      matchingColumns: list(columns.matchingColumns).map((c) => ({ column: str(c) })),
-      options: {
-        ...(str(options.queryBatching) === 'transaction' && { transaction: 'allItems' }),
-        ...(options.skipOnConflict === true && { skipOnConflict: true }),
+    if (str(options.queryBatching) === 'independently')
+      warnings.push('"Query Batching: independently" virou o padrão (um comando por lote)');
+    return ok(
+      POSTGRES_NODE_TYPE,
+      {
+        operation,
+        ...table,
+        columns: defineBelow
+          ? {
+              mappingMode: 'defineBelow',
+              values: Object.entries(value).map(([column, v2]) => ({
+                column,
+                value: typeof v2 === 'string' ? v2 : JSON.stringify(v2 ?? ''),
+              })),
+            }
+          : { mappingMode: 'autoMap', values: [] },
+        matchingColumns: list(columns.matchingColumns).map((c) => ({ column: str(c) })),
+        writeOptions: {
+          ...(str(options.queryBatching) === 'transaction' && { transaction: 'allItems' }),
+          ...(options.skipOnConflict === true && { skipOnConflict: true }),
+        },
       },
-    };
-    if (options.outputColumns)
-      warnings.push('"Colunas de saída" não convertidas: a gravação devolve todas (*)');
-    return ok('postgres.write', params, warnings, credentials);
+      warnings,
+      credentials,
+    );
+  }
+  if (operation === 'select') {
+    const returnAll = p.returnAll === true;
+    return ok(
+      POSTGRES_NODE_TYPE,
+      {
+        operation: 'select',
+        ...table,
+        returnAll,
+        ...(!returnAll && { limit: num(p.limit) ?? 50 }),
+        where: pgConditions(p),
+        combineConditions: str(p.combineConditions, 'AND') === 'OR' ? 'OR' : 'AND',
+        sort: collection(p.sort, 'values').map((s) => ({
+          column: rl(s.column) || str(s.column),
+          direction: str(s.direction, 'ASC') === 'DESC' ? 'DESC' : 'ASC',
+        })),
+      },
+      warnings,
+      credentials,
+    );
+  }
+  if (operation === 'deleteTable') {
+    // No N8N, o padrão é "truncate": o comando é gravado explicitamente (aqui, o padrão é "delete").
+    const command = str(p.deleteCommand, 'truncate');
+    return ok(
+      POSTGRES_NODE_TYPE,
+      {
+        operation: 'deleteTable',
+        ...table,
+        deleteCommand: ['delete', 'truncate', 'drop'].includes(command) ? command : 'truncate',
+        ...(command === 'delete' && {
+          where: pgConditions(p),
+          combineConditions: str(p.combineConditions, 'AND') === 'OR' ? 'OR' : 'AND',
+        }),
+        deleteOptions: {
+          ...(options.cascade === true && { cascade: true }),
+          ...(options.restartSequences === true && { restartSequences: true }),
+        },
+      },
+      warnings,
+      credentials,
+    );
   }
   return { unsupported: `PostgreSQL na operação "${operation}" não tem conversão` };
 };

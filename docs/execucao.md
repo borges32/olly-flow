@@ -82,8 +82,7 @@ Laços aninhados são aceitos. Qualquer outro ciclo é recusado ao salvar (`INVA
 
 Nos nós com `supportsParallelItems`, a aba **Configurações** oferece "Itens em paralelo" (`settings.parallelItems: { enabled, concurrency }`). Os nós elegíveis são:
 - `http.request`, que nesse caso substitui os lotes `batchSize`;
-- `postgres.query`, no modo por item;
-- `postgres.write`, sem transação única.
+- `postgres.database` (spec 022), na consulta por item, na seleção, na exclusão por linhas e na gravação sem transação única.
 
 Garantias:
 - no máximo `concurrency` itens ao mesmo tempo;

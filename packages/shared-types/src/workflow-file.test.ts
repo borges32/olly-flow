@@ -25,6 +25,14 @@ const TYPES: Record<string, NodeTypeInfo> = {
     },
   },
   'logic.if': { version: 1, inputs: [main()], outputs: [main('true'), main('false')] },
+  // Spec 022: nó PostgreSQL único (os tipos antigos não estão no catálogo).
+  'postgres.database': {
+    version: 1,
+    inputs: [main()],
+    outputs: [main()],
+    credentialTypes: ['postgres'],
+    paramsSchema: { properties: { operation: { default: 'insert' } } },
+  },
   'logic.merge': {
     version: 1,
     inputs: [main('input1'), main('input2')],
@@ -463,5 +471,54 @@ describe('spec 015 — FR-014: resolução das credenciais no destino', () => {
     expect(resolveCredentialRef(ref({ name: 'Dupla' }), available)).toBeUndefined();
     expect(resolveCredentialRef(ref({ name: 'Outra' }), available)).toBeUndefined();
     expect(resolveCredentialRef(ref({ id: 'a' }), available, ['httpBasic'])).toBeUndefined();
+  });
+});
+
+describe('spec 022 — FR-008: arquivo do Olly Flow com os nós PostgreSQL antigos', () => {
+  it('FR-008: postgres.query e postgres.write chegam como o nó único, sem marcador, com as conexões', () => {
+    const result = fromWorkflowFile(
+      {
+        nodes: [
+          {
+            name: 'Início',
+            type: 'trigger.manual',
+            typeVersion: 1,
+            position: [0, 0],
+            parameters: {},
+          },
+          {
+            name: 'Consulta',
+            type: 'postgres.query',
+            typeVersion: 1,
+            position: [200, 0],
+            parameters: { query: 'SELECT 1', options: { maxRows: 3 } },
+          },
+          {
+            name: 'Gravar',
+            type: 'postgres.write',
+            typeVersion: 1,
+            position: [400, 0],
+            parameters: { operation: 'upsert', table: 't', options: { batchSize: 10 } },
+          },
+        ],
+        connections: {
+          Início: { main: [[{ node: 'Consulta', type: 'main', index: 0 }]] },
+          Consulta: { main: [[{ node: 'Gravar', type: 'main', index: 0 }]] },
+        },
+      },
+      { catalog, newId },
+    );
+    expect(result.issues.pending).toEqual([]);
+    expect(result.issues.errors).toEqual([]);
+    const byName = (n: string) => result.definition.nodes.find((x) => x.name === n);
+    expect(byName('Consulta')).toMatchObject({
+      type: 'postgres.database',
+      params: { operation: 'executeQuery', query: 'SELECT 1', queryOptions: { maxRows: 3 } },
+    });
+    expect(byName('Gravar')).toMatchObject({
+      type: 'postgres.database',
+      params: { operation: 'upsert', table: 't', writeOptions: { batchSize: 10 } },
+    });
+    expect(result.definition.edges).toHaveLength(2);
   });
 });

@@ -184,3 +184,69 @@ test.describe('spec 002 — editor visual', () => {
     await expect(page.getByTestId('dirty-indicator')).toBeHidden();
   });
 });
+
+test.describe('spec 023 — organizar os nós', () => {
+  test('FR-001/FR-005/SC-002: organizar pelo botão e pelo atalho, sem sobreposição, e desfazer num passo', async ({
+    page,
+  }) => {
+    // Todos os nós empilhados no mesmo ponto, como num workflow bagunçado.
+    const at = (id: string, type: string, name: string) => ({
+      id,
+      type,
+      name,
+      params: {},
+      position: [100, 100] as [number, number],
+    });
+    const wf = await createWorkflow(admin, projectId, 'Organizar', {
+      nodes: [
+        at('m', 'trigger.manual', 'Início'),
+        at('s', 'data.set', 'Montar'),
+        at('i', 'logic.if', 'Decidir'),
+        at('a', 'data.set', 'Sim'),
+        at('b', 'data.set', 'Não'),
+      ],
+      edges: [
+        { id: 'e1', from: 'm', fromPort: 'main', to: 's', toPort: 'main' },
+        { id: 'e2', from: 's', fromPort: 'main', to: 'i', toPort: 'main' },
+        { id: 'e3', from: 'i', fromPort: 'true', to: 'a', toPort: 'main' },
+        { id: 'e4', from: 'i', fromPort: 'false', to: 'b', toPort: 'main' },
+      ],
+      settings: {},
+    });
+    await loginViaUi(page, 'editor', `/workflows/${wf.id}`);
+    const x = async (name: string) => Number(await node(page, name).getAttribute('data-x'));
+    const y = async (name: string) => Number(await node(page, name).getAttribute('data-y'));
+    const organized = async () => {
+      expect(await x('Início')).toBeLessThan(await x('Montar'));
+      expect(await x('Montar')).toBeLessThan(await x('Decidir'));
+      expect(await x('Decidir')).toBeLessThan(await x('Sim'));
+      // Os ramos do If na mesma coluna, um embaixo do outro.
+      expect(await x('Sim')).toBe(await x('Não'));
+      expect(await y('Sim')).not.toBe(await y('Não'));
+    };
+
+    await page.getByRole('button', { name: 'Organizar' }).click();
+    await expect.poll(() => x('Decidir')).toBeGreaterThan(100);
+    await organized();
+    await expect(page.getByTestId('dirty-indicator')).toBeVisible();
+
+    // Ctrl+Z desfaz tudo num só passo.
+    await page.getByTestId('canvas').click({ position: { x: 5, y: 5 } });
+    await page.keyboard.press('Control+z');
+    for (const name of ['Início', 'Montar', 'Decidir', 'Sim', 'Não']) {
+      await expect(node(page, name)).toHaveAttribute('data-x', '100');
+    }
+
+    // Shift+Alt+T faz o mesmo que o botão; o resultado é salvo.
+    await page.keyboard.press('Shift+Alt+KeyT');
+    await expect.poll(() => x('Decidir')).toBeGreaterThan(100);
+    await organized();
+    await page.keyboard.press('Control+s');
+    await expect(page.getByText('Workflow salvo')).toBeVisible();
+    const saved = await admin.call('GET', `/workflows/${wf.id}`);
+    const positions = (
+      saved.body as { definition: { nodes: { position: [number, number] }[] } }
+    ).definition.nodes.map((n) => n.position.join(','));
+    expect(new Set(positions).size).toBe(5);
+  });
+});

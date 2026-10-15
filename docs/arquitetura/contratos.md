@@ -74,7 +74,7 @@ export interface NodeDefinition {
 }
 ```
 
-`NodeContext` oferece, entre outros: `getParam(name, itemIndex)` (com expressões já resolvidas para o item; erros de expressão são lançados como `ExpressionError` na leitura), `setVariable(name, value)` (variável da execução, lida em `$vars`; spec 003), `getCredential()` (spec 004: devolve `{ id, type, data, updatedAt }`, a credencial do nó decifrada e verificada contra o projeto do workflow), `signal` (`AbortSignal`, abortado pelo timeout do nó ou pelo cancelamento), `logger`, `helpers` (paired items, binários no object storage e `registerSecret(valor)`, que inclui um segredo derivado, como um token OAuth2, no mascaramento), `runCode({ code, mode })` (spec 005: código de usuário no task runner com o contexto do nó; o `console` vai para o registro do nó), `respondToWebhook(resposta)` (spec 005: resposta do webhook; só a primeira vale, as seguintes devolvem `false`) e `mapItems(itens, fn)` (spec 006: processa os itens com a concorrência de `settings.parallelItems` quando o tipo tem `supportsParallelItems`; senão, um por vez; ordem preservada). Tipos com `supportsParallelItems` na spec 006: `http.request`, `postgres.query` (modo por item) e `postgres.write` (sem transação única). Spec 007:
+`NodeContext` oferece, entre outros: `getParam(name, itemIndex)` (com expressões já resolvidas para o item; erros de expressão são lançados como `ExpressionError` na leitura), `setVariable(name, value)` (variável da execução, lida em `$vars`; spec 003), `getCredential()` (spec 004: devolve `{ id, type, data, updatedAt }`, a credencial do nó decifrada e verificada contra o projeto do workflow), `signal` (`AbortSignal`, abortado pelo timeout do nó ou pelo cancelamento), `logger`, `helpers` (paired items, binários no object storage e `registerSecret(valor)`, que inclui um segredo derivado, como um token OAuth2, no mascaramento), `runCode({ code, mode })` (spec 005: código de usuário no task runner com o contexto do nó; o `console` vai para o registro do nó), `respondToWebhook(resposta)` (spec 005: resposta do webhook; só a primeira vale, as seguintes devolvem `false`) e `mapItems(itens, fn)` (spec 006: processa os itens com a concorrência de `settings.parallelItems` quando o tipo tem `supportsParallelItems`; senão, um por vez; ordem preservada). Tipos com `supportsParallelItems` na spec 006: `http.request` e o PostgreSQL (`postgres.database`, spec 022: consulta por item, seleção, exclusão por linhas e gravação sem transação única). Spec 007:
 - `NodeContext.loop` (`LoopState { index, maxIterations, accumulated, data }`) existe só nos nós de laço;
 - `NodeContext.maxLoopIterations` é o teto global;
 - `NodeDefinition.dynamicPorts` (`mergeInputs` | `switchOutputs` | `placeholder`, este da spec 015) descreve portas calculadas pelos parâmetros, e `resolveNodePorts(tipo, nó)` (`@olly/shared-types`) devolve as portas efetivas, inclusive a saída `error` quando `settings.onError = 'errorOutput'`;
@@ -106,8 +106,8 @@ Spec 011:
 |---|---|---|---|
 | `trigger.manual` | 002 | `http.request` | 004 |
 | `trigger.webhook` | 005 | `http.respondToWebhook` | 005 |
-| `trigger.schedule` | 020 (antes 008) | `postgres.query` | 004 |
-| `trigger.error` | 007 | `postgres.write` | 004 |
+| `trigger.schedule` | 020 (antes 008) | `postgres.database` (substitui `postgres.query` e `postgres.write`) | 022 (antes 004) |
+| `trigger.error` | 007 | | |
 | `trigger.executeWorkflow` | 008 | `code.javascript` | 005 |
 | `data.set` | 002 | `code.python` | 008 |
 | `data.setVariable` | 003 | `flow.executeWorkflow` | 008 |
@@ -343,4 +343,13 @@ Página: [trigger.chat.md](../nos/trigger.chat.md).
   - **avisos:** `CHAT_BUFFER_MEMORY` (engine) e `CHAT_NO_AUTH` (sem a autenticação obrigatória).
 - **Configuração:** `OLLY_CHAT_MAX_MESSAGE_CHARS` (20 000). O tempo limite, o limite de taxa e o tamanho dos arquivos são os do webhook.
 - Sem tabelas nem permissões novas.
+
+## PostgreSQL único (spec 022)
+
+Página: [postgres.database.md](../nos/postgres.database.md).
+
+- **Tipo de nó `postgres.database`:** operações `executeQuery`, `select`, `insert`, `update`, `upsert`, `deleteTable`. As opções ficam por operação (`queryOptions`, `writeOptions`, `deleteOptions`); `where[]` e `combineConditions` servem a seleção e a exclusão; `sort[]`, `returnAll` e `limit`, a seleção; `deleteCommand` (`delete`, `truncate`, `drop`), a exclusão. Saída de `truncate`/`drop`: `{ success: true, command }`.
+- **Migração:** `migrateLegacyPostgres` e `migrateLegacyPostgresNode` (`@olly/shared-types`, em `migrateLegacyDefinition` e em `fromWorkflowFile` antes de conferir o catálogo); `POSTGRES_NODE_TYPE`.
+- **`ColumnCache.invalidate(poolKey, schema, table)`:** chamado depois do `DROP TABLE`.
+- Sem rotas, tabelas, permissões ou variáveis novas.
 

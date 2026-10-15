@@ -135,6 +135,8 @@ export interface EditorState {
   setName(name: string): void;
   addNode(type: NodeDescription, position: [number, number]): string;
   moveNodes(positions: Record<string, [number, number]>): void;
+  /** Spec 023: posições do "Organizar", num só passo de desfazer. */
+  applyLayout(positions: Record<string, [number, number]>): void;
   connect(edge: Omit<Edge, 'id'>): void;
   updateNode(
     id: string,
@@ -278,6 +280,16 @@ export const useEditorStore = create<EditorState>()((set, get) => {
       });
       commit({ nodes: [...get().nodes, node], selection: { nodeIds: [id], edgeIds: [] } });
       return id;
+    },
+
+    applyLayout: (positions) => {
+      if (Object.keys(positions).length === 0) return;
+      commit({
+        nodes: get().nodes.map((n) => {
+          const position = positions[n.id];
+          return position ? { ...n, position } : n;
+        }),
+      });
     },
 
     moveNodes: (positions) => {

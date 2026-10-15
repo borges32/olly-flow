@@ -36,7 +36,7 @@ A importação é feita pela API (`POST /api/v1/projects/:id/workflows/import`, 
 | `noOp` | `data.set` (repassa os itens) | |
 | `code` (JavaScript) | `code.javascript` | Python ainda não existe: vira marcador |
 | `httpRequest` (4.x) | `http.request` | Autenticação genérica (básica, cabeçalho, query, bearer, OAuth2); credencial pré-definida gera aviso |
-| `postgres` (2.x: consulta, inserir, atualizar, upsert) | `postgres.query` / `postgres.write` | |
+| `postgres` (2.x: Execute Query, Select, Insert, Update, Upsert, Delete; v1: só Execute Query) | `postgres.database` (spec 022) | Delete com `truncate`, `drop` ou `delete` e condições; sem `deleteCommand`, vale o padrão do N8N (`truncate`). Pendências: colunas de saída, números grandes, strings vazias, `queryBatching: independently`. Arquivos do Olly Flow com `postgres.query`/`postgres.write` são convertidos para o nó único |
 | `respondToWebhook` | `http.respondToWebhook` | "JSON" vira texto com `Content-Type: application/json`; "redirect" vira 302 com `Location` |
 | `executeWorkflow` | `flow.executeWorkflow` | O workflow chamado precisa ser escolhido de novo |
 | `wait` (intervalo e data) | `flow.wait` | Retomada por webhook ou formulário: marcador |

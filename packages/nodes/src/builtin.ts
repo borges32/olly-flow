@@ -28,7 +28,7 @@ import { whileNode } from './logic/while/definition.js';
 import { ColumnCache } from './postgres/catalog.js';
 import { PoolManager } from './postgres/pool.js';
 import { createPostgresQueryNode } from './postgres/query/definition.js';
-import { createPostgresWriteNode } from './postgres/write/definition.js';
+import { createPostgresDatabaseNode } from './postgres/database/definition.js';
 import { NodeRegistry } from './registry.js';
 import { createHttpGuard, type HttpGuard } from './shared/http-guard.js';
 import { respondToWebhookNode } from './http/respond-to-webhook/definition.js';
@@ -69,8 +69,9 @@ export function createBuiltinNodes(options: BuiltinNodeOptions = {}): NodeDefini
     setVariableNode,
     ifNode,
     httpRequest,
-    postgresQuery,
-    createPostgresWriteNode({ pools, columns: options.columns ?? new ColumnCache() }),
+    // Spec 022: nó PostgreSQL único (substitui postgres.query e postgres.write, migrados na
+    // leitura). A consulta da spec 004 segue como base da ferramenta do Agent.
+    createPostgresDatabaseNode({ pools, columns: options.columns ?? new ColumnCache() }),
     webhookTrigger,
     respondToWebhookNode,
     codeJavascriptNode,
