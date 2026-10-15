@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import {
   collection,
   isObject,
@@ -29,6 +30,8 @@ export interface N8nNode {
   alwaysOutputData?: boolean;
   executeOnce?: boolean;
   notes?: string;
+  /** Identificador público dos gatilhos com URL (webhook, chat), no nível do nó. */
+  webhookId?: string;
 }
 
 export interface Conversion {
@@ -1168,6 +1171,82 @@ const convertMcpClientTool: Converter = (_node, p) => {
 // ---------------------------------------------------------------------------------------------
 
 /** Motivo do marcador para o Agentix usado como ferramenta de um AI Agent (spec 016, FR-012). */
+/** Modos de resposta do Chat Trigger do N8N → Olly Flow (spec 021, FR-012). */
+const CHAT_RESPONSE_MODES: Record<string, 'lastNode' | 'responseNode'> = {
+  lastNode: 'lastNode',
+  responseNode: 'responseNode',
+  responseNodes: 'responseNode',
+  streaming: 'lastNode',
+};
+
+/**
+ * Chat Trigger 1 a 1.3 (spec 021, FR-012): mesmos parâmetros; o `webhookId` do nó mantém a URL
+ * (`/webhook/<webhookId>/chat`). *Streaming*, "Respond to Chat", sessão anterior manual e CSS
+ * personalizado não existem aqui e viram pendências.
+ */
+const convertChatTrigger: Converter = (node, p) => {
+  const warnings: string[] = [];
+  const o = isObject(p.options) ? p.options : {};
+  const auth = str(p.authentication, 'none');
+  const authentication =
+    auth === 'n8nUserAuth' ? 'ollyUserAuth' : auth === 'basicAuth' ? 'basicAuth' : 'none';
+  if (!['none', 'basicAuth', 'n8nUserAuth'].includes(auth))
+    warnings.push(`Autenticação "${auth}" do chat não suportada: configure de novo`);
+  const responseRaw = str(o.responseMode, 'lastNode');
+  const responseMode = CHAT_RESPONSE_MODES[responseRaw] ?? 'lastNode';
+  if (responseRaw === 'streaming')
+    warnings.push(
+      'Resposta em streaming não existe no Olly Flow: a resposta chega de uma vez, ao fim do último nó',
+    );
+  else if (responseRaw === 'responseNodes')
+    warnings.push(
+      'O modo "Using Response Nodes" usa o nó "Respond to Chat", que não existe no Olly Flow: responda com o nó "Responder ao webhook"',
+    );
+  else if (!(responseRaw in CHAT_RESPONSE_MODES))
+    warnings.push(`Modo de resposta "${responseRaw}" convertido para "lastNode"`);
+  const load = str(o.loadPreviousSession, 'notSupported');
+  if (load === 'manually')
+    warnings.push(
+      '"Carregar sessão anterior" manual não existe no Olly Flow: ficou "Não suportado" (use "Da memória")',
+    );
+  if (str(o.customCss))
+    warnings.push(
+      'O CSS personalizado da página não foi importado: a página segue o tema do Olly Flow',
+    );
+  let webhookId = str(node.webhookId);
+  if (!webhookId) {
+    webhookId = randomUUID();
+    warnings.push('O nó não tinha webhookId: a URL do chat é nova');
+  }
+  const texts = [
+    'allowedFilesMimeTypes',
+    'allowedOrigins',
+    'getStarted',
+    'inputPlaceholder',
+    'subtitle',
+    'title',
+  ];
+  return ok(
+    'trigger.chat',
+    {
+      webhookId,
+      public: p.public === true,
+      mode: str(p.mode) === 'webhook' ? 'webhook' : 'hostedChat',
+      authentication,
+      ...(typeof p.initialMessages === 'string' && { initialMessages: p.initialMessages }),
+      options: {
+        ...Object.fromEntries(texts.filter((k) => typeof o[k] === 'string').map((k) => [k, o[k]])),
+        ...(typeof o.allowFileUploads === 'boolean' && { allowFileUploads: o.allowFileUploads }),
+        ...(typeof o.showWelcomeScreen === 'boolean' && { showWelcomeScreen: o.showWelcomeScreen }),
+        loadPreviousSession: load === 'memory' ? 'memory' : 'notSupported',
+        responseMode,
+      },
+    },
+    warnings,
+    auth === 'basicAuth' ? { httpBasicAuth: 'webhookBasicAuth' } : undefined,
+  );
+};
+
 export const AGENTIX_TOOL_REASON =
   'Agentix como ferramenta do Agent: uso fora do escopo (spec 016)';
 
@@ -1265,6 +1344,7 @@ export const CONVERTERS: Record<string, Converter> = {
   'n8n-nodes-base.manualTrigger': simple('trigger.manual'),
   'n8n-nodes-base.errorTrigger': simple('trigger.error'),
   'n8n-nodes-base.webhook': convertWebhook,
+  '@n8n/n8n-nodes-langchain.chatTrigger': convertChatTrigger,
   'n8n-nodes-base.executeWorkflowTrigger': convertExecuteWorkflowTrigger,
   'n8n-nodes-base.set': convertSet,
   'n8n-nodes-base.if': convertIf,

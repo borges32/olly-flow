@@ -81,6 +81,8 @@ const envSchema = z.object({
   OLLY_WEBHOOK_MAX_BODY: z.coerce.number().positive().max(1024).default(16),
   OLLY_WEBHOOK_RESPONSE_TIMEOUT: z.coerce.number().positive().max(3600).default(120),
   OLLY_WEBHOOK_RATE_LIMIT_PER_MIN: z.coerce.number().int().min(1).default(120),
+  // Spec 021, FR-009: tamanho máximo da mensagem do chat (caracteres).
+  OLLY_CHAT_MAX_MESSAGE_CHARS: z.coerce.number().int().min(100).max(1_000_000).default(20_000),
   // Spec 015, NFR-002: limites da importação de workflows (bytes, nós, profundidade do JSON).
   OLLY_IMPORT_MAX_BYTES: z.coerce
     .number()
@@ -235,6 +237,8 @@ export interface AppConfig {
     rateLimitPerMin: number;
     requireAuth: boolean;
   };
+  /** Spec 021: chat (o tempo limite, o limite de taxa e o de arquivos são os do webhook). */
+  chat: { maxMessageChars: number };
   code: { timeoutMs: number; memoryMb: number };
   /** Spec 015, NFR-002: limites da importação de workflows. */
   workflowImport: { maxBytes: number; maxNodes: number; maxDepth: number };
@@ -400,6 +404,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
       rateLimitPerMin: e.OLLY_WEBHOOK_RATE_LIMIT_PER_MIN,
       requireAuth: e.OLLY_REQUIRE_WEBHOOK_AUTH,
     },
+    chat: { maxMessageChars: e.OLLY_CHAT_MAX_MESSAGE_CHARS },
     code: { timeoutMs: e.OLLY_CODE_TIMEOUT_MS, memoryMb: e.OLLY_CODE_MEMORY_MB },
     workflowImport: {
       maxBytes: e.OLLY_IMPORT_MAX_BYTES,

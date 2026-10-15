@@ -86,3 +86,43 @@ describe('spec 015 — NFR-001/SC-001/FR-003: ida e volta com todos os tipos de 
     expect(strip(back.definition)).toEqual(strip(definition));
   });
 });
+
+describe('spec 021 — FR-012: ida e volta do Chat Trigger', () => {
+  it('mantém o webhookId, as opções e a memória ligada ao gatilho', () => {
+    const chat: WorkflowNode = {
+      id: randomUUID(),
+      name: 'Chat',
+      type: 'trigger.chat',
+      params: {
+        webhookId: 'c3d4e5f6-0000-4000-8000-000000000003',
+        public: true,
+        mode: 'hostedChat',
+        authentication: 'ollyUserAuth',
+        initialMessages: 'Olá!',
+        options: { title: 'Suporte', loadPreviousSession: 'memory', responseMode: 'lastNode' },
+      },
+      position: [0, 0],
+    };
+    const memory: WorkflowNode = {
+      id: randomUUID(),
+      name: 'Memória',
+      type: 'memory.postgres',
+      params: { sessionKey: '={{ $json.sessionId }}', contextWindowLength: 10 },
+      position: [0, 200],
+    };
+    const definition: WorkflowDefinition = {
+      nodes: [chat, memory],
+      edges: [
+        { id: 'e', from: memory.id, fromPort: 'ai_memory', to: chat.id, toPort: 'ai_memory' },
+      ],
+      settings: {},
+    };
+    const file = toWorkflowFile(definition, { catalog, name: 'Chat' });
+    const back = fromWorkflowFile(JSON.parse(JSON.stringify(file)), { catalog, newId: randomUUID });
+    expect(back.issues.errors).toEqual([]);
+    expect(back.definition.nodes).toEqual(definition.nodes);
+    expect(back.definition.edges.map(({ id: _id, ...e }) => e)).toEqual([
+      { from: memory.id, fromPort: 'ai_memory', to: chat.id, toPort: 'ai_memory' },
+    ]);
+  });
+});

@@ -33,6 +33,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
+import { isFieldVisible, type ParamSchema } from '@/editor/schema-form-logic';
 
 const dateFormat = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
 
@@ -40,7 +41,7 @@ const dateFormat = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeSt
 const scalar = (v: unknown) =>
   typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean' ? String(v) : '';
 
-type FieldSchema = JSONSchema7 & {
+type FieldSchema = ParamSchema & {
   'x-secret'?: boolean;
   'x-multiline'?: boolean;
   'x-hidden'?: boolean;
@@ -93,11 +94,17 @@ function CredentialDialog({
   const [name, setName] = useState(editing?.name ?? '');
   const [values, setValues] = useState(() => initialValues(type, editing ?? undefined));
   const required = new Set(type?.properties.required ?? []);
+  // `x-display-options` (como no painel dos nós): ex.: a chave ou o token, conforme a
+  // autenticação do Agentix (spec 016). Campos ocultos não são mostrados nem enviados.
+  const siblingSchemas = (type?.properties.properties ?? {}) as Record<string, JSONSchema7>;
+  const visibleFields = fieldsOf(type).filter(([, schema]) =>
+    isFieldVisible(schema, values, siblingSchemas),
+  );
 
   const save = useMutation({
     mutationFn: () => {
       const data = Object.fromEntries(
-        fieldsOf(type).flatMap(([field, schema]) => {
+        visibleFields.flatMap(([field, schema]) => {
           const v = values[field];
           // Vazio: no secreto mantém o atual (edição); nos demais, usa o padrão do tipo.
           if (v === '' && (schema['x-secret'] || schema.default !== undefined)) return [];
@@ -173,7 +180,7 @@ function CredentialDialog({
               ))}
             </Select>
           </div>
-          {fieldsOf(type).map(([field, schema]) => {
+          {visibleFields.map(([field, schema]) => {
             const id = `cred-field-${field}`;
             const label = `${schema.title ?? field}${required.has(field) ? ' *' : ''}`;
             const value = values[field];

@@ -14,7 +14,7 @@ import {
   type AgentixMock,
   type AgentixMockOptions,
 } from '../testing/service-mocks.js';
-import { createAgentixNode, extractMessages } from './definition.js';
+import { agentixAuthHeader, createAgentixNode, extractMessages, jwtExpiry } from './definition.js';
 
 // Os serviços simulados ficam em 127.0.0.1: nos testes, o loopback entra na allowlist.
 const realGuard = createHttpGuard({ allowlist: ['127.0.0.1'] });
@@ -439,5 +439,72 @@ describe('spec 016 — FR-007 (13/10/2026): payload por lista de propriedades', 
     const props = node.paramsSchema.properties ?? {};
     expect(props.payloadMode).toMatchObject({ default: 'fields', enum: ['fields', 'json'] });
     expect(props.payloadFields).toMatchObject({ default: [{ name: 'pergunta', value: '' }] });
+  });
+});
+
+/** JWT de teste (assinatura fictícia: quem verifica é o Agentix). */
+const jwt = (claims: Record<string, unknown>) =>
+  ['{"alg":"HS256","typ":"JWT"}', JSON.stringify(claims)]
+    .map((part) => Buffer.from(part).toString('base64url'))
+    .concat('assinatura')
+    .join('.');
+
+describe('spec 016 — FR-008 (14/10/2026): Agentix com Bearer JWT', () => {
+  const valid = jwt({ sub: 'olly-flow', exp: Math.floor(Date.now() / 1000) + 3600 });
+
+  it('FR-008: com "Bearer JWT", todas as chamadas levam Authorization: Bearer e não a chave', async () => {
+    const { output, mock: m } = await run(
+      {},
+      {
+        mock: { bearerToken: valid, scenarios: { conversor: { states: ['RUNNING', 'DONE'] } } },
+        data: { authentication: 'bearerJwt', token: valid, apiKey: undefined },
+      },
+    );
+    expect(output.main?.[0]?.json).toMatchObject({ session_id: 'sessao-1' });
+    expect(m.requests.length).toBeGreaterThan(1);
+    for (const r of m.requests) {
+      expect(r.authorization).toBe(`Bearer ${valid}`);
+      expect(r.apiKey).toBeUndefined();
+    }
+  });
+
+  it('FR-008/FR-014: token recusado falha com o status e a orientação do token, sem expô-lo', async () => {
+    const wrong = jwt({ sub: 'outro', exp: Math.floor(Date.now() / 1000) + 3600 });
+    const error = await run(
+      {},
+      { mock: { bearerToken: valid }, data: { authentication: 'bearerJwt', token: wrong } },
+    ).catch((e: unknown) => e as Error);
+    expect((error as Error).message).toBe(
+      `Chamada ao Agentix falhou: POST ${mock?.baseUrl ?? ''}/sessions/invoke respondeu 401 (Token inválido). Confira o token JWT (validade e permissões) e a URL base da credencial (ex.: https://<host>/v2/api).`,
+    );
+    expect(JSON.stringify(error)).not.toContain(wrong);
+  });
+
+  it('FR-008: JWT expirado falha antes de chamar o Agentix, com a data de expiração', async () => {
+    const expired = jwt({ sub: 'olly-flow', exp: 1_700_000_000 });
+    const error = await run(
+      {},
+      { mock: { bearerToken: expired }, data: { authentication: 'bearerJwt', token: expired } },
+    ).catch((e: unknown) => e as Error);
+    expect(error).toBeInstanceOf(NodeExecutionError);
+    expect((error as Error).message).toBe(
+      'O token JWT da credencial Agentix expirou em 2023-11-14T22:13:20.000Z: atualize o token na credencial',
+    );
+    expect(mock?.requests).toEqual([]);
+  });
+
+  it('FR-008: token ausente pede o campo; credencial antiga (sem autenticação) segue com a chave', () => {
+    expect(() => agentixAuthHeader({ authentication: 'bearerJwt' })).toThrow(
+      'informe o campo "token" (JWT)',
+    );
+    expect(agentixAuthHeader({ apiKey: ' chave ' }).header).toEqual({ 'x-api-key': 'chave' });
+    // O prefixo "Bearer" colado junto com o token não duplica.
+    expect(
+      agentixAuthHeader({ authentication: 'bearerJwt', token: `Bearer ${valid}` }).header,
+    ).toEqual({ authorization: `Bearer ${valid}` });
+    // Token opaco (não JWT) é aceito sem conferência de validade.
+    expect(jwtExpiry('token-opaco')).toBeUndefined();
+    expect(jwtExpiry(jwt({ sub: 'x' }))).toBeUndefined();
+    expect(jwtExpiry(jwt({ exp: 2_000_000_000 }))?.toISOString()).toBe('2033-05-18T03:33:20.000Z');
   });
 });

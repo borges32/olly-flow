@@ -47,6 +47,15 @@ export function copySelection(
  * Prepara a colagem: novos ids, nomes únicos (caso de borda da spec 002) e posição deslocada.
  * As conexões internas acompanham os novos ids.
  */
+/**
+ * Spec 021, FR-003: o Chat Trigger tem um identificador público (`webhookId`, a URL do chat).
+ * Um nó novo, colado ou duplicado ganha outro, para não disputar a URL com o original.
+ */
+export function withFreshWebhookId(node: WorkflowNode): WorkflowNode {
+  if (node.type !== 'trigger.chat') return node;
+  return { ...node, params: { ...node.params, webhookId: crypto.randomUUID() } };
+}
+
 export function prepareClipboardPaste(
   clipboard: Clipboard,
   existing: WorkflowNode[],
@@ -60,12 +69,12 @@ export function prepareClipboardPaste(
     idMap.set(node.id, id);
     const name = uniqueName(node.name, taken);
     taken.add(name);
-    return {
+    return withFreshWebhookId({
       ...structuredClone(node),
       id,
       name,
       position: [node.position[0] + offset[0], node.position[1] + offset[1]] as [number, number],
-    };
+    });
   });
   const edges = clipboard.edges.flatMap((edge) => {
     const from = idMap.get(edge.from);

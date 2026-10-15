@@ -130,6 +130,8 @@ export interface McpServersTable {
   url: string;
   credential_id: string | null;
   project_id: string | null;
+  /** Não verifica o certificado TLS do servidor (ex.: CA interna). */
+  insecure_tls: Generated<boolean>;
   status: ColumnType<McpServerStatus, McpServerStatus | undefined, McpServerStatus>;
   /** JSONB `{ [tool]: { description, inputSchema, hash } }` (FR-003): insira com `JSON.stringify`. */
   tools_snapshot: ColumnType<unknown, string | null | undefined, string | null>;

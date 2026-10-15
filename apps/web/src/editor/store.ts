@@ -22,6 +22,7 @@ import {
   prepareClipboardPaste,
   removeElements,
   uniqueName,
+  withFreshWebhookId,
   type Clipboard,
 } from './graph';
 import { downstreamOf } from './partial-run';
@@ -74,6 +75,8 @@ export interface RunState {
   error: string | null;
   /** Assinaturas dos nós no início da execução corrente. */
   signatures: Record<string, string>;
+  /** Spec 021: execução iniciada pelo painel de chat (a resposta aparece no painel, sem aviso). */
+  fromChat?: boolean;
 }
 
 const IDLE_RUN: RunState = {
@@ -89,6 +92,7 @@ export interface RunStart {
   /** Execução de um nó: mantém os dados dos nós que não dependem dele (FR-020). */
   destinationNodeId?: string;
   signatures?: Record<string, string>;
+  fromChat?: boolean;
 }
 
 export interface Selection {
@@ -262,7 +266,7 @@ export const useEditorStore = create<EditorState>()((set, get) => {
 
     addNode: (type, position) => {
       const id = newId();
-      const node: WorkflowNode = {
+      const node: WorkflowNode = withFreshWebhookId({
         id,
         type: type.type,
         name: uniqueName(
@@ -271,7 +275,7 @@ export const useEditorStore = create<EditorState>()((set, get) => {
         ),
         params: defaultParams(type.paramsSchema),
         position,
-      };
+      });
       commit({ nodes: [...get().nodes, node], selection: { nodeIds: [id], edgeIds: [] } });
       return id;
     },
@@ -378,6 +382,7 @@ export const useEditorStore = create<EditorState>()((set, get) => {
           runs,
           error: null,
           signatures: start.signatures ?? {},
+          ...(start.fromChat && { fromChat: true }),
         },
       });
     },

@@ -1,4 +1,5 @@
 import {
+  CHAT_TRIGGER_TYPE,
   LOOP_NODE_TYPES,
   analyzeLoops,
   resolveNodePorts,
@@ -25,7 +26,10 @@ export type IssueCode =
   // Spec 007, FR-001 (e todo parâmetro numérico com faixa no schema).
   | 'PARAM_OUT_OF_RANGE'
   // Spec 015, FR-016: nó marcador (só na publicação; o rascunho aceita).
-  | 'UNSUPPORTED_NODE';
+  | 'UNSUPPORTED_NODE'
+  // Spec 021: um Chat Trigger por workflow (FR-010); memória temporária no chat (FR-015).
+  | 'CHAT_TRIGGER_DUPLICATE'
+  | 'CHAT_BUFFER_MEMORY';
 
 export interface Issue {
   code: IssueCode;
@@ -244,6 +248,8 @@ export function validateWorkflow(
     errors.push({ code: 'INVALID_CYCLE', message: cycle.reason, nodeIds: cycle.nodeIds });
   }
 
+  validateChat(def, errors, warnings);
+
   if (def.nodes.length > 1) {
     const connected = new Set(validEdges.flatMap((e) => [e.from, e.to]));
     for (const node of def.nodes) {
@@ -258,6 +264,30 @@ export function validateWorkflow(
   }
 
   return { errors, warnings };
+}
+
+/**
+ * Spec 021: no máximo um Chat Trigger habilitado (FR-010). A memória temporária só lembra a
+ * conversa dentro de uma execução, e no chat cada mensagem é uma execução: aviso (FR-015).
+ */
+function validateChat(def: WorkflowDefinition, errors: Issue[], warnings: Issue[]): void {
+  const chats = def.nodes.filter((n) => n.type === CHAT_TRIGGER_TYPE && !n.disabled);
+  if (chats.length > 1) {
+    errors.push({
+      code: 'CHAT_TRIGGER_DUPLICATE',
+      message: 'Um workflow aceita só um gatilho de chat habilitado',
+      nodeIds: chats.map((n) => n.id),
+    });
+  }
+  const buffers = def.nodes.filter((n) => n.type === 'memory.buffer' && !n.disabled);
+  if (chats.length > 0 && buffers.length > 0) {
+    warnings.push({
+      code: 'CHAT_BUFFER_MEMORY',
+      message:
+        'A memória temporária não guarda a conversa entre mensagens do chat (cada mensagem é uma execução): use a memória persistente',
+      nodeIds: buffers.map((n) => n.id),
+    });
+  }
 }
 
 /**

@@ -22,9 +22,16 @@ let agentix: AgentixMock;
 let credentialId: string;
 const logs: string[] = [];
 const responses: string[] = [];
+/** JWT sentinela (spec 016, FR-008, 14/10/2026): não pode aparecer em logs, respostas ou banco. */
+const AGENTIX_JWT = [
+  Buffer.from('{"alg":"HS256","typ":"JWT"}').toString('base64url'),
+  Buffer.from(JSON.stringify({ sub: 'olly-flow', exp: 4_102_444_800 })).toString('base64url'),
+  'assinatura-sentinela-jwt',
+].join('.');
 
 beforeAll(async () => {
   agentix = await startAgentixMock({
+    bearerToken: AGENTIX_JWT,
     scenarios: {
       falha: { states: ['RUNNING', 'FAILED'], errorMessage: 'o agente quebrou' },
       demorado: { states: ['RUNNING'] },
@@ -224,7 +231,32 @@ describe('spec 016 — HU-2: Agentix numa execução pela fila', () => {
     expect(detail.error?.message).toContain('último estado: RUNNING');
   });
 
-  it('SC-004/FR-014: a chave do Agentix não aparece em logs, respostas ou no banco', async () => {
+  it('FR-008 (14/10/2026): a credencial com Bearer JWT executa o nó, com o token em Authorization', async () => {
+    const created = await editor.call('POST', `/projects/${project.id}/credentials`, {
+      name: 'Agentix JWT',
+      type: 'agentixApi',
+      data: { baseUrl: agentix.baseUrl, authentication: 'bearerJwt', token: AGENTIX_JWT },
+    });
+    expect(created.statusCode).toBe(201);
+    const jwtCredential = created.json<CredentialSummary>();
+    expect(jwtCredential.publicFields).toMatchObject({ authentication: 'bearerJwt' });
+    const definition = workflow([{ entidade: 'conversor', pergunta: 'Com JWT?' }]);
+    definition.nodes = definition.nodes.map((n) =>
+      n.id === 'ax' ? { ...n, credentialId: jwtCredential.id } : n,
+    );
+    const before = agentix.requests.length;
+    const detail = await waitForStatus(
+      editor,
+      await startTestRun(editor, await createWorkflow(editor, project.id, definition)),
+    );
+    expect(detail.status).toBe('success');
+    const sent = agentix.requests.slice(before);
+    expect(sent.length).toBeGreaterThan(0);
+    expect(sent.every((r) => r.authorization === `Bearer ${AGENTIX_JWT}` && !r.apiKey)).toBe(true);
+  });
+
+  // Último: confere tudo o que os testes anteriores gravaram e registraram.
+  it('SC-004/FR-014: a chave e o token JWT do Agentix não aparecem em logs, respostas ou no banco', async () => {
     const tables = await Promise.all(
       ['node_executions', 'executions', 'audit_log', 'credentials'].map(async (t) => {
         const { rows } = await sql<Record<string, unknown>>`SELECT * FROM ${sql.table(t)}`.execute(
@@ -244,6 +276,7 @@ describe('spec 016 — HU-2: Agentix numa execução pela fila', () => {
       db: tables.join('\n'),
     })) {
       expect(text.includes(agentix.apiKey), `${where} contém a chave`).toBe(false);
+      expect(text.includes('assinatura-sentinela-jwt'), `${where} contém o token JWT`).toBe(false);
     }
   });
 });

@@ -11,6 +11,7 @@ Papéis por projeto. "Admin da plataforma" é o grupo de administração do IdP 
 | Editar workflow | `workflow:update` | ✅ | ✅ | ✅ | — | — | — |
 | Excluir workflow | `workflow:delete` | ✅ | ✅ | ✅ | — | — | — |
 | Executar (teste) | `workflow:execute` | ✅ | ✅ | ✅ | ✅ | — | — |
+| Conversar pelo painel de chat (teste) | `workflow:execute` | ✅ | ✅ | ✅ | ✅ | — | — |
 | Publicar e despublicar | `workflow:publish` | ✅ | ✅ | ✅ | — | — | — |
 | Ver execuções | `execution:read` | ✅ | ✅ | ✅ | ✅ | ✅ | — |
 | Ver dados das execuções | `execution:readData` | ✅ | ✅ | ✅ | — | — | — |

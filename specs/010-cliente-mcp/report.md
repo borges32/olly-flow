@@ -201,8 +201,21 @@ Ambiente: `pnpm app:up`. Ele sobe também o servidor MCP de teste em `http://mcp
 6. **Anti-SSRF (SC-005):** cadastre um servidor com URL `http://169.254.169.254/mcp` e use **Testar**: aparece "Destino bloqueado pelo filtro de rede".
 7. **OAuth (SC-006), com `pnpm dev`:**
    - suba o servidor de teste protegido: `MCP_OAUTH_ISSUER=http://localhost:8080/realms/olly MCP_OAUTH_AUDIENCE=olly-mcp-test PORT=3334 HOST=127.0.0.1 node infra/mcp-test-server/dist/main.js`;
-   - libere `127.0.0.1,localhost` em `OLLY_HTTP_ALLOWLIST`;
+   - (desde 14/10/2026 o MCP aceita loopback sem `OLLY_HTTP_ALLOWLIST`);
    - crie uma credencial **MCP: OAuth 2.1** com URL `http://127.0.0.1:3334/mcp` e Client ID `olly-mcp`, e use **Conectar**: a credencial fica "Conectada".
+
+## Alterações posteriores
+
+### 14/10/2026 — endereços internos sem allowlist e TLS não verificado
+
+Spec e plano atualizados antes do código (Histórico 14/10/2026). Motivo: o servidor `mcp-dynatrace` do OpenShift não conectava. O nome resolvia para `172.23.226.254` (rede privada, barrada sem allowlist), e o certificado é da CA corporativa, que o Node não reconhece (`SELF_SIGNED_CERT_IN_CHAIN`).
+
+- **Rede:** o `fetch` do MCP passa `allowPrivateNetworks` e a nova `allowLoopback` do `HttpGuard`. Endereços públicos, privados, CGNAT, ULA e loopback são aceitos sem `OLLY_HTTP_ALLOWLIST`. Continuam bloqueados: link-local (inclusive `169.254.169.254`), não especificado, multicast, reservados e IPv6 que embutem IPv4. O nó HTTP e o gateway de IA mantêm a regra da spec 004.
+- **TLS:** coluna `mcp_servers.insecure_tls` (migration `0016_mcp_insecure_tls`) e checkbox "Não verificar o certificado TLS" no cadastro, sinalizada na listagem. Vale para o teste, a aprovação, as execuções e a renovação de token feita pela conexão. O fluxo OAuth interativo (Conectar) continua verificando o certificado.
+- **Mensagens:** erros de conexão mostram a causa (ex.: `fetch failed (self-signed certificate in certificate chain)`), antes escondida atrás de `fetch failed`.
+- **Testes:** `http-guard.test.ts` (faixas aceitas e bloqueadas para o MCP), `fetch.test.ts` e `client.test.ts` (opções repassadas, `fetch` por servidor, causa no erro), `mcp-transports.int.test.ts` (contexto sem allowlist; servidor interno funciona; HTTPS autoassinado só conecta com `insecureTls`; metadados da nuvem bloqueados), `migrations.int.test.ts` (down de 0016).
+- **Risco aceito:** quem tem `mcp:manage` pode apontar o cliente para serviços internos, e o TLS não verificado fica exposto a interceptação. A alternativa segura para a CA corporativa é instalá-la no container (`NODE_EXTRA_CA_CERTS`).
+- **Pré-existente, sem relação:** 2 testes de `packages/nodes/src/ai/bridge/bridge.test.ts` (streaming, FR-001) falham por timeout também sem esta alteração.
 
 ## Próximos passos sugeridos
 

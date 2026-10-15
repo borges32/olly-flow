@@ -24,7 +24,9 @@ export class McpConfigurationError extends Error {
 
 /**
  * Conexões com os servidores MCP do catálogo (spec 010, plan §3–§4): reaproveitadas por
- * servidor e credencial (FR-006), sempre pelo `fetch` com anti-SSRF (FR-004, SC-005). A cada
+ * servidor e credencial (FR-006), sempre pelo `fetch` com anti-SSRF (FR-004, SC-005). Endereços
+ * internos (redes privadas e loopback) são aceitos sem `OLLY_HTTP_ALLOWLIST`; link-local
+ * (metadados da nuvem) segue bloqueado (spec, Histórico 14/10/2026). A cada
  * conexão nova (e a cada `tools/list_changed`), as tools anunciadas são comparadas com o
  * snapshot aprovado e a divergência é gravada para revisão (FR-003).
  */
@@ -32,6 +34,8 @@ export class McpConfigurationError extends Error {
 export class McpConnections implements OnApplicationShutdown {
   private readonly logger = new Logger('McpConnections');
   private readonly settings: McpClientSettings;
+  /** `fetch` dos servidores com "não verificar o certificado TLS". */
+  private readonly insecureFetch: McpClientSettings['fetch'];
   private readonly pool: McpConnectionPool;
 
   constructor(
@@ -43,8 +47,13 @@ export class McpConnections implements OnApplicationShutdown {
     // O `fetch` do undici e o global têm tipos diferentes, mas o mesmo formato.
     const guarded = ((url: string | URL, init: Parameters<GuardedFetch>[1]) =>
       guard.fetch(url, init)) as unknown as GuardedFetch;
+    const destination = { allowPrivateNetworks: true, allowLoopback: true };
+    this.insecureFetch = guardedFetchLike(guarded, config.mcp.maxResultBytes, {
+      ...destination,
+      insecureTls: true,
+    });
     this.settings = {
-      fetch: guardedFetchLike(guarded, config.mcp.maxResultBytes),
+      fetch: guardedFetchLike(guarded, config.mcp.maxResultBytes, destination),
       callTimeoutMs: config.mcp.callTimeoutMs,
       maxResultBytes: config.mcp.maxResultBytes,
       clientInfo: { name: 'olly-flow', version: '1.0.0' },
@@ -131,7 +140,12 @@ export class McpConnections implements OnApplicationShutdown {
     server: McpServerRow,
     credential: ResolvedCredential | undefined,
   ): McpConnectionConfig {
-    const base = { serverId: server.id, transport: server.transport, url: server.url };
+    const base = {
+      serverId: server.id,
+      transport: server.transport,
+      url: server.url,
+      ...(server.insecure_tls && { fetch: this.insecureFetch }),
+    };
     if (!credential) return base;
     switch (credential.type) {
       case 'mcpBearer':

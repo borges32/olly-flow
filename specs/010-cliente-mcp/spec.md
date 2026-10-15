@@ -41,7 +41,8 @@ Como **editor**, quero conectar servidores MCP que exigem token ou OAuth.
 
 ### Casos de borda
 
-- Servidor MCP aponta para IP interno não liberado: bloqueado pelo anti-SSRF.
+- Servidor MCP aponta para link-local (metadados da nuvem) ou endereço não roteável: bloqueado pelo anti-SSRF. Endereços internos (redes privadas e loopback) são aceitos.
+- Servidor MCP com certificado de CA interna: conecta só com a opção "Não verificar o certificado TLS" do cadastro.
 - A tool retorna `isError`: segue a configuração de erro do nó.
 - Resultado muito grande: truncado ou recusado.
 
@@ -50,7 +51,7 @@ Como **editor**, quero conectar servidores MCP que exigem token ou OAuth.
 - **FR-001**: O sistema DEVE manter um catálogo de servidores MCP (transporte, endereço ou imagem, credencial, escopo global ou por projeto, status, quem cadastrou e quem aprovou), gerenciado com a permissão `mcp:manage`.
 - **FR-002**: Tools DEVEM ser negadas por padrão e liberadas explicitamente por servidor e projeto, com a marcação de destrutiva.
 - **FR-003**: Ao aprovar um servidor, o sistema DEVE guardar um snapshot das tools (nome, descrição, schema). Mudanças em tools liberadas DEVEM bloquear as chamadas até nova revisão, exibindo o diff.
-- **FR-004**: O cliente DEVE suportar os transportes Streamable HTTP (preferencial) e SSE (legado), ambos sujeitos ao anti-SSRF. Nesta versão, só transportes HTTP são aceitos.
+- **FR-004**: O cliente DEVE suportar os transportes Streamable HTTP (preferencial) e SSE (legado), ambos sujeitos ao anti-SSRF. Nesta versão, só transportes HTTP são aceitos. Servidores MCP DEVEM aceitar endereços externos e internos (redes privadas, CGNAT, ULA e loopback) sem allowlist; o filtro continua barrando link-local (inclusive metadados da nuvem) e endereços não roteáveis. O cadastro DEVE oferecer a opção de não verificar o certificado TLS do servidor (padrão: verificar).
 - **FR-005**: ~~O transporte stdio DEVE ser permitido somente para servidores aprovados, executados em container isolado.~~ Removido nesta versão: o cadastro DEVE recusar o transporte stdio, e o sistema NÃO DEVE executar processos stdio (ver Fora do escopo).
 - **FR-006**: O cliente DEVE reaproveitar as conexões, aplicar timeout e cancelamento por chamada e limitar o tamanho dos resultados.
 - **FR-007**: O sistema DEVE suportar autenticação por token, por headers e por OAuth 2.1 conforme a especificação MCP, com tokens de atualização cifrados.
@@ -100,3 +101,4 @@ Nenhum.
 | 03/10/2026 | Criação a partir do prompt da Sprint 9 | Migração para SDD |
 | 03/10/2026 | Permissões RBAC explicitadas no plano (seção e tarefa T089), sem mudança de requisito | Decisão humana sobre permissões por spec |
 | 05/10/2026 | Transporte stdio fora do escopo: FR-005 removido (cadastro recusa stdio), FR-004, FR-013 e SC-001 só com HTTP | Decisão humana: nesta versão o cliente MCP faz chamadas somente via HTTP |
+| 14/10/2026 | FR-004: servidores MCP aceitam endereços internos (redes privadas e loopback) sem `OLLY_HTTP_ALLOWLIST`; link-local e endereços não roteáveis seguem bloqueados. Opção do cadastro "Não verificar o certificado TLS" (padrão: verificar) | Decisão humana: servidores MCP internos (ex.: rotas do OpenShift em 172.16/12 com CA corporativa) não conectavam. Risco aceito: quem tem `mcp:manage` pode apontar o cliente para serviços internos, e o TLS não verificado fica exposto a interceptação |

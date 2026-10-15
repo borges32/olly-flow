@@ -369,9 +369,9 @@ describe('spec 016 — FR-002/FR-008: credenciais Bridge e Agentix', () => {
         expect((props[field] as { default?: unknown } | undefined)?.default).toBeUndefined();
       }
     }
-    // FR-014: senha e chave são campos secretos.
+    // FR-014: senha, chave e token JWT (14/10/2026) são campos secretos.
     expect(registry.secretFields('bridgeApi')).toEqual(['senha']);
-    expect(registry.secretFields('agentixApi')).toEqual(['apiKey']);
+    expect(registry.secretFields('agentixApi')).toEqual(['apiKey', 'token']);
   });
 
   it('FR-002: "Testar" faz o mesmo login da execução, sem expor a senha', async () => {

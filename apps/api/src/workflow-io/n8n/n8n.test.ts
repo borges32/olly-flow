@@ -915,3 +915,148 @@ describe('spec 018 — FR-008/FR-009/FR-010/SC-005: output parsers do N8N', () =
     });
   });
 });
+
+describe('spec 021 — FR-011/FR-012/FR-015/SC-004: Chat Trigger do N8N', () => {
+  const openAiModel = (name: string) =>
+    node(
+      name,
+      '@n8n/n8n-nodes-langchain.lmChatOpenAi',
+      { model: { __rl: true, value: 'gpt-4o-mini' } },
+      { typeVersion: 1.2, credentials: { openAiApi: { id: '7', name: 'OpenAI' } } },
+    );
+  const sub = (to: string, type: string) => ({ [type]: [[{ node: to, type, index: 0 }]] });
+
+  it('SC-004/FR-011/FR-012: Chat Trigger → AI Agent (prompt automático) → memória importa sem marcadores, com a mesma URL', () => {
+    const { result, validation, byName, edge, report, errors } = importN8n({
+      nodes: [
+        node(
+          'When chat message received',
+          '@n8n/n8n-nodes-langchain.chatTrigger',
+          {
+            public: true,
+            mode: 'hostedChat',
+            authentication: 'basicAuth',
+            initialMessages: 'Olá!\nComo posso ajudar?',
+            options: {
+              title: 'Suporte',
+              subtitle: 'Atendimento',
+              inputPlaceholder: 'Pergunte',
+              showWelcomeScreen: true,
+              getStarted: 'Começar',
+              allowFileUploads: true,
+              allowedFilesMimeTypes: 'image/*',
+              allowedOrigins: 'https://intranet.local',
+              loadPreviousSession: 'memory',
+              responseMode: 'responseNode',
+            },
+          },
+          {
+            typeVersion: 1.1,
+            webhookId: 'a1b2c3d4-0000-4000-8000-000000000001',
+            credentials: { httpBasicAuth: { id: '3', name: 'Chat' } },
+          },
+        ),
+        node('AI Agent', '@n8n/n8n-nodes-langchain.agent', { options: {} }, { typeVersion: 1.7 }),
+        openAiModel('OpenAI Chat Model'),
+        node(
+          'Postgres Chat Memory',
+          '@n8n/n8n-nodes-langchain.memoryPostgresChat',
+          {},
+          { typeVersion: 1.3, credentials: { postgres: { id: '9', name: 'PG' } } },
+        ),
+        node('Responder', 'n8n-nodes-base.respondToWebhook', { respondWith: 'firstIncomingItem' }),
+      ],
+      connections: {
+        'When chat message received': { main: [[main('AI Agent')]] },
+        'OpenAI Chat Model': sub('AI Agent', 'ai_languageModel'),
+        'Postgres Chat Memory': {
+          ai_memory: [
+            [
+              { node: 'AI Agent', type: 'ai_memory', index: 0 },
+              { node: 'When chat message received', type: 'ai_memory', index: 0 },
+            ],
+          ],
+        },
+        'AI Agent': { main: [[main('Responder')]] },
+      },
+    });
+    expect(errors).toEqual([]);
+    expect(report.nodes.unsupported).toEqual([]);
+    expect(byName('When chat message received')).toMatchObject({
+      type: 'trigger.chat',
+      params: {
+        webhookId: 'a1b2c3d4-0000-4000-8000-000000000001',
+        public: true,
+        mode: 'hostedChat',
+        authentication: 'basicAuth',
+        initialMessages: 'Olá!\nComo posso ajudar?',
+        options: {
+          title: 'Suporte',
+          showWelcomeScreen: true,
+          allowedOrigins: 'https://intranet.local',
+          loadPreviousSession: 'memory',
+          responseMode: 'responseNode',
+        },
+      },
+    });
+    // Prompt automático ("Connected Chat Trigger Node"): o Agent lê o `chatInput` do item.
+    expect(byName('AI Agent')?.params.promptSource).toBe('fromInput');
+    // A memória chega ao Agent e ao gatilho (sessão anterior).
+    expect(edge('Postgres Chat Memory', 'When chat message received')?.toPort).toBe('ai_memory');
+    expect(edge('Postgres Chat Memory', 'AI Agent')?.toPort).toBe('ai_memory');
+    expect(result.issues.errors).toEqual([]);
+    expect(validation.errors).toEqual([]);
+    expect(report.credentialsToCreate).toContainEqual(
+      expect.objectContaining({ n8nType: 'httpBasicAuth', ollyType: 'webhookBasicAuth' }),
+    );
+  });
+
+  it('FR-012/FR-015: streaming, sessão manual, CSS, "n8n User Auth" e memória temporária viram pendências', () => {
+    const { byName, report } = importN8n({
+      nodes: [
+        node(
+          'Chat',
+          '@n8n/n8n-nodes-langchain.chatTrigger',
+          {
+            public: true,
+            mode: 'webhook',
+            authentication: 'n8nUserAuth',
+            options: {
+              responseMode: 'streaming',
+              loadPreviousSession: 'manually',
+              customCss: 'body { color: red }',
+            },
+          },
+          { typeVersion: 1.3, webhookId: 'b2c3d4e5-0000-4000-8000-000000000002' },
+        ),
+        node('Agente', '@n8n/n8n-nodes-langchain.agent', {}, { typeVersion: 1.7 }),
+        openAiModel('Modelo'),
+        node(
+          'Simple Memory',
+          '@n8n/n8n-nodes-langchain.memoryBufferWindow',
+          {},
+          { typeVersion: 1.3 },
+        ),
+      ],
+      connections: {
+        Chat: { main: [[main('Agente')]] },
+        Modelo: sub('Agente', 'ai_languageModel'),
+        'Simple Memory': sub('Agente', 'ai_memory'),
+      },
+    });
+    expect(byName('Chat')?.params).toMatchObject({
+      mode: 'webhook',
+      authentication: 'ollyUserAuth',
+      options: { responseMode: 'lastNode', loadPreviousSession: 'notSupported' },
+    });
+    expect(byName('Chat')?.params.options).not.toHaveProperty('customCss');
+    const chat = report.nodes.withWarnings.find((w) => w.node === 'Chat')?.warnings ?? [];
+    expect(chat).toEqual([
+      expect.stringContaining('streaming'),
+      expect.stringContaining('manual'),
+      expect.stringContaining('CSS'),
+    ]);
+    const memory = report.nodes.withWarnings.find((w) => w.node === 'Simple Memory')?.warnings;
+    expect(memory).toEqual([expect.stringContaining('memória persistente')]);
+  });
+});

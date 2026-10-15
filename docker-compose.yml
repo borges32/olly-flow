@@ -166,8 +166,8 @@ services:
       OLLY_VAULT_SECRET_ID: ${OLLY_VAULT_SECRET_ID:-olly-api-dev-secret}
       # Spec 009: salt do hash do mascaramento (valor fictício de desenvolvimento).
       OLLY_MASKING_SALT: ${OLLY_MASKING_SALT:-olly-dev-masking-salt-0001}
-      # Spec 010: o servidor MCP de teste (`mcp-test`) é interno; liberado só no desenvolvimento.
-      OLLY_HTTP_ALLOWLIST: ${OLLY_HTTP_ALLOWLIST:-mcp-test}
+      # Hosts/CIDRs internos liberados para o nó HTTP. O MCP aceita endereços internos sem ela.
+      OLLY_HTTP_ALLOWLIST: ${OLLY_HTTP_ALLOWLIST:-}
       # Spec 005: a API fica atrás do nginx do serviço `web` (IP real para a allowlist do webhook).
       OLLY_TRUST_PROXY: 'true'
       S3_ENDPOINT: http://minio:9000

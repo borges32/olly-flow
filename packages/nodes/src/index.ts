@@ -38,6 +38,19 @@ export {
 } from './trigger/webhook/definition.js';
 export { verifyWebhookAuth, hmacSignature, safeEqual } from './trigger/webhook/auth.js';
 export { respondToWebhookNode } from './http/respond-to-webhook/definition.js';
+// Spec 021: gatilho de chat.
+export { chatTrigger } from './trigger/chat/definition.js';
+export {
+  CHAT_AUTHENTICATIONS,
+  CHAT_DEFAULTS,
+  chatConfig,
+  chatPath,
+  chatSettings,
+  isValidWebhookId,
+  type ChatSettings,
+} from './trigger/chat/config.js';
+export { chatMessageText, chatResponseBody, fileAllowed } from './trigger/chat/response.js';
+export { chatHistory } from './trigger/chat/history.js';
 export { mergeNode } from './logic/merge/definition.js';
 export { combineJson } from './logic/merge/execute.js';
 export { whileNode, WHILE_DEFAULT_MAX_ITERATIONS } from './logic/while/definition.js';
@@ -96,3 +109,4 @@ export {
 } from './ai/agentix/definition.js';
 // Spec 016, NFR-003: serviços simulados para os testes (como o modelo simulado da spec 011).
 export * from './ai/testing/service-mocks.js';
+export { TEST_TLS_CERT, TEST_TLS_KEY } from './ai/testing/test-tls.js';

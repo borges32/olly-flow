@@ -20,12 +20,20 @@ export type DynamicPorts =
    * `needsFallback` → modelo reserva (`ai_fallbackModel`, tipo `ai_languageModel`; spec 017,
    * FR-011); `hasOutputParser` → `ai_outputParser` (spec 018, FR-001).
    */
-  | { kind: 'aiRootInputs' };
+  | { kind: 'aiRootInputs' }
+  /**
+   * Spec 021, FR-006: o Chat Trigger ganha a entrada `ai_memory` quando
+   * `options.loadPreviousSession = 'memory'` (histórico da sessão lido dessa memória).
+   */
+  | { kind: 'chatTriggerInputs' };
 
 /** Entrada do modelo reserva (spec 017). */
 export const FALLBACK_MODEL_PORT = 'ai_fallbackModel';
 /** Entrada do output parser (spec 018). */
 export const OUTPUT_PARSER_PORT = 'ai_outputParser';
+
+/** Entrada da memória do Chat Trigger (spec 021). */
+export const CHAT_MEMORY_PORT = 'ai_memory';
 
 /** Porta de erro (spec 007, FR-013): existe quando `settings.onError = 'errorOutput'`. */
 export const ERROR_PORT = 'error';
@@ -113,6 +121,21 @@ export function resolveNodePorts(
           name: OUTPUT_PARSER_PORT,
           displayName: 'Output Parser',
           kind: 'ai_outputParser',
+          required: true,
+          maxConnections: 1,
+        },
+      ];
+    }
+  }
+  if (type.dynamicPorts?.kind === 'chatTriggerInputs') {
+    const options = (node.params.options ?? {}) as { loadPreviousSession?: unknown };
+    if (options.loadPreviousSession === 'memory') {
+      inputs = [
+        ...inputs,
+        {
+          name: CHAT_MEMORY_PORT,
+          displayName: 'Memória',
+          kind: 'ai_memory',
           required: true,
           maxConnections: 1,
         },

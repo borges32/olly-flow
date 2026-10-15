@@ -44,7 +44,8 @@ Chama tools, lê resources e obtém prompts de servidores MCP (Model Context Pro
 - **Tamanho (FR-006):** resultado acima de `OLLY_MCP_MAX_RESULT_MB` (padrão 10) é recusado enquanto chega.
 - **Credencial (FR-007):** a credencial do nó prevalece; sem ela, vale a do servidor no catálogo.
 - **Registro (FR-011):** cada operação vai para `mcp_calls` com os argumentos mascarados (regras de LGPD do projeto) e aparece no painel do nó, em "Chamadas MCP".
-- **Anti-SSRF:** toda conexão (inclusive a descoberta e o token do OAuth) passa pelo filtro de rede, como no `http.request`.
+- **Anti-SSRF:** toda conexão (inclusive a descoberta e o token do OAuth) passa pelo filtro de rede. Diferente do `http.request`, servidores MCP em endereços internos (redes privadas e loopback) são aceitos sem `OLLY_HTTP_ALLOWLIST`; link-local (metadados da nuvem) e endereços não roteáveis seguem bloqueados.
+- **TLS:** servidores com certificado de CA interna precisam da opção "Não verificar o certificado TLS" no cadastro (Administração › MCP) ou da CA instalada no container (`NODE_EXTRA_CA_CERTS`).
 
 ## Divergências do N8N
 

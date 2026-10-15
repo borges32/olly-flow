@@ -15,6 +15,7 @@ import {
   List,
   LogIn,
   Merge,
+  MessageCircle,
   MessageSquare,
   PenLine,
   Play,
@@ -60,6 +61,7 @@ export const NODE_ICONS: Record<string, LucideIcon> = {
   bot: Bot,
   brain: Brain,
   'database-zap': DatabaseZap,
+  'message-circle': MessageCircle,
   'message-square': MessageSquare,
   // Spec 016: Bridge Chat Model e Agentix.
   waypoints: Waypoints,

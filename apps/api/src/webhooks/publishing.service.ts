@@ -1,12 +1,19 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { Db } from '@olly/db';
 import { unsupportedNodeIssues, validateWorkflow } from '@olly/engine';
-import { WEBHOOK_AUTH_CREDENTIAL, type NodeRegistry } from '@olly/nodes';
-import type {
-  PublishResponse,
-  WorkflowDefinition,
-  WorkflowIssue,
-  WorkflowNode,
+import {
+  WEBHOOK_AUTH_CREDENTIAL,
+  chatPath,
+  chatSettings,
+  isValidWebhookId,
+  type NodeRegistry,
+} from '@olly/nodes';
+import {
+  CHAT_TRIGGER_TYPE,
+  type PublishResponse,
+  type WorkflowDefinition,
+  type WorkflowIssue,
+  type WorkflowNode,
 } from '@olly/shared-types';
 import { AuditService, type AuditContext } from '../audit/audit.service.js';
 import { ConflictError, NotFoundError, UnprocessableError } from '../common/errors.js';
@@ -94,6 +101,61 @@ export async function webhookIssues(
   return { errors, warnings };
 }
 
+/** Spec 021: gatilhos de chat publicados (habilitados e com o chat público ligado). */
+export const publicChatNodes = (definition: WorkflowDefinition): WorkflowNode[] =>
+  definition.nodes.filter(
+    (n) => n.type === CHAT_TRIGGER_TYPE && !n.disabled && chatSettings(n).public,
+  );
+
+/**
+ * Validações do chat público (spec 021, FR-003, FR-004): identificador da URL, autenticação
+ * obrigatória quando configurada (como no webhook) e credencial Basic Auth do projeto.
+ */
+export async function chatIssues(
+  definition: WorkflowDefinition,
+  projectId: string,
+  credentials: CredentialsService,
+  requireAuth: boolean,
+): Promise<{ errors: WorkflowIssue[]; warnings: WorkflowIssue[] }> {
+  const errors: WorkflowIssue[] = [];
+  const warnings: WorkflowIssue[] = [];
+  const nodes = publicChatNodes(definition);
+  const types = await credentials.typesById(
+    projectId,
+    nodes.flatMap((n) => (n.credentialId ? [n.credentialId] : [])),
+  );
+  for (const node of nodes) {
+    const issue = (code: string, message: string) => ({
+      code,
+      message: `Nó "${node.name}": ${message}`,
+      nodeIds: [node.id],
+    });
+    const settings = chatSettings(node);
+    if (!isValidWebhookId(settings.webhookId)) {
+      errors.push(
+        issue('CHAT_WEBHOOK_ID_INVALID', 'identificador do chat ausente: remova e adicione o nó'),
+      );
+    }
+    if (settings.authentication === 'none') {
+      (requireAuth ? errors : warnings).push(
+        issue('CHAT_NO_AUTH', 'chat público sem autenticação'),
+      );
+    }
+    if (
+      settings.authentication === 'basicAuth' &&
+      (!node.credentialId || types.get(node.credentialId) !== 'webhookBasicAuth')
+    ) {
+      errors.push(
+        issue(
+          'CHAT_CREDENTIAL_INVALID',
+          'selecione uma credencial do tipo webhookBasicAuth deste projeto',
+        ),
+      );
+    }
+  }
+  return { errors, warnings };
+}
+
 export interface PreparedPublication {
   workflowId: string;
   projectId: string;
@@ -143,9 +205,16 @@ export class PublishingService {
       this.credentials,
       this.config.webhook.requireAuth,
     );
+    const chats = await chatIssues(
+      definition,
+      workflow.project_id,
+      this.credentials,
+      this.config.webhook.requireAuth,
+    );
     const errors = [
       ...structure.errors,
       ...hooks.errors,
+      ...chats.errors,
       // Spec 015, FR-016: nós marcadores (importação) bloqueiam a publicação.
       ...unsupportedNodeIssues(definition),
     ];
@@ -158,12 +227,22 @@ export class PublishingService {
       workflowId,
       projectId: workflow.project_id,
       version,
-      webhooks: webhookNodes(definition).map((n) => ({
-        nodeId: n.id,
-        method: methodOf(n),
-        path: pathOf(n),
-      })),
-      warnings: [...structure.warnings, ...hooks.warnings],
+      webhooks: [
+        ...webhookNodes(definition).map((n) => ({
+          nodeId: n.id,
+          method: methodOf(n),
+          path: pathOf(n),
+        })),
+        // Spec 021: página (`GET`) e mensagens (`POST`) do chat, no caminho do N8N.
+        ...publicChatNodes(definition).flatMap((n) =>
+          ['GET', 'POST'].map((method) => ({
+            nodeId: n.id,
+            method,
+            path: chatPath(chatSettings(n).webhookId),
+          })),
+        ),
+      ],
+      warnings: [...structure.warnings, ...hooks.warnings, ...chats.warnings],
     };
   }
 

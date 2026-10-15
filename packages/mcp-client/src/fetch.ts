@@ -10,7 +10,17 @@ export interface GuardedFetchResponse {
   body: ReadableStream<Uint8Array> | null;
 }
 
-export interface GuardedFetchInit {
+/** Opções de destino e TLS repassadas ao `HttpGuard.fetch` (ver `GuardedRequestInit`). */
+export interface GuardedFetchOptions {
+  /** Redes privadas, CGNAT e ULA sem allowlist. */
+  allowPrivateNetworks?: boolean;
+  /** Loopback sem allowlist. */
+  allowLoopback?: boolean;
+  /** Não verifica o certificado TLS do servidor. */
+  insecureTls?: boolean;
+}
+
+export interface GuardedFetchInit extends GuardedFetchOptions {
   method?: string;
   headers?: Record<string, string>;
   body?: string | null;
@@ -40,7 +50,11 @@ const NULL_BODY_STATUSES = new Set([101, 204, 205, 304]);
  *
  * A resposta é convertida para a `Response` global: o SDK usa `instanceof Response`.
  */
-export function guardedFetchLike(guarded: GuardedFetch, maxBodyBytes: number): FetchLike {
+export function guardedFetchLike(
+  guarded: GuardedFetch,
+  maxBodyBytes: number,
+  options: GuardedFetchOptions = {},
+): FetchLike {
   return async (url, init = {}) => {
     const method = (init.method ?? 'GET').toUpperCase();
     const headers = headersRecord(init.headers);
@@ -54,6 +68,7 @@ export function guardedFetchLike(guarded: GuardedFetch, maxBodyBytes: number): F
       throw new TypeError('Corpo de requisição MCP não suportado');
     }
     const res = await guarded(url, {
+      ...options,
       method,
       headers,
       body,

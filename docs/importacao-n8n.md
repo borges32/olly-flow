@@ -46,7 +46,8 @@ A importação é feita pela API (`POST /api/v1/projects/:id/workflows/import`, 
 | `outputParserStructured` (1–1.3, spec 018) | `outputParser.structured` | Exemplo JSON ou JSON Schema (o `jsonSchema` da v1 vira "JSON Schema"), `autoFix`. Prompt de correção personalizado gera aviso |
 | `outputParserAutofixing` (spec 018) | `outputParser.autoFixing` | `options.prompt`; o modelo e o parser interno chegam ligados a ele |
 | `outputParserItemList` (spec 018) | `outputParser.itemList` | `numberOfItems` e `separator` |
-| `memoryBufferWindow`, `memoryPostgresChat` | `memory.buffer`, `memory.postgres` | |
+| `memoryBufferWindow`, `memoryPostgresChat` | `memory.buffer`, `memory.postgres` | Com um Chat Trigger no workflow, a memória temporária gera pendência: ela não guarda a conversa entre mensagens (spec 021, FR-015) |
+| `chatTrigger` (1–1.3, spec 021) | `trigger.chat` | Mesmos parâmetros; o `webhookId` mantém a URL `/webhook/<webhookId>/chat`. `n8nUserAuth` vira `ollyUserAuth`. Pendências: *streaming* (responde de uma vez), "Using Response Nodes" ("Respond to Chat" não existe), sessão anterior manual e CSS personalizado |
 | `toolHttpRequest`, `httpRequestTool` | `tool.httpRequest` | Os `{marcadores}` da ferramenta antiga viram `$fromAI` |
 | `toolCode` (JavaScript) | `tool.code` | A variável `query` é recriada no início do código |
 | `toolWorkflow` | `tool.workflow` | O workflow precisa ser escolhido de novo |

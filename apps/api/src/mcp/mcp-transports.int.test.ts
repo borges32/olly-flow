@@ -1,4 +1,5 @@
 import { startMcpTestServer, type McpTestServer } from '@olly/mcp-test-server';
+import { TEST_TLS_CERT, TEST_TLS_KEY } from '@olly/nodes';
 import type { CredentialSummary, McpServerTestResponse, ProjectSummary } from '@olly/shared-types';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createWorkflow, startTestRun, waitForStatus } from '../testing/execution-helpers.js';
@@ -12,8 +13,10 @@ let project: ProjectSummary;
 
 beforeAll(async () => {
   mcp = await startMcpTestServer();
+  // Sem allowlist: o servidor de teste fica em loopback, aceito pelo MCP sem
+  // OLLY_HTTP_ALLOWLIST (spec, Histórico 14/10/2026).
   ctx = await startTestContext({
-    http: { allowlist: ['127.0.0.1'], maxResponseBytes: 1024 * 1024 },
+    http: { allowlist: [], maxResponseBytes: 1024 * 1024 },
     mcp: { callTimeoutMs: 3000, maxResultBytes: 256 * 1024 },
   });
   admin = await loginAs(ctx, { sub: 'admin', email: 'admin@tr.local', groups: ['admin'] });
@@ -108,7 +111,7 @@ describe('spec 010 — FR-004/SC-001: chamada via HTTP', () => {
 });
 
 describe('spec 010 — FR-004/SC-005: anti-SSRF', () => {
-  it('SC-005: servidor com IP interno não liberado é bloqueado (teste e execução)', async () => {
+  it('SC-005: servidor apontando para os metadados da nuvem é bloqueado (teste e execução)', async () => {
     const created = await admin.call('POST', '/mcp-servers', {
       name: 'Metadados',
       transport: 'streamableHttp',
@@ -124,7 +127,7 @@ describe('spec 010 — FR-004/SC-005: anti-SSRF', () => {
     expect(approve.statusCode).toBe(422);
     expect(approve.body).toContain('bloqueado pelo filtro de rede');
 
-    // Mesmo um servidor aprovado que passe a apontar para um IP interno é barrado na execução.
+    // Mesmo um servidor aprovado que passe a apontar para link-local é barrado na execução.
     const server = await registerMcpServer(
       admin,
       { name: 'Muda de endereço', transport: 'streamableHttp', url: `${mcp.url}/mcp` },
@@ -132,12 +135,67 @@ describe('spec 010 — FR-004/SC-005: anti-SSRF', () => {
     );
     await ctx.database.db
       .updateTable('mcp_servers')
-      .set({ url: 'http://10.0.0.7/mcp', updated_at: new Date() })
+      .set({ url: 'http://169.254.169.254/mcp', updated_at: new Date() })
       .where('id', '=', server.id)
       .execute();
     const { detail } = await run(server.id, { toolName: 'soma', arguments: { a: 1, b: 1 } });
     expect(detail.status).toBe('error');
-    expect(detail.error?.message).toMatch(/bloqueado pelo filtro de rede \(10\.0\.0\.7\)/);
+    expect(detail.error?.message).toMatch(/bloqueado pelo filtro de rede \(169\.254\.169\.254\)/);
+  });
+
+  it('FR-004 (Histórico 14/10/2026): servidor em endereço interno funciona sem allowlist', async () => {
+    // O contexto não tem OLLY_HTTP_ALLOWLIST e o servidor de teste está em 127.0.0.1.
+    const server = await registerMcpServer(
+      admin,
+      { name: 'Interno', transport: 'streamableHttp', url: `${mcp.url}/mcp` },
+      { allow: ['soma'] },
+    );
+    expect(server.status).toBe('active');
+    const { detail } = await run(server.id, { toolName: 'soma', arguments: { a: 2, b: 3 } });
+    expect(detail.status).toBe('success');
+  });
+});
+
+describe('spec 010 (Histórico 14/10/2026) — não verificar o certificado TLS', () => {
+  it('FR-004: HTTPS com CA não reconhecida só conecta com insecureTls (teste, aprovação e execução)', async () => {
+    const tls = await startMcpTestServer({ tls: { cert: TEST_TLS_CERT, key: TEST_TLS_KEY } });
+    try {
+      const created = await admin.call('POST', '/mcp-servers', {
+        name: 'CA interna',
+        transport: 'streamableHttp',
+        url: `${tls.url}/mcp`,
+      });
+      const id = created.json<{ id: string; insecureTls: boolean }>().id;
+      expect(created.json<{ insecureTls: boolean }>().insecureTls).toBe(false);
+      const strict = (
+        await admin.call('POST', `/mcp-servers/${id}/test`)
+      ).json<McpServerTestResponse>();
+      expect(strict.ok).toBe(false);
+      expect(strict.message).toMatch(/certificate|certificado/i);
+
+      const updated = await admin.call('PUT', `/mcp-servers/${id}`, {
+        name: 'CA interna',
+        transport: 'streamableHttp',
+        url: `${tls.url}/mcp`,
+        insecureTls: true,
+      });
+      expect(updated.json<{ insecureTls: boolean }>().insecureTls).toBe(true);
+      const test = (
+        await admin.call('POST', `/mcp-servers/${id}/test`)
+      ).json<McpServerTestResponse>();
+      expect(test.ok).toBe(true);
+
+      const approved = await admin.call('POST', `/mcp-servers/${id}/approve`);
+      expect(approved.statusCode).toBe(200);
+      await admin.call('PUT', `/mcp-servers/${id}/policies`, {
+        projectId: null,
+        policies: [{ toolName: 'soma', allowed: true, destructive: false }],
+      });
+      const { detail } = await run(id, { toolName: 'soma', arguments: { a: 4, b: 5 } });
+      expect(detail.status).toBe('success');
+    } finally {
+      await tls.close();
+    }
   });
 });
 

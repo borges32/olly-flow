@@ -109,3 +109,24 @@ describe('spec 007 — FR-001/FR-012/FR-013: portas dinâmicas', () => {
     ).toEqual(['main', 'error']);
   });
 });
+
+describe('spec 021 — portas do Chat Trigger', () => {
+  const chat = {
+    inputs: [],
+    outputs: [{ name: 'main', kind: 'main' as const }],
+    dynamicPorts: { kind: 'chatTriggerInputs' as const },
+  };
+  it('FR-006: "Da memória" acrescenta a entrada de memória obrigatória; sem ela, nenhuma entrada', () => {
+    const withMemory = resolveNodePorts(chat, {
+      params: { options: { loadPreviousSession: 'memory' } },
+    });
+    expect(withMemory.inputs).toEqual([
+      expect.objectContaining({ name: 'ai_memory', kind: 'ai_memory', required: true }),
+    ]);
+    expect(resolveNodePorts(chat, { params: {} }).inputs).toEqual([]);
+    expect(
+      resolveNodePorts(chat, { params: { options: { loadPreviousSession: 'notSupported' } } })
+        .inputs,
+    ).toEqual([]);
+  });
+});

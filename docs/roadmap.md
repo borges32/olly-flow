@@ -28,6 +28,7 @@
 | 018 | [output-parsers](../specs/018-output-parsers/spec.md) | 4 — Hardening (paridade com o N8N) | Output parsers como no N8N (Structured, Auto-fixing e Item List) ligados ao Agent e ao Basic LLM Chain, substituindo o JSON Schema no nó, com migração automática e importação do N8N | 011, 015, 017 | Implementada com pendências ([relatório](../specs/018-output-parsers/report.md)) — testes de tempo das specs 002 e 003 a confirmar no CI | |
 | 019 | [baixar-dados-do-no](../specs/019-baixar-dados-do-no/spec.md) | 4 — Hardening (apoio à depuração) | Botão "Baixar" nos dados de entrada e saída do painel de todos os nós (JSON com os itens exibidos) | 003, 009 | Implementada ([relatório](../specs/019-baixar-dados-do-no/report.md)) — E2E de fps do canvas (spec 002) a confirmar no CI | |
 | 020 | [schedule-trigger](../specs/020-schedule-trigger/spec.md) | 4 — Hardening (paridade com o N8N) | Gatilho Schedule Trigger como no N8N (segundos, minutos, horas, dias, semanas, meses e cron), ativo pela publicação, sem duplicidade entre workers, com prévia das próximas execuções e importação/exportação do N8N; substitui o agendamento da spec 008 | 005, 006, 009, 015 | Planejada (plano e tarefas aguardando revisão) | |
+| 021 | [chat-trigger](../specs/021-chat-trigger/spec.md) | 4 — Hardening (paridade com o N8N) | Gatilho Chat Trigger ("When chat message received") como no N8N: painel de chat no editor, chat hospedado e incorporado após a publicação, sessões com memória, arquivos, modos de resposta e importação/exportação do N8N | 005, 009, 011, 015, 017 | Implementada ([relatório](../specs/021-chat-trigger/report.md)) — avaliação da Segurança e workflows reais da POC pendentes | |
 
 As specs estão organizadas por escopo, não por calendário. A referência original era de 13 sprints de 2 semanas com uma equipe de 4 pessoas. Com implementação por agente de IA, o ritmo depende principalmente das revisões humanas entre specs.
 
@@ -58,6 +59,7 @@ Entre cada spec, antes de iniciar a próxima:
 | 018 | ~~Decidir os parsers e o destino do JSON Schema no nó~~ (09/10/2026: os três do N8N; substituir e migrar); ~~revisar plano e tarefas~~ (aprovados em 09/10/2026); confirmar os testes de tempo das specs 002 e 003 no CI; workflows da POC com output parsers em `fixtures/n8n/`, quando houver | PO |
 | 019 | Revisar o escopo (arquivo JSON por saída, sem binários); DPO: avaliar se o download dos dados do painel, já mascarados, precisa de auditoria | PO + DPO |
 | 020 | ~~Responder aos pontos em aberto~~ (13/10/2026: fuso por workflow, mínimo de 1 minuto, pular com execução em andamento, sem recuperar execuções perdidas, Cron e Interval fora do escopo); revisar plano e tarefas; workflows da POC com Schedule Trigger em `fixtures/n8n/` | PO |
+| 021 | ~~Responder aos pontos em aberto~~ (14/10/2026: autenticação do N8N, sem widget, sem *streaming*, mensagens da sessão em sequência, risco do `sessionId` aceito, "Respond to Chat" fora); ~~revisar plano e tarefas~~ (aprovados em 14/10/2026); avaliação da Segurança sobre a exposição pública do chat; workflows da POC com Chat Trigger em `fixtures/n8n/` | PO + Segurança |
 | Pós 013 | Deploy em produção, treinamento, reteste do pentest, hypercare, desligamento do N8N | Infra + PO + Segurança |
 
 ## Decisões pendentes
@@ -74,7 +76,7 @@ Entre cada spec, antes de iniciar a próxima:
 - Ambientes (dev/hml/prod) com promoção de workflows e integração com Git.
 - Novos nós: e-mail, filas (RabbitMQ/Kafka), arquivos (S3/SFTP), Excel/CSV, conectores internos.
 - RAG: vector store (pgvector), embeddings, loaders de documentos.
-- Chat trigger (interface de chat para agentes).
+- ~~Chat trigger (interface de chat para agentes)~~: antecipado para a [spec 021](../specs/021-chat-trigger/spec.md) (14/10/2026).
 - `fetch` controlado no nó de código JS.
 - Notificações por e-mail/Teams (aprovações, falhas).
 - Marketplace interno de nós via SDK.

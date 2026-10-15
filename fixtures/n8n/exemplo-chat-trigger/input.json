@@ -1,0 +1,4 @@
+{
+  "trigger": "When chat message received",
+  "items": [{ "json": { "sessionId": "sessao-1", "action": "sendMessage", "chatInput": "Olá" } }]
+}

@@ -119,6 +119,7 @@ Spec 011:
 | `placeholder.unsupported` | 015 | `tool.*`, `memory.*` (sub-nós) | 011 |
 | `ai.bridgeChatModel` (sub-nó) | 016 | `ai.agentix` | 016 |
 | `ai.chainLlm` | 017 | `outputParser.*` (sub-nós) | 018 |
+| `trigger.chat` | 021 | | |
 
 ## Permissões RBAC
 
@@ -323,3 +324,23 @@ Página: [output-parsers.md](../nos/output-parsers.md).
 - **Sub-nós de sub-nós:** o motor entrega `subNodes` aos sub-nós, com o limite `MAX_SUBNODE_DEPTH` (5).
 - **Formatos antigos:** `migrateLegacyDefinition` (`@olly/shared-types`) junta `migrateLegacyOutputParser` (JSON Schema dentro do nó → sub-nó) e `migrateLegacyAgentixPayload` (Agentix sem `payloadMode` → `json`; spec 016, 13/10/2026). Na API, roda pelo `workflowDefinitionInputSchema` (entradas) e pelo `readDefinition` (leituras do banco); na importação, por `fromWorkflowFile`.
 - Sem rotas, tabelas, permissões ou variáveis novas.
+
+## Chat Trigger (spec 021)
+
+Página: [trigger.chat.md](../nos/trigger.chat.md).
+
+- **Tipo de nó `trigger.chat`:** `webhookId`, `public`, `mode`, `authentication`, `initialMessages`, `options.*`. `dynamicPorts: { kind: 'chatTriggerInputs' }` acrescenta a entrada `ai_memory` com `options.loadPreviousSession = 'memory'`. Item: `{ sessionId, action: 'sendMessage', chatInput, files? }`, com binários `data0…`.
+- **Tipos compartilhados** (`@olly/shared-types`): `CHAT_TRIGGER_TYPE`, `CHAT_TRIGGER_ORIGIN` (`'chat'`), `CHAT_MEMORY_PORT`, `ChatConfig`, `ChatTestReply`, `ChatTestStart`.
+- **Rotas públicas** (tabela `webhooks`, gateway de webhooks), com a autenticação do nó:
+  - `GET /webhook/<webhookId>/chat`: configuração da página (`ChatConfig`);
+  - `POST /webhook/<webhookId>/chat`: ações `sendMessage` (JSON ou multipart) e `loadPreviousSession` (`{ data }`).
+- **Rotas do editor** (`workflow:execute`): `POST /api/v1/workflows/:id/chat/test` → `{ executionId }`; `GET /api/v1/workflows/:id/chat/test/:executionId/reply` → `ChatTestReply`.
+- **Página pública do frontend:** `/chat/:webhookId`.
+- **Execuções:** `triggerType: 'chat'`, em produção (chat publicado) e em teste (painel do editor).
+- **Redis:** locks das sessões `olly:chat:<workflowId>:<modo>:<sessionId>` (FR-014) e `olly:chat:test-run:<executionId>`.
+- **Validação:**
+  - **erros:** `CHAT_TRIGGER_DUPLICATE` (engine); `CHAT_NO_AUTH` (com `OLLY_REQUIRE_WEBHOOK_AUTH`), `CHAT_CREDENTIAL_INVALID` e `CHAT_WEBHOOK_ID_INVALID` (publicação);
+  - **avisos:** `CHAT_BUFFER_MEMORY` (engine) e `CHAT_NO_AUTH` (sem a autenticação obrigatória).
+- **Configuração:** `OLLY_CHAT_MAX_MESSAGE_CHARS` (20 000). O tempo limite, o limite de taxa e o tamanho dos arquivos são os do webhook.
+- Sem tabelas nem permissões novas.
+

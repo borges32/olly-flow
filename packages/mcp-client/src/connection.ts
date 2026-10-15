@@ -38,6 +38,8 @@ export interface McpConnectionConfig {
   headers?: Record<string, string>;
   /** OAuth 2.1 conforme a especificação MCP (credencial `mcpOAuth`, FR-007). */
   authProvider?: OAuthClientProvider;
+  /** `fetch` próprio do servidor (ex.: sem verificar TLS); padrão: o de `McpClientSettings`. */
+  fetch?: FetchLike;
 }
 
 export interface McpClientSettings {
@@ -81,7 +83,7 @@ export class McpConnection {
     try {
       const url = new URL(config.url);
       const options = {
-        fetch: settings.fetch,
+        fetch: config.fetch ?? settings.fetch,
         ...(config.headers && { requestInit: { headers: config.headers } }),
         ...(config.authProvider && { authProvider: config.authProvider }),
       };
@@ -294,8 +296,17 @@ export class McpConnection {
   }
 }
 
+/** Mensagem com as causas encadeadas (ex.: `fetch failed (self-signed certificate ...)`). */
 function describe(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  if (!(error instanceof Error)) return String(error);
+  const causes: string[] = [];
+  let e: unknown = error.cause;
+  for (let depth = 0; e && depth < 5; depth++) {
+    const text = e instanceof Error ? e.message : typeof e === 'string' ? e : '';
+    if (text && !error.message.includes(text) && !causes.includes(text)) causes.push(text);
+    e = (e as { cause?: unknown }).cause;
+  }
+  return causes.length ? `${error.message} (${causes.join(': ')})` : error.message;
 }
 
 function findInChain<T extends Error>(

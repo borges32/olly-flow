@@ -22,7 +22,7 @@ Credenciais guardam os dados de acesso a APIs e bancos usados pelos nós. Introd
 | `anthropic` | **apiKey**, baseURL (opcional) | — |
 | `googleGemini` | **apiKey**, baseURL (vazio = endpoint compatível com OpenAI do Gemini) | — |
 | `bridgeApi` | tokenUrl, baseUrl, identificador, **senha**, tokenSkewSeconds (60), allowUnauthorizedCerts (`false`). Endereços sem valor padrão | Login de serviço, como na execução (spec 016) |
-| `agentixApi` | baseUrl, **apiKey**, allowUnauthorizedCerts (`false`). Endereço sem valor padrão | — (validada na primeira execução do nó, spec 016) |
+| `agentixApi` | baseUrl, authentication (`apiKey` ou `bearerJwt`), **apiKey** ou **token** (JWT, em `Authorization: Bearer`), allowUnauthorizedCerts (`false`). Endereço sem valor padrão | — (validada na primeira execução do nó, spec 016) |
 | `fakeLlm` | script (roteiro JSON) | — (só com `NODE_ENV=test`: modelo simulado dos testes, FR-016) |
 
 O teste dos tipos HTTP passa pelo filtro anti-SSRF, como as requisições dos nós.
@@ -57,7 +57,7 @@ O teste dos tipos HTTP passa pelo filtro anti-SSRF, como as requisições dos n�
 |---|---|---|
 | `OLLY_KEY_PROVIDER` | `env` | Provedor da chave mestra |
 | `OLLY_MASTER_KEY` | — (obrigatória) | Chave mestra do provedor `env` |
-| `OLLY_HTTP_ALLOWLIST` | vazio | Hosts e CIDRs internos liberados para o nó HTTP e o teste de credencial (a Bridge e o Agentix aceitam redes privadas sem ela) |
+| `OLLY_HTTP_ALLOWLIST` | vazio | Hosts e CIDRs internos liberados para o nó HTTP e o teste de credencial (a Bridge e o Agentix aceitam redes privadas sem ela; o MCP aceita redes privadas e loopback sem ela) |
 | `OLLY_HTTP_MAX_RESPONSE_MB` | 50 | Limite de resposta HTTP |
 | `OLLY_PG_POOL_MAX` | 5 | Conexões por credencial Postgres |
 | `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET`, `S3_REGION` | — | Object storage dos binários. Sem `S3_ENDPOINT`, resposta binária do nó HTTP falha |

@@ -26,7 +26,7 @@
 | `group_role_mappings` | Grupo do IdP → papel (`project_id` nulo = global) | 009 | Único por (grupo, projeto) |
 | `publish_requests` | Pedidos de aprovação de publicação (versão, mensagem, autor, decisão, comentário) | 009 | `CHECK decided_by <> requested_by`; um pendente por workflow |
 | `masking_rules` | Regras de mascaramento LGPD (`field` \| `pattern`; `redact` \| `partial` \| `hash`) globais ou por projeto | 009 | Regras padrão (`builtin`) semeadas na migration `0009_governanca` |
-| `mcp_servers` | Catálogo de servidores MCP (`project_id` nulo = global) | 010 | Somente `streamableHttp` \| `sse`; status `pending` \| `active` \| `disabled`; `tools_snapshot` (aprovado) e `snapshot_pending_diff` (mudança a revisar); `credential_id`; único por (projeto, nome) |
+| `mcp_servers` | Catálogo de servidores MCP (`project_id` nulo = global) | 010 | Somente `streamableHttp` \| `sse`; status `pending` \| `active` \| `disabled`; `tools_snapshot` (aprovado) e `snapshot_pending_diff` (mudança a revisar); `credential_id`; `insecure_tls` (não verificar o certificado, migration 0016); único por (projeto, nome) |
 | `mcp_tool_policies` | Política de tool por servidor e projeto (`project_id` nulo = global; a do projeto prevalece) | 010 | `allowed`, `destructive`; sem registro = negado |
 | `mcp_calls` | Registro de cada chamada MCP | 010 | Argumentos e erro mascarados; `project_id` (retenção); sem FK para `executions` (particionada) |
 | `agent_steps` | Passos dos agentes (`model` \| `tool` \| `approval` \| `final` \| `error`), por execução, nó, `run_index`, item e `step_index` | 011 | Conteúdo mascarado, apagado com os dados da execução (`retention.dataDays`); a linha sai com os metadados. `project_id`; sem FK para `executions` (particionada) |

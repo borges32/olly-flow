@@ -40,6 +40,17 @@ describe('spec 010 — FR-004/FR-007: fetch dos transportes e do OAuth', () => {
     });
   });
 
+  it('FR-004 (Histórico 14/10/2026): opções de rede e TLS chegam ao filtro em toda requisição', async () => {
+    const { seen, guarded } = recorder();
+    const options = { allowPrivateNetworks: true, allowLoopback: true, insecureTls: true };
+    await guardedFetchLike(guarded, 1024, options)('https://mcp.interno/mcp', { method: 'POST' });
+    await guardedFetchLike(guarded, 1024)('https://mcp.exemplo/mcp', { method: 'GET' });
+    expect(seen[0]?.init).toMatchObject(options);
+    // Sem opções (ex.: provedor de IA), a regra padrão do filtro não muda.
+    expect(seen[1]?.init).not.toHaveProperty('allowPrivateNetworks');
+    expect(seen[1]?.init).not.toHaveProperty('insecureTls');
+  });
+
   it('FR-006: resposta a POST acima do limite é interrompida', async () => {
     const big: GuardedFetch = () => Promise.resolve(new Response('x'.repeat(4096)));
     const res = await guardedFetchLike(big, 1024)('https://mcp.exemplo/mcp', { method: 'POST' });

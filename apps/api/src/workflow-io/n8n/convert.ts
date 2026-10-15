@@ -194,6 +194,11 @@ export function convertN8n(input: unknown): N8nConversion {
     return issues;
   };
 
+  // Spec 021, FR-015: a memória temporária não guarda a conversa entre mensagens do chat.
+  const hasChatTrigger = rawNodes.some(
+    (n) => str(n.type) === '@n8n/n8n-nodes-langchain.chatTrigger' && n.disabled !== true,
+  );
+
   const nodes: WorkflowFileNode[] = [];
   const dropped = new Set<string>();
   let stickies = 0;
@@ -221,6 +226,11 @@ export function convertN8n(input: unknown): N8nConversion {
       : { unsupported: `Tipo do N8N sem conversão: ${type}` };
     if (!('unsupported' in result)) {
       result = { ...result, warnings: [...result.warnings, ...parserIssues(node, name, type)] };
+      if (hasChatTrigger && result.type === 'memory.buffer') {
+        result.warnings.push(
+          'A memória temporária não guarda a conversa entre mensagens do chat (cada mensagem é uma execução; no N8N, a Simple Memory guarda): use a memória persistente',
+        );
+      }
     }
     // Spec 016, FR-012: o Agentix ligado como ferramenta de um AI Agent vira marcador.
     if (!('unsupported' in result) && result.type === 'ai.agentix' && toolSources.has(name)) {

@@ -29,6 +29,7 @@
     "oidc-client-ts": "^3.5.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-markdown": "^10.1.0",
     "react-router": "^7.18.4",
     "socket.io-client": "^4.8.1",
     "sonner": "^2.0.8",

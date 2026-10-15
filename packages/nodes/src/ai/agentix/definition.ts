@@ -21,6 +21,51 @@ const ERROR_SNIPPET = 500;
  */
 export const AGENTIX_USER_AGENT = 'Olly-Flow/1.0 (agentix)';
 const AUTH_HINT = 'Confira a chave da API e a URL base da credencial (ex.: https://<host>/v2/api).';
+const JWT_HINT =
+  'Confira o token JWT (validade e permissões) e a URL base da credencial (ex.: https://<host>/v2/api).';
+
+/**
+ * Validade (`exp`, em segundos) de um JWT, sem verificar a assinatura (quem verifica é o Agentix).
+ * `undefined` quando o token não é um JWT legível ou não tem `exp`.
+ */
+export function jwtExpiry(token: string): Date | undefined {
+  const payload = token.split('.')[1];
+  if (!payload || token.split('.').length !== 3) return undefined;
+  try {
+    const claims = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as {
+      exp?: unknown;
+    };
+    return typeof claims.exp === 'number' ? new Date(claims.exp * 1000) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Cabeçalho de autenticação da credencial (spec 016, FR-008): `X-API-Key` (padrão, inclusive
+ * nas credenciais antigas, sem o campo) ou `Authorization: Bearer <JWT>`. O JWT vencido falha
+ * aqui, antes de chamar o Agentix.
+ */
+export function agentixAuthHeader(
+  data: Record<string, unknown>,
+  now: Date = new Date(),
+): { header: Record<string, string>; hint: string } {
+  const text = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
+  if (data.authentication === 'bearerJwt') {
+    const token = text(data.token).replace(/^Bearer\s+/i, '');
+    if (!token) throw new Error('Credencial Agentix: informe o campo "token" (JWT)');
+    const expiry = jwtExpiry(token);
+    if (expiry && expiry.getTime() <= now.getTime()) {
+      throw new NodeExecutionError(
+        `O token JWT da credencial Agentix expirou em ${expiry.toISOString()}: atualize o token na credencial`,
+      );
+    }
+    return { header: { authorization: `Bearer ${token}` }, hint: JWT_HINT };
+  }
+  const apiKey = text(data.apiKey);
+  if (!apiKey) throw new Error('Credencial Agentix: informe o campo "apiKey"');
+  return { header: { 'x-api-key': apiKey }, hint: AUTH_HINT };
+}
 
 export interface AgentixDeps {
   guard: HttpGuard;
@@ -206,9 +251,8 @@ function createRequest(
 ): Request {
   const data = credential.data;
   const baseUrl = agentixBaseUrl(data.baseUrl);
-  const apiKey = typeof data.apiKey === 'string' ? data.apiKey.trim() : '';
   if (!baseUrl) throw new Error('Credencial Agentix: informe o campo "baseUrl"');
-  if (!apiKey) throw new Error('Credencial Agentix: informe o campo "apiKey"');
+  const auth = agentixAuthHeader(data);
   return async (method, path, body) => {
     const url = `${baseUrl}/${path}`;
     const response = await deps.guard.fetch(url, {
@@ -216,7 +260,7 @@ function createRequest(
       headers: {
         accept: 'application/json',
         'user-agent': AGENTIX_USER_AGENT,
-        'x-api-key': apiKey,
+        ...auth.header,
         ...(body && { 'content-type': 'application/json' }),
       },
       ...(body && { body: JSON.stringify(body) }),
@@ -227,11 +271,12 @@ function createRequest(
     });
     const text = await readText(response, deps.maxResponseBytes);
     if (!response.ok) {
-      // O endereço não tem segredo (a chave vai no cabeçalho) e mostra uma URL base errada.
+      // O endereço não tem segredo (a chave ou o token vão no cabeçalho) e mostra uma URL base
+      // errada.
       const reason = errorReason(text);
-      const auth = response.status === 401 || response.status === 403 ? ` ${AUTH_HINT}` : '';
+      const hint = response.status === 401 || response.status === 403 ? ` ${auth.hint}` : '';
       throw new NodeExecutionError(
-        `Chamada ao Agentix falhou: ${method} ${url} respondeu ${String(response.status)}${reason ? ` (${reason})` : ''}.${auth}`,
+        `Chamada ao Agentix falhou: ${method} ${url} respondeu ${String(response.status)}${reason ? ` (${reason})` : ''}.${hint}`,
         { httpCode: response.status, description: text.slice(0, ERROR_SNIPPET) },
       );
     }

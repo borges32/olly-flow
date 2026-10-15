@@ -330,6 +330,8 @@ export interface AgentixScenario {
 export interface AgentixMockOptions {
   tls?: boolean;
   apiKey?: string;
+  /** Token aceito em `Authorization: Bearer` (spec 016, FR-008, 14/10/2026). */
+  bearerToken?: string;
   scenarios?: Record<string, AgentixScenario>;
 }
 
@@ -337,6 +339,8 @@ export interface AgentixMockRequest {
   method: string;
   path: string;
   apiKey: string | undefined;
+  /** Cabeçalho `Authorization` recebido. */
+  authorization: string | undefined;
   userAgent: string | undefined;
 }
 
@@ -401,8 +405,8 @@ export const AGENTIX_EXAMPLE_MESSAGES = [
 /**
  * Agentix simulado no formato do exemplo da API (`prompt/Agentix/exemplo_api_agentix.txt`): a
  * criação devolve `status`; a consulta, `state` e os demais campos (nulos quando vazios). Sem o
- * cabeçalho `X-API-Key`, responde 403 `Not authenticated` (como o `APIKeyHeader` do FastAPI);
- * com a chave errada, 401.
+ * cabeçalho `X-API-Key` (nem o Bearer JWT, quando configurado), responde 403 `Not authenticated`
+ * (como o `APIKeyHeader` do FastAPI); com a chave ou o token errado, 401.
  */
 export async function startAgentixMock(options: AgentixMockOptions = {}): Promise<AgentixMock> {
   const apiKey = options.apiKey ?? AGENTIX_MOCK_API_KEY;
@@ -418,14 +422,21 @@ export async function startAgentixMock(options: AgentixMockOptions = {}): Promis
     const path = new URL(req.url ?? '/', 'http://x').pathname;
     const key = req.headers['x-api-key'];
     const keyValue = Array.isArray(key) ? key[0] : key;
+    const authorization = req.headers.authorization;
     requests.push({
       method: req.method ?? 'GET',
       path,
       apiKey: keyValue,
+      authorization,
       userAgent: req.headers['user-agent'],
     });
-    if (keyValue === undefined) return { status: 403, json: { detail: 'Not authenticated' } };
-    if (keyValue !== apiKey) return { status: 401, json: { detail: 'Chave de API inválida' } };
+    if (authorization && options.bearerToken !== undefined) {
+      if (authorization !== `Bearer ${options.bearerToken}`)
+        return { status: 401, json: { detail: 'Token inválido' } };
+    } else {
+      if (keyValue === undefined) return { status: 403, json: { detail: 'Not authenticated' } };
+      if (keyValue !== apiKey) return { status: 401, json: { detail: 'Chave de API inválida' } };
+    }
 
     if (req.method === 'POST' && path === '/v2/api/sessions/invoke') {
       const data = parse(body);

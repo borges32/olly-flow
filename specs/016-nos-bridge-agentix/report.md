@@ -121,6 +121,24 @@ Pedido do PO, seguindo o nó customizado de referência (`Bridge-Chat-Model`, Ag
   - `n8n.test.ts` › "FR-012 (13/10/2026)…";
   - `agentix.int.test.ts` › "FR-007 (13/10/2026)…": as expressões são resolvidas pelo motor, por exemplo `{{ $json.n * 2 }}` chega como número.
 
+## Melhoria (14/10/2026): autenticação do Agentix por Bearer JWT
+
+Pedido do PO: o Agentix também aceita Bearer JWT.
+
+- **Credencial `agentixApi`:** campo **Autenticação** com `apiKey` (padrão, chave em `X-API-Key`) ou `bearerJwt` (token secreto em `Authorization: Bearer <token>`). O formulário mostra só o campo da opção escolhida.
+- **JWT vencido:** o nó lê a validade (`exp`) do token, sem verificar a assinatura (quem verifica é o Agentix). Vencido, falha antes da chamada, com a data na mensagem. Um token que não seja JWT é enviado sem essa conferência, e o prefixo `Bearer` colado junto com o token não se repete.
+- **Recusa (401/403):** a orientação passa a citar o token JWT, em vez da chave.
+- **Credenciais antigas:** sem o campo, continuam como chave de API. A importação do nó customizado do N8N (só chave) não muda.
+- **Formulário de credenciais:** passou a respeitar `x-display-options` (exibição condicional, como no painel dos nós); campos ocultos não são enviados. Melhoria genérica, usada aqui pela primeira vez.
+- **Spec:** atualizada antes do código (FR-008, SC-003, entidade, histórico).
+- **Testes:**
+  - `agentix.test.ts` › "spec 016 — FR-008 (14/10/2026)…" (4 casos: token aceito, recusado, vencido sem chamar o Agentix, token ausente, credencial antiga e prefixo);
+  - `agentix.int.test.ts` › "FR-008 (14/10/2026)…" e a busca do token sentinela em logs, respostas e banco (SC-004/FR-014);
+  - E2E `integrations.spec.ts` › "spec 016 — FR-008 (14/10/2026)…" (formulário);
+  - `bridge.test.ts` › "FR-002/FR-008…" atualizado: o `token` também é campo secreto da credencial Agentix.
+- **Verificação (14/10/2026):** install, lint, typecheck, unidade (863), build, integração (386: api 331, db 29, nodes 23, engine 3), E2E (51 de 51) e smoke, todos verdes. A primeira rodada da unidade falhou só no teste dos campos secretos acima, que esperava apenas a `apiKey`.
+- **Limite:** a plataforma não obtém nem renova o JWT; o token é colado na credencial e trocado antes de vencer. Se o Agentix emitir tokens por login (usuário de serviço ou client credentials), a renovação automática pode ser uma melhoria futura, como o token da Bridge.
+
 ## Correção após a implementação: erro 403 da Bridge em dev
 
 Relatado pelo PO ao testar em dev. O erro não mostrava a causa. Comparando a chamada real do nó (capturada num servidor local) com o exemplo da Bridge (`Bridge-Chat-Model/prompt/Prompt N8N.md`), o corpo já estava igual ao curl do exemplo. Os cabeçalhos não estavam, e foram corrigidos junto com os demais pontos:

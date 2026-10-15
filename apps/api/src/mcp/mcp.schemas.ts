@@ -33,6 +33,7 @@ export const mcpServerSchema = z.object({
   url: httpUrl,
   credentialId: z.uuid().nullable().optional(),
   projectId: z.uuid().nullable().optional(),
+  insecureTls: z.boolean().optional(),
 });
 export type McpServerBody = z.infer<typeof mcpServerSchema>;
 

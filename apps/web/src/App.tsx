@@ -17,6 +17,7 @@ import { AdminPage } from '@/pages/admin-page';
 import { AdminSsoPage } from '@/pages/admin-sso-page';
 import { ApprovalsPage } from '@/pages/approvals-page';
 import { AuthCallbackPage } from '@/pages/auth-callback-page';
+import { ChatPage } from '@/pages/chat-page';
 import { CredentialsPage } from '@/pages/credentials-page';
 import { ExecutionPage } from '@/pages/execution-page';
 import { ExecutionsPage } from '@/pages/executions-page';
@@ -35,6 +36,8 @@ const queryClient = new QueryClient({
 
 const router = createBrowserRouter([
   { path: '/auth/callback', element: <AuthCallbackPage /> },
+  // Spec 021, FR-003: página pública do chat publicado (a autenticação é a do nó).
+  { path: '/chat/:webhookId', element: <ChatPage /> },
   {
     element: <RequireAuth />,
     children: [

@@ -6,6 +6,7 @@ import {
   prepareClipboardPaste,
   removeElements,
   uniqueName,
+  withFreshWebhookId,
 } from './graph';
 
 const node = (id: string, name: string, x = 0): WorkflowNode => ({
@@ -76,5 +77,24 @@ describe('ícones do catálogo de nós', () => {
     expect(builtinNodes.map((n) => n.icon).filter((icon) => !KNOWN_ICONS.includes(icon))).toEqual(
       [],
     );
+  });
+});
+
+describe('spec 021 — identificador do Chat Trigger', () => {
+  it('FR-003: nó novo ou colado ganha outro webhookId; os demais nós ficam iguais', () => {
+    const chat: WorkflowNode = {
+      id: 'c',
+      type: 'trigger.chat',
+      name: 'Chat',
+      params: { webhookId: 'original-0001', public: true },
+      position: [0, 0],
+    };
+    const fresh = withFreshWebhookId(chat);
+    expect(fresh.params.webhookId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(fresh.params.public).toBe(true);
+    const other = node('s', 'Montar');
+    expect(withFreshWebhookId(other)).toBe(other);
+    const pasted = prepareClipboardPaste({ nodes: [chat], edges: [] }, [chat], () => 'novo');
+    expect(pasted.nodes[0]?.params.webhookId).not.toBe('original-0001');
   });
 });

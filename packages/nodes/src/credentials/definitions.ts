@@ -385,13 +385,17 @@ export const bridgeApiCredential: CredentialTypeDefinition = {
 };
 
 /** Spec 016, FR-008: Agentix, a plataforma interna de agentes (chave no cabeçalho `X-API-Key`). */
+/** Autenticações da credencial Agentix (spec 016, FR-008). */
+export const AGENTIX_AUTHENTICATIONS = ['apiKey', 'bearerJwt'] as const;
+
 export const agentixApiCredential: CredentialTypeDefinition = {
   name: 'agentixApi',
   displayName: 'Agentix',
-  description: 'Plataforma interna de agentes: a chave vai no cabeçalho X-API-Key.',
+  description:
+    'Plataforma interna de agentes: chave no cabeçalho X-API-Key ou token JWT em Authorization: Bearer.',
   properties: {
     type: 'object',
-    required: ['baseUrl', 'apiKey'],
+    required: ['baseUrl'],
     properties: {
       baseUrl: {
         type: 'string',
@@ -400,7 +404,23 @@ export const agentixApiCredential: CredentialTypeDefinition = {
           'URL base da API do Agentix (ex.: …/v1): o nó chama sessions/invoke e sessions/{id}. Endereços da rede interna são aceitos.',
         minLength: 1,
       },
-      apiKey: secret('Chave da API'),
+      // Spec 016, FR-008 (14/10/2026): sem o campo (credenciais antigas), vale a chave de API.
+      authentication: {
+        type: 'string',
+        title: 'Autenticação',
+        description:
+          '`apiKey`: chave no cabeçalho X-API-Key. `bearerJwt`: token JWT em Authorization: Bearer.',
+        enum: [...AGENTIX_AUTHENTICATIONS],
+        default: 'apiKey',
+      },
+      apiKey: secret('Chave da API', {
+        'x-display-options': { show: { authentication: ['apiKey'] } },
+      } as JSONSchema7),
+      token: secret('Token JWT', {
+        description:
+          'Enviado como Authorization: Bearer <token>. Com a validade (exp) vencida, o nó falha antes de chamar o Agentix: atualize o token aqui.',
+        'x-display-options': { show: { authentication: ['bearerJwt'] } },
+      } as JSONSchema7),
       allowUnauthorizedCerts: insecureTlsField,
     },
   },

@@ -82,6 +82,32 @@ describe('spec 010 — FR-004/FR-006: cliente MCP', () => {
     ).rejects.toThrow(/bloqueado pelo filtro de rede/);
   });
 
+  it('FR-004 (Histórico 14/10/2026): o erro de conexão mostra a causa e o fetch do servidor prevalece', async () => {
+    const tlsError: GuardedFetch = () =>
+      Promise.reject(
+        new TypeError('fetch failed', {
+          cause: new Error('self-signed certificate in certificate chain'),
+        }),
+      );
+    await expect(
+      McpConnection.open(
+        { serverId: 's', transport: 'streamableHttp', url: 'https://mcp.interno/mcp' },
+        settings({ fetch: guardedFetchLike(tlsError, 1024) }),
+      ),
+    ).rejects.toThrow(/fetch failed \(self-signed certificate in certificate chain\)/);
+    // `config.fetch` (ex.: servidor com TLS não verificado) substitui o das configurações.
+    const conn = await McpConnection.open(
+      {
+        serverId: 's',
+        transport: 'streamableHttp',
+        url: `${server.url}/mcp`,
+        fetch: guardedFetchLike(recordingGuard, 1024 * 1024),
+      },
+      settings({ fetch: guardedFetchLike(tlsError, 1024) }),
+    );
+    await conn.close();
+  });
+
   it('FR-006: o pool reaproveita a conexão (um único initialize)', async () => {
     requested.length = 0;
     const listed: McpToolDefinition[][] = [];

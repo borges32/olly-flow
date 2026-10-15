@@ -34,7 +34,9 @@ Invoca um **agente ou workflow do Agentix**, a plataforma interna de agentes, e 
 | Campo | Descrição |
 |---|---|
 | `baseUrl` | Raiz da API do Agentix, com o caminho da API (ex.: `https://<host>/v2/api`). Obrigatória, **sem valor padrão**. Se for colada com o endpoint (`…/sessions/invoke`), o nó usa a raiz |
-| `apiKey` | Chave da API (secreta), enviada no cabeçalho `X-API-Key` |
+| `authentication` | `apiKey` (padrão): chave no cabeçalho `X-API-Key`. `bearerJwt`: token JWT no cabeçalho `Authorization: Bearer <token>`. Credenciais criadas antes de 14/10/2026, sem o campo, valem como `apiKey` |
+| `apiKey` | Chave da API (secreta), com `authentication: "apiKey"` |
+| `token` | Token JWT (secreto), com `authentication: "bearerJwt"`. Se o token tiver validade (`exp`) vencida, o nó falha antes de chamar o Agentix: `O token JWT da credencial Agentix expirou em <data>: atualize o token na credencial`. Um token que não seja JWT é enviado sem essa conferência. A plataforma não renova o token: troque-o na credencial antes de vencer |
 | `allowUnauthorizedCerts` | Não verificar o certificado TLS (padrão desligado) |
 
 **Testar** não está disponível: como no N8N, o Agentix não tem um endpoint só de validação, e a credencial é validada na primeira execução.
@@ -57,14 +59,14 @@ Invoca um **agente ou workflow do Agentix**, a plataforma interna de agentes, e 
 - **Erros (FR-010):**
   - tempo limite: cita o último estado e como aumentar o tempo;
   - falha transitória na consulta: tolerada até `maxPollErrors` erros seguidos;
-  - resposta fora de 2xx: `Chamada ao Agentix falhou: <método> <endereço> respondeu <status> (<motivo>)`, com o `detail` do Agentix e o endereço chamado (sem a chave). Em 401 e 403, a mensagem pede para conferir a chave e a URL base;
+  - resposta fora de 2xx: `Chamada ao Agentix falhou: <método> <endereço> respondeu <status> (<motivo>)`, com o `detail` do Agentix e o endereço chamado (sem a chave). Em 401 e 403, a mensagem pede para conferir a chave (ou o token JWT) e a URL base;
   - payload ou constantes que não sejam um objeto JSON: erro no item, citando o parâmetro;
   - propriedade do payload sem nome: erro no item, citando a posição (`propriedade #2 sem nome`).
 - **Tratamento de erro por item:** "continuar" emite `{ error }` no lugar do item que falhou e segue com os demais; "saída de erro" desvia o item para a porta `error`.
 - **Rede (FR-013):** as chamadas passam pelo filtro anti-SSRF, mas **aceitam endereços de rede privada sem a allowlist**. Loopback, link-local (inclusive o endereço de metadados da nuvem) e protocolos diferentes de HTTP e HTTPS continuam barrados.
 - **TLS (FR-008):** `allowUnauthorizedCerts` vale só para as chamadas desta credencial.
-- **Segredos (FR-014):** a chave nunca aparece em logs, dados de execução ou respostas da API.
-- **Cabeçalhos:** `X-API-Key`, `Accept: application/json` e `User-Agent: Olly-Flow/1.0 (agentix)` (o `fetch` enviaria `undici`, que WAFs e gateways corporativos costumam barrar com 403).
+- **Segredos (FR-014):** a chave e o token nunca aparecem em logs, dados de execução ou respostas da API.
+- **Cabeçalhos:** `X-API-Key` (ou `Authorization: Bearer`), `Accept: application/json` e `User-Agent: Olly-Flow/1.0 (agentix)` (o `fetch` enviaria `undici`, que WAFs e gateways corporativos costumam barrar com 403).
 
 ## Erro 403
 

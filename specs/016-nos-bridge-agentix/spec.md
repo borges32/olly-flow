@@ -18,7 +18,7 @@ Na POC, a instituição criou dois nós customizados para o N8N (projeto `Bridge
    - o **modelo vai no endereço**, e não no corpo: `<URL base>/deployments/{modelo}/chat/completions`;
    - a autenticação é por um **token de curta duração (~20 minutos)**, obtido num endpoint de login com identificador e senha de um usuário de serviço. A resposta do login traz o token no campo `token`;
    - o campo `model` não consta no corpo documentado da Bridge.
-2. **Agentix:** nó que **invoca um agente ou workflow do Agentix**, a plataforma interna de agentes, e devolve a resposta ao fluxo. Autentica-se por uma chave de API no cabeçalho `X-API-Key`. A chamada é assíncrona:
+2. **Agentix:** nó que **invoca um agente ou workflow do Agentix**, a plataforma interna de agentes, e devolve a resposta ao fluxo. Autentica-se por uma chave de API no cabeçalho `X-API-Key` ou por um token JWT no cabeçalho `Authorization: Bearer`. A chamada é assíncrona:
    1. `POST sessions/invoke` cria uma sessão e devolve `session_id`;
    2. `GET sessions/{session_id}` é consultado até o campo `state` indicar o fim:
       - `DONE` termina com sucesso;
@@ -122,10 +122,12 @@ Como **editor**, quero importar workflows do N8N que usam os nós customizados, 
   - saída ("resposta final" ou "todas as mensagens");
   - opções: intervalo da consulta (padrão 3 s), **tempo limite configurável no nó** (padrão 600 s; 0 = sem limite próprio, valendo os limites do nó e do workflow), erros de consulta seguidos tolerados (padrão 3) e incluir os detalhes da sessão.
 - **FR-008**: DEVE existir o tipo de credencial **Agentix**, com:
-  - URL base e chave de API (secreta), obrigatórias e **sem valor padrão**;
+  - URL base, obrigatória e **sem valor padrão**;
+  - **autenticação**: "Chave de API" (padrão) ou "Bearer JWT";
+  - a chave de API ou o token JWT (secretos, sem valor padrão), conforme a autenticação;
   - **não verificar o certificado TLS** (padrão desligado).
 
-  A chave DEVE ir no cabeçalho `X-API-Key` de todas as chamadas.
+  A chave DEVE ir no cabeçalho `X-API-Key`, e o token, em `Authorization: Bearer <token>`, em todas as chamadas. Com um JWT expirado (claim `exp`), o nó DEVE falhar antes de chamar o Agentix, com a data de expiração na mensagem. Credenciais anteriores, sem a autenticação, continuam como "Chave de API".
 - **FR-009**: O nó Agentix DEVE, para cada item:
   1. criar a sessão com os parâmetros (`entity_type`, `entity_name`, `entity_version`, `bundle`, `version`, `payload`, `constants`);
   2. com a espera ligada, consultar a sessão dentro do próprio nó até um estado final e buscar as mensagens;
@@ -147,14 +149,14 @@ Como **editor**, quero importar workflows do N8N que usam os nós customizados, 
 
 - **Credencial Bridge:** endereço de login, URL base, identificador, senha e margem de renovação.
 - **Token da Bridge:** credencial de acesso de curta duração, obtida pelo login, reaproveitada e renovada pela plataforma; nunca guardada em dados de execução.
-- **Credencial Agentix:** URL base e chave de API.
+- **Credencial Agentix:** URL base, autenticação (chave de API ou Bearer JWT) e o segredo correspondente.
 - **Sessão do Agentix:** execução assíncrona de um agente ou workflow, com identificador, estado, mensagens e uso de tokens.
 
 ## Critérios de sucesso
 
 - **SC-001**: Com a Bridge simulada, um Agent com o Bridge Chat Model conclui uma conversa com chamada de ferramenta. Verificam-se o endereço com o modelo, o token, a ausência de `model` no corpo, o streaming e o uso de tokens registrado, também com um servidor de certificado autoassinado e a verificação desligada, e com o serviço num endereço de rede privada sem liberação da instalação.
 - **SC-002**: Com a Bridge simulada, uma execução que atravessa a expiração do token e uma resposta 401 termina com sucesso, com um login por ciclo.
-- **SC-003**: Com o Agentix simulado, o nó cobre: as duas saídas, a espera desligada, os três estados de falha, o tempo limite, a falha transitória tolerada e a não tolerada, a chave inválida e o "continuar" por item.
+- **SC-003**: Com o Agentix simulado, o nó cobre: as duas saídas, a espera desligada, os três estados de falha, o tempo limite, a falha transitória tolerada e a não tolerada, a chave inválida, o token JWT (válido, recusado e expirado) e o "continuar" por item.
 - **SC-004**: Nenhuma senha, chave ou token aparece em logs, respostas, dados de execução, auditoria ou telemetria (busca por valores sentinela).
 - **SC-005**: Um workflow do N8N com os dois nós customizados é importado sem nós marcadores.
 - **SC-006**: Validação manual em homologação com a Bridge e o Agentix reais, depois da liberação de acesso.
@@ -191,3 +193,4 @@ Como **editor**, quero importar workflows do N8N que usam os nós customizados, 
 | 07/10/2026 | Correção da Bridge após erro 403 em dev, a partir do exemplo da Bridge (`prompt/Prompt N8N.md`): casos de borda "recusa persistente (401/403)", "URL base colada com o endpoint" e "campos extras na resposta" | Correção de bug |
 | 07/10/2026 | Correção do Agentix após erro 403 em dev, a partir do exemplo da API (`prompt/Agentix`): casos de borda "criação já recusada" (`status` na criação), "URL base colada com o endpoint" e "recusa da chamada (401/403)" | Correção de bug |
 | 13/10/2026 | Payload do Agentix por lista de propriedades (nome e valor, texto fixo ou expressão), como no nó customizado de referência (`Bridge-Chat-Model`, Agentix 1.1): modo do payload "campos" (padrão nos nós novos) ou "JSON" (nós existentes, migrados na leitura); caso de borda da propriedade sem nome; FR-007 e FR-012 | Melhoria pedida pelo PO |
+| 14/10/2026 | Credencial Agentix com autenticação por Bearer JWT, além da chave de API (FR-008, SC-003; entidade): token em `Authorization: Bearer`, falha antes da chamada com o JWT expirado, credenciais antigas seguem como chave de API | Pedido do PO: o Agentix também aceita Bearer JWT |

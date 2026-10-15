@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { createServer as createHttpsServer } from 'node:https';
 import type { AddressInfo } from 'node:net';
 import { McpServer, type RegisteredTool } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
@@ -24,6 +25,8 @@ export interface McpTestServerOptions {
   /** Altera o schema e a descrição de `soma` (teste de snapshot, FR-003). */
   mutateSchema?: boolean;
   auth?: McpTestAuth;
+  /** HTTPS com este certificado (ex.: autoassinado, teste de "não verificar o certificado TLS"). */
+  tls?: { cert: string; key: string };
 }
 
 export type McpTestAuth =
@@ -277,12 +280,13 @@ export async function startMcpTestServer(
     }
   }
 
-  const server = createServer((req, res) => {
+  const listener = (req: IncomingMessage, res: ServerResponse) => {
     void handle(req, res).catch((error: unknown) => {
       if (!res.headersSent) res.statusCode = 500;
       res.end(String(error));
     });
-  });
+  };
+  const server = options.tls ? createHttpsServer(options.tls, listener) : createServer(listener);
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const url = new URL(req.url ?? '/', base);
@@ -368,7 +372,7 @@ export async function startMcpTestServer(
     server.listen(options.port ?? 0, options.host ?? '127.0.0.1', resolve),
   );
   const address = server.address() as AddressInfo;
-  base = `http://${options.host === '0.0.0.0' ? '127.0.0.1' : (options.host ?? '127.0.0.1')}:${address.port}`;
+  base = `${options.tls ? 'https' : 'http'}://${options.host === '0.0.0.0' ? '127.0.0.1' : (options.host ?? '127.0.0.1')}:${address.port}`;
   if (process.env.MCP_PUBLIC_URL) base = process.env.MCP_PUBLIC_URL.replace(/\/+$/, '');
 
   return {

@@ -83,6 +83,7 @@ function ServerDialog({ editing, onClose }: { editing: McpServer | null; onClose
     url: editing?.url ?? '',
     credentialId: editing?.credentialId ?? null,
     projectId: editing?.projectId ?? null,
+    insecureTls: editing?.insecureTls ?? false,
   });
   const set = (patch: Partial<McpServerInput>) => {
     setForm((prev) => ({ ...prev, ...patch }));
@@ -165,7 +166,8 @@ function ServerDialog({ editing, onClose }: { editing: McpServer | null; onClose
               ))}
             </Select>
             <p className="text-xs text-muted-foreground">
-              Somente servidores via HTTP nesta versão. O endereço passa pelo filtro anti-SSRF.
+              Somente servidores via HTTP nesta versão. Aceita endereços internos e externos; o
+              filtro de rede barra só os metadados da nuvem e endereços não roteáveis.
             </p>
           </div>
           <div className="grid gap-1.5">
@@ -179,6 +181,27 @@ function ServerDialog({ editing, onClose }: { editing: McpServer | null; onClose
                 set({ url: e.target.value });
               }}
             />
+          </div>
+          <div className="grid gap-1.5">
+            <label
+              className="flex items-center gap-2 text-sm font-medium"
+              htmlFor="mcp-insecure-tls"
+            >
+              <input
+                id="mcp-insecure-tls"
+                type="checkbox"
+                className="size-4 accent-primary"
+                checked={form.insecureTls ?? false}
+                onChange={(e) => {
+                  set({ insecureTls: e.target.checked });
+                }}
+              />
+              Não verificar o certificado TLS
+            </label>
+            <p className="text-xs text-muted-foreground">
+              Conecta mesmo que o certificado do servidor não possa ser verificado (ex.: CA
+              interna). Deixa a conexão exposta a interceptação: prefira instalar a CA interna.
+            </p>
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor="mcp-scope">Escopo</Label>
@@ -633,6 +656,7 @@ export function AdminMcpPage() {
                           <span className="font-mono text-xs">{s.url}</span>
                           <p className="text-xs text-muted-foreground">
                             {TRANSPORT_LABELS[s.transport]}
+                            {s.insecureTls && ' · TLS não verificado'}
                           </p>
                         </td>
                         <td className="px-3 py-2">{projectName(s.projectId)}</td>

@@ -72,8 +72,11 @@ export function useTestRun(workflowId: string) {
     };
     const onFinished = (e: ExecutionFinishedEvent) => {
       dispatch(e.executionId, () => {
+        // Spec 021: no chat, a resposta (ou o erro) já aparece no painel.
+        const quiet = store().run.fromChat === true;
         store().runFinished(e);
         finishWithDetail(e.executionId);
+        if (quiet) return;
         if (e.status === 'success') toast.success('Execução concluída');
         else if (e.status === 'cancelled')
           toast.warning('Execução interrompida', { description: e.error?.message });

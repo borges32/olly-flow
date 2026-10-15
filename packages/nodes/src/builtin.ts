@@ -35,6 +35,7 @@ import { respondToWebhookNode } from './http/respond-to-webhook/definition.js';
 import { errorTrigger } from './trigger/error/definition.js';
 import { manualTrigger } from './trigger/manual/definition.js';
 import { webhookTrigger } from './trigger/webhook/definition.js';
+import { chatTrigger } from './trigger/chat/definition.js';
 import type { NodeDefinition } from './types.js';
 
 /** Dependências dos nós de integração (spec 004, plan §10): a API passa as da sua configuração. */
@@ -100,6 +101,8 @@ export function createBuiltinNodes(options: BuiltinNodeOptions = {}): NodeDefini
     chainLlmNode,
     // Spec 018: output parsers.
     ...outputParserNodes,
+    // Spec 021: gatilho de chat.
+    chatTrigger,
   ];
 }
 

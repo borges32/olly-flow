@@ -16,6 +16,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
   ChartGantt,
+  MessageCircle,
   ClipboardCopy,
   Download,
   Eye,
@@ -50,6 +51,7 @@ import { NodeDetailsView } from './ndv/node-details-view';
 import { useEditorStore } from './store';
 import { NodeActionsContext, type NodeActions } from './node-actions';
 import { PublishControls } from './publish-controls';
+import { LogsPanel } from './logs-panel';
 import { ExecutionTimeline } from './execution-timeline';
 import { timelineRows } from './timeline';
 import { useCancelExecution, useTestRun } from './use-test-run';
@@ -175,6 +177,8 @@ export function Editor({
   const cancelExecution = useCancelExecution();
   const [ndvNodeId, setNdvNodeId] = useState<string | null>(null);
   const [showTimeline, setShowTimeline] = useState(false);
+  // Spec 021, FR-002/FR-016: painel inferior com os logs (e o chat, com o Chat Trigger).
+  const [logsOpen, setLogsOpen] = useState(false);
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
   // Spec 009 (FR-008 a FR-010): histórico e comparação visual (canvas somente leitura).
   const [showHistory, setShowHistory] = useState(false);
@@ -183,6 +187,7 @@ export function Editor({
 
   const state = useEditorStore();
   const { nodes, edges, selection, errors, warnings, dirty, name, run, pinData } = state;
+  const hasChatTrigger = nodes.some((n) => n.type === 'trigger.chat' && !n.disabled);
   const typesByName = useMemo(() => new Map(types.map((t) => [t.type, t])), [types]);
   // Spec 015: credenciais do projeto (copiar e colar nós no formato do arquivo).
   const credentialsQuery = useCredentials(workflow.projectId, canUpdate);
@@ -720,6 +725,19 @@ export function Editor({
             <Square /> Parar execução
           </Button>
         )}
+        {canExecute && hasChatTrigger && (
+          <Button
+            size="sm"
+            variant={logsOpen ? 'secondary' : 'outline'}
+            aria-pressed={logsOpen}
+            onClick={() => {
+              setLogsOpen((v) => !v);
+            }}
+            title="Conversar com o workflow: cada mensagem executa em modo teste"
+          >
+            <MessageCircle /> Abrir chat
+          </Button>
+        )}
         {canExecute && (
           <Button
             size="sm"
@@ -757,93 +775,103 @@ export function Editor({
             }}
           />
         )}
-        <div
-          ref={canvasRef}
-          className="relative min-w-0 flex-1"
-          data-testid="canvas"
-          onDragOver={(e) => {
-            if (!locked) e.preventDefault();
-          }}
-          onDrop={onDrop}
-        >
-          <NodeActionsContext.Provider value={nodeActions}>
-            <ReactFlow<OllyFlowNode, OllyFlowEdge>
-              nodes={flowNodes}
-              edges={flowEdges}
-              nodeTypes={nodeTypes}
-              edgeTypes={edgeTypes}
-              onEdgeMouseEnter={(_e, edge) => {
-                setHoveredEdgeId(edge.id);
-              }}
-              onEdgeMouseLeave={() => {
-                setHoveredEdgeId(null);
-              }}
-              onNodesChange={onNodesChange}
-              onEdgesChange={onEdgesChange}
-              onConnect={onConnect}
-              onNodeDragStart={() => {
-                state.checkpoint();
-              }}
-              onNodeDoubleClick={(_e, n) => {
-                if (!diffView) setNdvNodeId(n.id);
-              }}
-              isValidConnection={(c) =>
-                c.source !== c.target &&
-                (!c.sourceHandle ||
-                  !c.targetHandle ||
-                  connectionRejection(typesByName, nodes, edges, {
-                    from: c.source,
-                    fromPort: c.sourceHandle,
-                    to: c.target,
-                    toPort: c.targetHandle,
-                  }) === null)
-              }
-              nodesDraggable={!locked}
-              nodesConnectable={!locked}
-              deleteKeyCode={null}
-              // Clique duplo abre o painel do nó (como no N8N), não dá zoom.
-              zoomOnDoubleClick={false}
-              colorMode={theme}
-              fitView
-              fitViewOptions={{ padding: 0.3, maxZoom: 1 }}
-              proOptions={{ hideAttribution: true }}
-            >
-              <Background />
-              <Controls showInteractive={false} />
-              <MiniMap pannable zoomable />
-            </ReactFlow>
-          </NodeActionsContext.Provider>
-          {nodes.length === 0 && (
-            <p className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
-              {readOnly ? 'Workflow vazio.' : 'Adicione um nó pela paleta à esquerda.'}
-            </p>
-          )}
-          {showTimeline && (
-            <div className="absolute inset-x-0 bottom-0 z-10 max-h-[40%] overflow-auto border-t bg-card shadow-lg">
-              <div className="flex items-center justify-between border-b px-3 py-1.5 text-sm font-medium">
-                Linha do tempo
-                <span className="text-xs font-normal text-muted-foreground">
-                  {timeline.length} {timeline.length === 1 ? 'nó' : 'nós'}
-                </span>
-              </div>
-              <ExecutionTimeline rows={timeline} />
-            </div>
-          )}
-          {diffView && (
-            <div
-              className="pointer-events-none absolute top-2 left-1/2 z-10 -translate-x-1/2 rounded-full border bg-card px-3 py-1 text-xs shadow"
-              data-testid="diff-banner"
-            >
-              Comparando v{diffView.diff.from} com v{diffView.diff.to} · somente leitura
-            </div>
-          )}
-          <IssuesPanel
-            errors={errors}
-            warnings={warnings}
-            nodes={nodes}
-            onSelect={(nodeIds) => {
-              state.setSelection({ nodeIds, edgeIds: [] });
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div
+            ref={canvasRef}
+            className="relative min-h-0 flex-1"
+            data-testid="canvas"
+            onDragOver={(e) => {
+              if (!locked) e.preventDefault();
             }}
+            onDrop={onDrop}
+          >
+            <NodeActionsContext.Provider value={nodeActions}>
+              <ReactFlow<OllyFlowNode, OllyFlowEdge>
+                nodes={flowNodes}
+                edges={flowEdges}
+                nodeTypes={nodeTypes}
+                edgeTypes={edgeTypes}
+                onEdgeMouseEnter={(_e, edge) => {
+                  setHoveredEdgeId(edge.id);
+                }}
+                onEdgeMouseLeave={() => {
+                  setHoveredEdgeId(null);
+                }}
+                onNodesChange={onNodesChange}
+                onEdgesChange={onEdgesChange}
+                onConnect={onConnect}
+                onNodeDragStart={() => {
+                  state.checkpoint();
+                }}
+                onNodeDoubleClick={(_e, n) => {
+                  if (!diffView) setNdvNodeId(n.id);
+                }}
+                isValidConnection={(c) =>
+                  c.source !== c.target &&
+                  (!c.sourceHandle ||
+                    !c.targetHandle ||
+                    connectionRejection(typesByName, nodes, edges, {
+                      from: c.source,
+                      fromPort: c.sourceHandle,
+                      to: c.target,
+                      toPort: c.targetHandle,
+                    }) === null)
+                }
+                nodesDraggable={!locked}
+                nodesConnectable={!locked}
+                deleteKeyCode={null}
+                // Clique duplo abre o painel do nó (como no N8N), não dá zoom.
+                zoomOnDoubleClick={false}
+                colorMode={theme}
+                fitView
+                fitViewOptions={{ padding: 0.3, maxZoom: 1 }}
+                proOptions={{ hideAttribution: true }}
+              >
+                <Background />
+                <Controls showInteractive={false} />
+                <MiniMap pannable zoomable />
+              </ReactFlow>
+            </NodeActionsContext.Provider>
+            {nodes.length === 0 && (
+              <p className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
+                {readOnly ? 'Workflow vazio.' : 'Adicione um nó pela paleta à esquerda.'}
+              </p>
+            )}
+            {showTimeline && (
+              <div className="absolute inset-x-0 bottom-0 z-10 max-h-[40%] overflow-auto border-t bg-card shadow-lg">
+                <div className="flex items-center justify-between border-b px-3 py-1.5 text-sm font-medium">
+                  Linha do tempo
+                  <span className="text-xs font-normal text-muted-foreground">
+                    {timeline.length} {timeline.length === 1 ? 'nó' : 'nós'}
+                  </span>
+                </div>
+                <ExecutionTimeline rows={timeline} />
+              </div>
+            )}
+            {diffView && (
+              <div
+                className="pointer-events-none absolute top-2 left-1/2 z-10 -translate-x-1/2 rounded-full border bg-card px-3 py-1 text-xs shadow"
+                data-testid="diff-banner"
+              >
+                Comparando v{diffView.diff.from} com v{diffView.diff.to} · somente leitura
+              </div>
+            )}
+            <IssuesPanel
+              errors={errors}
+              warnings={warnings}
+              nodes={nodes}
+              onSelect={(nodeIds) => {
+                state.setSelection({ nodeIds, edgeIds: [] });
+              }}
+            />
+          </div>
+          <LogsPanel
+            workflowId={workflow.id}
+            hasChat={hasChatTrigger}
+            canExecute={canExecute}
+            open={logsOpen}
+            onOpenChange={setLogsOpen}
+            typesByName={typesByName}
           />
         </div>
         {showHistory && !execution && (

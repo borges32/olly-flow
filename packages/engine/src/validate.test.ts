@@ -194,3 +194,50 @@ describe('spec 007 — FR-001: números dentro da faixa do parâmetro', () => {
     ).toEqual([{ path: 'regras[1].peso', value: 3, minimum: 0, maximum: 1 }]);
   });
 });
+
+describe('spec 021 — validação do Chat Trigger', () => {
+  const chat = (id: string, params: Record<string, unknown> = {}): WorkflowNode => ({
+    ...node(id, 'trigger.chat'),
+    params,
+  });
+  it('FR-010: dois gatilhos de chat habilitados são erro; desabilitado não conta', () => {
+    const two = validateWorkflow(def([chat('c1'), chat('c2')], []), registry);
+    expect(two.errors).toEqual([
+      expect.objectContaining({ code: 'CHAT_TRIGGER_DUPLICATE', nodeIds: ['c1', 'c2'] }),
+    ]);
+    const one = validateWorkflow(
+      def([chat('c1'), { ...chat('c2'), disabled: true }], []),
+      registry,
+    );
+    expect(one.errors.map((e) => e.code)).not.toContain('CHAT_TRIGGER_DUPLICATE');
+  });
+
+  it('FR-006: "Da memória" sem memória ligada é erro; com a memória, não', () => {
+    const params = { options: { loadPreviousSession: 'memory' } };
+    const missing = validateWorkflow(def([chat('c', params)], []), registry);
+    expect(missing.errors).toEqual([
+      expect.objectContaining({ code: 'AGENT_MODEL_REQUIRED', nodeIds: ['c'] }),
+    ]);
+    const ok = validateWorkflow(
+      def(
+        [chat('c', params), node('mem', 'memory.postgres')],
+        [edge('mem', 'c', 'ai_memory', 'ai_memory')],
+      ),
+      registry,
+    );
+    expect(ok.errors).toEqual([]);
+  });
+
+  it('FR-015: memória temporária num workflow com Chat Trigger gera aviso', () => {
+    const result = validateWorkflow(
+      def(
+        [chat('c'), node('ag', 'ai.agent'), node('buf', 'memory.buffer')],
+        [edge('c', 'ag'), edge('buf', 'ag', 'ai_memory', 'ai_memory')],
+      ),
+      registry,
+    );
+    expect(result.warnings).toEqual([
+      expect.objectContaining({ code: 'CHAT_BUFFER_MEMORY', nodeIds: ['buf'] }),
+    ]);
+  });
+});

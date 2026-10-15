@@ -33,6 +33,7 @@ function toServer(row: McpServerRow): McpServer {
     url: row.url,
     credentialId: row.credential_id,
     projectId: row.project_id,
+    insecureTls: row.insecure_tls,
     status: row.status,
     serverInfo: (row.server_info ?? null) as McpServerInfo | null,
     pendingDiff: (row.snapshot_pending_diff ?? null) as McpSnapshotDiff | null,
@@ -139,6 +140,7 @@ export class McpCatalogService {
             url: body.url,
             credential_id: body.credentialId ?? null,
             project_id: body.projectId ?? null,
+            insecure_tls: body.insecureTls ?? false,
             created_by: ctx.userId,
           })
           .returningAll()
@@ -152,6 +154,7 @@ export class McpCatalogService {
             transport: saved.transport,
             url: saved.url,
             projectId: saved.project_id,
+            insecureTls: saved.insecure_tls,
           },
         });
         return saved;
@@ -184,6 +187,7 @@ export class McpCatalogService {
             url: body.url,
             credential_id: body.credentialId ?? null,
             project_id: body.projectId ?? null,
+            insecure_tls: body.insecureTls ?? false,
             updated_at: new Date(),
             ...(reapprove && {
               status: 'pending' as const,
@@ -200,7 +204,12 @@ export class McpCatalogService {
           action: 'mcp.server_update',
           entityType: 'mcp_server',
           entityId: id,
-          details: { name: saved.name, url: saved.url, reapprovalRequired: reapprove },
+          details: {
+            name: saved.name,
+            url: saved.url,
+            insecureTls: saved.insecure_tls,
+            reapprovalRequired: reapprove,
+          },
         });
         return saved;
       })

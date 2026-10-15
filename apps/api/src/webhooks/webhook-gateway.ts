@@ -1,10 +1,11 @@
 import { ollyMetrics } from '@olly/telemetry';
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { ipInList, verifyWebhookAuth, type WebhookResponse } from '@olly/nodes';
-import type { Item, WorkflowNode } from '@olly/shared-types';
+import { chatSettings, ipInList, verifyWebhookAuth } from '@olly/nodes';
+import { CHAT_TRIGGER_TYPE, type Item, type WorkflowNode } from '@olly/shared-types';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { BINARY_STORAGE } from '../binary/binary.module.js';
+import { ChatService, type ChatTarget } from '../chat/chat.service.js';
 import type { S3BinaryStorage } from '../binary/s3-binary-store.js';
 import { APP_CONFIG, type AppConfig } from '../config/config.js';
 import { CredentialsService } from '../credentials/credentials.service.js';
@@ -13,6 +14,7 @@ import { ExecutionEventsService } from '../executions/execution-events.service.j
 import type { ExecutionOutcome } from '../executions/execution-job.js';
 import { ExecutionsService } from '../executions/executions.service.js';
 import { normalizePath } from './paths.js';
+import { sendWebhookResponse } from './webhook-response.js';
 import { FixedWindowLimiter } from './rate-limiter.js';
 import { TestListeners } from './test-listeners.js';
 import { WebhookRegistry } from './webhook-registry.js';
@@ -29,6 +31,8 @@ interface Resolved {
   /** Teste parado no Webhook: responde na hora, sem esperar os nós seguintes (HU-2.1). */
   stopAtNode: boolean;
   launch(item: Item): Promise<{ executionId: string }>;
+  /** Rota de produção (o chat da spec 021 precisa do workflow publicado). */
+  target?: ChatTarget;
 }
 
 /** O texto como objeto ou lista JSON, se for um; senão `undefined` (texto comum continua texto). */
@@ -69,6 +73,7 @@ export class WebhookGateway {
     @Inject(ExecutionEventsService) private readonly events: ExecutionEventsService,
     @Inject(CredentialsService) private readonly credentials: CredentialsService,
     @Inject(BINARY_STORAGE) private readonly binaries: S3BinaryStorage | null,
+    @Inject(ChatService) private readonly chat: ChatService,
   ) {}
 
   /** Registra as rotas num escopo do Fastify que recebe o corpo cru (HMAC sobre os bytes). */
@@ -151,6 +156,7 @@ export class WebhookGateway {
       workflowId: r.workflow.id,
       rateKey: `prod:${r.key}`,
       stopAtNode: false,
+      target: { key: r.key, workflow: r.workflow, definition: r.definition, node: r.node },
       launch: (item) =>
         this.executions.launch({
           workflow: r.workflow,
@@ -177,10 +183,14 @@ export class WebhookGateway {
       return;
     }
     const options = (resolved.node.params.options ?? {}) as Record<string, unknown>;
+    // Spec 021: rotas do chat publicado (`<webhookId>/chat`), com as origens padrão do chat.
+    const isChat = resolved.node.type === CHAT_TRIGGER_TYPE;
 
     // CORS (FR-006).
     const origin = str(req.headers.origin);
-    const origins = list(options.allowedOrigins);
+    const origins = list(
+      isChat ? chatSettings(resolved.node).options.allowedOrigins : options.allowedOrigins,
+    );
     if (origin && (origins.includes('*') || origins.includes(origin))) {
       void reply
         .header('access-control-allow-origin', origins.includes('*') ? '*' : origin)
@@ -189,12 +199,21 @@ export class WebhookGateway {
     if (method === 'OPTIONS') {
       await reply
         .code(204)
-        .header('access-control-allow-methods', str(resolved.node.params.httpMethod) || 'POST')
+        .header(
+          'access-control-allow-methods',
+          isChat ? 'GET, POST' : str(resolved.node.params.httpMethod) || 'POST',
+        )
         .header(
           'access-control-allow-headers',
           str(req.headers['access-control-request-headers']) || '*',
         )
         .send();
+      return;
+    }
+
+    if (isChat && resolved.target) {
+      const body = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+      await this.chat.handlePublic(req, reply, resolved.target, body);
       return;
     }
 
@@ -350,7 +369,7 @@ export class WebhookGateway {
       return;
     }
     if (result.kind === 'response') {
-      await this.sendResponse(reply, result.response, executionId);
+      await sendWebhookResponse(reply, result.response, executionId, this.binaries);
       return;
     }
     await this.sendOutcome(reply, result.outcome, mode, executionId);
@@ -381,41 +400,5 @@ export class WebhookGateway {
       return;
     }
     await reply.code(200).send(outcome.lastOutput?.[0]?.json ?? {});
-  }
-
-  /** Resposta do nó "Responder ao webhook" (FR-008). */
-  private async sendResponse(
-    reply: FastifyReply,
-    response: WebhookResponse,
-    executionId: string,
-  ): Promise<void> {
-    void reply.code(response.statusCode);
-    for (const [name, value] of Object.entries(response.headers)) void reply.header(name, value);
-    const body = response.body;
-    if (!body) {
-      await reply.send();
-      return;
-    }
-    if (body.kind === 'json') {
-      if (!reply.hasHeader('content-type'))
-        void reply.header('content-type', 'application/json; charset=utf-8');
-      await reply.send(JSON.stringify(body.value ?? null));
-      return;
-    }
-    if (body.kind === 'text') {
-      if (!reply.hasHeader('content-type'))
-        void reply.header('content-type', 'text/plain; charset=utf-8');
-      await reply.send(body.value);
-      return;
-    }
-    if (!this.binaries) {
-      await reply
-        .code(500)
-        .send({ message: 'Armazenamento de binários não configurado', executionId });
-      return;
-    }
-    const data = await this.binaries.get(body.ref);
-    if (!reply.hasHeader('content-type')) void reply.header('content-type', body.ref.mimeType);
-    await reply.send(Buffer.from(data));
   }
 }

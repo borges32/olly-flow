@@ -122,6 +122,35 @@ const ACTIONS: Action[] = [
     },
   },
   {
+    // Spec 021, FR-002: painel de chat do editor (a resposta usa a mesma permissão).
+    name: 'Conversar pelo painel de chat (teste)',
+    permission: 'workflow:execute',
+    run: async (u) => {
+      const wf = await newWorkflow();
+      const chat: WorkflowDefinition = {
+        nodes: [
+          {
+            id: 'chat',
+            type: 'trigger.chat',
+            name: 'Chat',
+            params: { webhookId: 'c0ffee00-rbac' },
+            position: [0, 0],
+          },
+        ],
+        edges: [],
+        settings: {},
+      };
+      const res = await u.call('POST', `/workflows/${wf.id}/chat/test`, {
+        definition: chat,
+        sessionId: `rbac-${Math.random()}`,
+        chatInput: 'Oi',
+      });
+      if (!ok(res.statusCode)) return false;
+      const { executionId: id } = res.json<{ executionId: string }>();
+      return ok((await u.call('GET', `/workflows/${wf.id}/chat/test/${id}/reply`)).statusCode);
+    },
+  },
+  {
     name: 'Publicar e despublicar',
     permission: 'workflow:publish',
     run: async (u) => {

@@ -11,7 +11,7 @@ import { useEditorStore } from './store';
 const pathOf = (node: WorkflowNode) =>
   (typeof node.params.path === 'string' ? node.params.path : '').trim().replace(/^\/+|\/+$/g, '');
 
-function UrlRow({ label, url, testId }: { label: string; url: string; testId: string }) {
+export function UrlRow({ label, url, testId }: { label: string; url: string; testId: string }) {
   return (
     <div className="grid gap-1">
       <span className="text-xs font-medium text-muted-foreground">{label}</span>

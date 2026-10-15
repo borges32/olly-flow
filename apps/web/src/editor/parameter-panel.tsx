@@ -10,6 +10,7 @@ import { NodeSettings } from './node-settings';
 import { ParamOptionsContext } from './param-options';
 import { SchemaForm } from './schema-form';
 import { updateNodeGuarded } from './port-guard';
+import { ChatTriggerPanel } from './chat-trigger-panel';
 import { WebhookPanel } from './webhook-panel';
 import { useEditorStore, type EditorState } from './store';
 
@@ -139,6 +140,7 @@ export function ParameterPanel({
               published={published}
             />
           )}
+          {node.type === 'trigger.chat' && <ChatTriggerPanel node={node} published={published} />}
           <CredentialField
             node={node}
             description={description}

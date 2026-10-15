@@ -290,6 +290,8 @@ describe('spec 002 — FR-006: catálogo de tipos de nó', () => {
       'tool.mcp',
       'tool.postgresQuery',
       'tool.workflow',
+      // Spec 021: gatilho de chat.
+      'trigger.chat',
       'trigger.error',
       'trigger.executeWorkflow',
       'trigger.manual',

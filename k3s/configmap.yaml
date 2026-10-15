@@ -45,7 +45,8 @@ data:
   OLLY_PROJECT_MAX_CONCURRENT: '20'
   OLLY_DEFAULT_WORKFLOW_TIMEOUT: '300'
 
-  # Destinos internos liberados para HTTP/MCP (anti-SSRF), separados por vírgula.
+  # Destinos internos liberados para o nó HTTP (anti-SSRF), separados por vírgula. Servidores MCP
+  # aceitam endereços internos sem esta lista.
   OLLY_HTTP_ALLOWLIST: ''
 
   # Spec 011: prazo da aprovação humana do Agent.

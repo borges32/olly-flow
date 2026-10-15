@@ -180,7 +180,7 @@ As portas são numeradas na ordem abaixo, separadamente para entradas e saídas 
 
 | Tipo | Entradas (`main`) | Saídas (`main`) |
 |---|---|---|
-| `trigger.manual`, `trigger.webhook`, `trigger.error`, `trigger.executeWorkflow` | nenhuma | 0 |
+| `trigger.manual`, `trigger.webhook`, `trigger.error`, `trigger.executeWorkflow`, `trigger.chat` | nenhuma (`trigger.chat` com `options.loadPreviousSession: "memory"`: a entrada de sub-nó `ai_memory`) | 0 |
 | `data.set`, `data.setVariable`, `code.javascript`, `http.request`, `http.respondToWebhook`, `postgres.query`, `postgres.write`, `ai.mcpClient`, `flow.wait`, `flow.executeWorkflow` | 0 | 0 |
 | `logic.if` | 0 | 0 = verdadeiro, 1 = falso |
 | `logic.switch` (modo `rules`) | 0 | uma por regra, na ordem de `rules` (0, 1, 2...); com `options.fallbackOutput: "extra"`, a saída **Padrão** vem depois da última regra |
@@ -330,7 +330,7 @@ Na importação, a credencial é procurada no projeto de destino: primeiro pelo 
 | `oauth2ClientCredentials` | idem | OAuth2 com client credentials |
 | `postgres` | `postgres.query`, `postgres.write`, `tool.postgresQuery` | Conexão PostgreSQL. **Obrigatória** |
 | `webhookHeaderAuth` | `trigger.webhook` | Com `authentication: "headerAuth"` |
-| `webhookBasicAuth` | `trigger.webhook` | Com `authentication: "basicAuth"` |
+| `webhookBasicAuth` | `trigger.webhook`, `trigger.chat` | Com `authentication: "basicAuth"` |
 | `webhookHmac` | `trigger.webhook` | Com `authentication: "hmac"` |
 | `mcpBearer`, `mcpHeaders`, `mcpOAuth` | `ai.mcpClient` | Quando o servidor MCP exige autenticação |
 | `openAiCompatible`, `anthropic`, `googleGemini` | `ai.chatModel` | Provedor do modelo. **Obrigatória** |
@@ -392,6 +392,23 @@ Inicia o workflow quando a URL `<origem>/webhook/<path>` recebe uma chamada (dep
 | `responseMode` | `onReceived` \| `lastNode` \| `responseNode` | `onReceived` | `onReceived`: responde 200 na hora. `lastNode`: responde com a saída do último nó. `responseNode`: quem responde é o nó `http.respondToWebhook` |
 | `options.allowedOrigins` | texto | `""` | Origens de CORS permitidas, separadas por vírgula |
 | `options.ipAllowlist` | texto | `""` | IPs ou faixas permitidas, separados por vírgula |
+
+#### `trigger.chat` — Mensagem de chat recebida
+
+Inicia o workflow a cada mensagem de chat (painel do editor, página `<origem>/chat/<webhookId>` ou `POST <origem>/webhook/<webhookId>/chat`, depois de publicado). Cada item tem a forma `{ "sessionId": "...", "action": "sendMessage", "chatInput": "..." }`. O Agent e o Basic LLM Chain com o prompt do item (`promptSource: "fromInput"`) leem o `chatInput`. Detalhes: [trigger.chat.md](trigger.chat.md).
+
+| Parâmetro | Tipo | Padrão | Descrição |
+|---|---|---|---|
+| `webhookId` | texto | — | Identificador da URL do chat; sem expressão. Gere um uuid novo para cada nó |
+| `public` | booleano | `false` | Chat fora do editor, depois de publicar |
+| `mode` | `hostedChat` \| `webhook` | `hostedChat` | Página hospedada ou só o endereço HTTP |
+| `authentication` | `none` \| `basicAuth` \| `ollyUserAuth` | `none` | `basicAuth` exige a credencial `webhookBasicAuth` |
+| `initialMessages` | texto | `Olá! 👋…` | Mensagens iniciais da página, uma por linha |
+| `options.title`, `options.subtitle`, `options.inputPlaceholder`, `options.getStarted` | texto | textos padrão | Textos da página |
+| `options.showWelcomeScreen`, `options.allowFileUploads` | booleano | `false` | Tela de boas-vindas; anexos |
+| `options.allowedFilesMimeTypes`, `options.allowedOrigins` | texto | `*` | Tipos de arquivo; origens de CORS |
+| `options.loadPreviousSession` | `notSupported` \| `memory` | `notSupported` | `memory` exige uma memória ligada à entrada `ai_memory` do gatilho |
+| `options.responseMode` | `lastNode` \| `responseNode` | `lastNode` | Resposta pelo último nó ou pelo `http.respondToWebhook` |
 
 #### `trigger.executeWorkflow` — Quando chamado por outro workflow
 

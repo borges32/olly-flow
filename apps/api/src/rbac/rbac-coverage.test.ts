@@ -88,6 +88,7 @@ beforeAll(async () => {
       rateLimitPerMin: 120,
       requireAuth: false,
     },
+    chat: { maxMessageChars: 20_000 },
     code: { timeoutMs: 30_000, memoryMb: 128 },
     workflowImport: { maxBytes: 5 * 1024 * 1024, maxNodes: 500, maxDepth: 64 },
   });

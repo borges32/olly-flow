@@ -72,10 +72,12 @@ export function ipInList(address: string, entries: readonly string[]): boolean {
  */
 const PRIVATE_NETWORK_RANGES = new Set(['private', 'carrierGradeNat', 'uniqueLocal']);
 
-/** Opções de destino por chamada (spec 016). */
+/** Opções de destino por chamada (spec 016; spec 010, Histórico 14/10/2026). */
 export interface DestinationOptions {
-  /** Aceita as redes internas (`PRIVATE_NETWORK_RANGES`) sem allowlist. Só Bridge e Agentix. */
+  /** Aceita as redes internas (`PRIVATE_NETWORK_RANGES`) sem allowlist. Bridge, Agentix e MCP. */
   allowPrivateNetworks?: boolean;
+  /** Aceita loopback (127/8, ::1) sem allowlist. Só MCP. */
+  allowLoopback?: boolean;
 }
 
 /** Motivo do bloqueio, ou `null` se o endereço pode ser acessado. */
@@ -90,6 +92,7 @@ export function blockedReason(
   const range = ip.range();
   if (range === 'unicast') return null;
   if (options.allowPrivateNetworks && PRIVATE_NETWORK_RANGES.has(range)) return null;
+  if (options.allowLoopback && range === 'loopback') return null;
   return `endereço ${ip.toString()} é de rede ${range}`;
 }
 
@@ -193,7 +196,7 @@ export function createHttpGuard(options: HttpGuardOptions = {}): HttpGuard {
     });
   const agents = new Map<string, Agent>();
   const agentFor = (insecureTls: boolean, destination: DestinationOptions): Agent => {
-    const key = `${String(insecureTls)}|${String(destination.allowPrivateNetworks === true)}`;
+    const key = `${String(insecureTls)}|${String(destination.allowPrivateNetworks === true)}|${String(destination.allowLoopback === true)}`;
     let agent = agents.get(key);
     if (!agent) {
       agent = createAgent(insecureTls, destination);
@@ -211,9 +214,10 @@ export function createHttpGuard(options: HttpGuardOptions = {}): HttpGuard {
       maxRedirects = 5,
       insecureTls = false,
       allowPrivateNetworks = false,
+      allowLoopback = false,
       ...rest
     } = init;
-    const destination = { allowPrivateNetworks };
+    const destination = { allowPrivateNetworks, allowLoopback };
     const agent = agentFor(insecureTls, destination);
     let url = new URL(input);
     let method = (rest.method ?? 'GET').toUpperCase();

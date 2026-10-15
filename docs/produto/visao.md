@@ -69,28 +69,28 @@ Os itens PR-01 a PR-14 são os requisitos originais solicitados. Os itens PR-15 
 
 ## 6. Matriz de rastreabilidade (requisito de produto → specs)
 
-| PR | 001 | 002 | 003 | 004 | 005 | 006 | 007 | 008 | 009 | 010 | 011 | 012 | 013 | 014 | 015 | 016 | 017 | 018 | 019 | 020 |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| PR-01 While | | | | | | | ● | | | | | | | | | | | | | |
-| PR-02 If | | | ● | | | | ○ | | | | | | | | | | | | | |
-| PR-03 HTTP | | | | ● | | | | ○ | | | | | | | | | | | | |
-| PR-04 Query PG | | | | ● | | | | | | | | | | | | | | | | |
-| PR-05 Escrita PG | | | | ● | | | | | | | | | | | | | | | | |
-| PR-06 Webhook | | | | | ● | | | | | | | | | | | | | | | |
-| PR-07 Log | | | ● | | ● | | | | ○ | | | ○ | | | | | | | | |
-| PR-08 RBAC | ○ | ● | | | ● | | | | ○ | | | | | ○ | | | | | | |
-| PR-09 JS | | | | | ● | | | | | | | | | | | | | | | |
-| PR-10 Python | | | | | | | | ● | | | | | | | | | | | | |
-| PR-11 Variáveis | | | ● | | | | | | | | | | | | | | | | | |
-| PR-12 Paralelo | | | | | | ● | | | | | | | | | | | | | | |
-| PR-13 Merge | | | | | | | ● | | | | | | | | | | | | | |
-| PR-14 MCP | | | | | | | | | | ● | ○ | | | | | | | | | |
-| PR-15 Editor | ○ | ● | ● | | | | | | | | | | | | ○ | | | | ○ | |
-| PR-16 Agent | | | | | | | | | | | ● | | | | | ○ | ○ | ○ | | |
-| PR-17 N8N | | | ○ | | ○ | | | | | | | | ○ | | ● | ○ | ○ | ○ | | ○ |
-| PR-18 Credenciais | | | | ● | | | | | ○ | | | | | | ○ | ○ | | | | |
-| PR-19 Auditoria/LGPD | ○ | | | | ● | | | | ● | | | | | | ○ | | | | | |
-| PR-20 Operação | ○ | | | | | ● | | | | | | ● | ● | ○ | | | | | | ○ |
+| PR | 001 | 002 | 003 | 004 | 005 | 006 | 007 | 008 | 009 | 010 | 011 | 012 | 013 | 014 | 015 | 016 | 017 | 018 | 019 | 020 | 021 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| PR-01 While | | | | | | | ● | | | | | | | | | | | | | | |
+| PR-02 If | | | ● | | | | ○ | | | | | | | | | | | | | | |
+| PR-03 HTTP | | | | ● | | | | ○ | | | | | | | | | | | | | |
+| PR-04 Query PG | | | | ● | | | | | | | | | | | | | | | | | |
+| PR-05 Escrita PG | | | | ● | | | | | | | | | | | | | | | | | |
+| PR-06 Webhook | | | | | ● | | | | | | | | | | | | | | | | |
+| PR-07 Log | | | ● | | ● | | | | ○ | | | ○ | | | | | | | | | |
+| PR-08 RBAC | ○ | ● | | | ● | | | | ○ | | | | | ○ | | | | | | | |
+| PR-09 JS | | | | | ● | | | | | | | | | | | | | | | | |
+| PR-10 Python | | | | | | | | ● | | | | | | | | | | | | | |
+| PR-11 Variáveis | | | ● | | | | | | | | | | | | | | | | | | |
+| PR-12 Paralelo | | | | | | ● | | | | | | | | | | | | | | | |
+| PR-13 Merge | | | | | | | ● | | | | | | | | | | | | | | |
+| PR-14 MCP | | | | | | | | | | ● | ○ | | | | | | | | | | |
+| PR-15 Editor | ○ | ● | ● | | | | | | | | | | | | ○ | | | | ○ | | ○ |
+| PR-16 Agent | | | | | | | | | | | ● | | | | | ○ | ○ | ○ | | | ○ |
+| PR-17 N8N | | | ○ | | ○ | | | | | | | | ○ | | ● | ○ | ○ | ○ | | ○ | ○ |
+| PR-18 Credenciais | | | | ● | | | | | ○ | | | | | | ○ | ○ | | | | | |
+| PR-19 Auditoria/LGPD | ○ | | | | ● | | | | ● | | | | | | ○ | | | | | | |
+| PR-20 Operação | ○ | | | | | ● | | | | | | ● | ● | ○ | | | | | | ○ | |
 
 ● entrega principal · ○ entrega parcial/complementar
 
@@ -98,4 +98,4 @@ Os itens PR-01 a PR-14 são os requisitos originais solicitados. Os itens PR-15 
 
 - Execução de nós da comunidade N8N ou leitura do banco do N8N.
 - Marketplace público de nós.
-- RAG/vector store, chat trigger e ambientes com promoção via Git: candidatos a specs pós go-live (ver [roadmap](../roadmap.md)).
+- RAG/vector store e ambientes com promoção via Git: candidatos a specs pós go-live (ver [roadmap](../roadmap.md)). O chat trigger foi antecipado para a [spec 021](../../specs/021-chat-trigger/spec.md) (14/10/2026).

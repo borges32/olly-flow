@@ -73,6 +73,8 @@ export interface McpServer {
   credentialId: string | null;
   /** `null`: servidor global (todos os projetos). */
   projectId: string | null;
+  /** Não verifica o certificado TLS do servidor (ex.: CA interna). */
+  insecureTls: boolean;
   status: McpServerStatus;
   serverInfo: McpServerInfo | null;
   /** Há divergência das tools liberadas aguardando revisão (FR-003). */
@@ -93,6 +95,8 @@ export interface McpServerInput {
   url: string;
   credentialId?: string | null;
   projectId?: string | null;
+  /** Padrão: `false` (o certificado é verificado). */
+  insecureTls?: boolean;
 }
 
 /** `POST /mcp-servers/:id/test`. */

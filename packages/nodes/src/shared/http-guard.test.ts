@@ -209,3 +209,42 @@ describe('spec 016 — FR-013 e FR-002/FR-008: redes internas e TLS por chamada'
     }
   });
 });
+
+describe('spec 010 (Histórico 14/10/2026) — MCP: endereços internos sem allowlist', () => {
+  const none = parseAllowlist([]);
+  const mcp = { allowPrivateNetworks: true, allowLoopback: true };
+
+  it.each([
+    ['8.8.8.8', 'pública'],
+    ['172.23.226.254', 'privada'],
+    ['10.0.0.5', 'privada'],
+    ['100.64.0.1', 'CGNAT'],
+    ['fc00::1', 'ULA'],
+    ['127.0.0.1', 'loopback'],
+    ['::1', 'loopback'],
+    ['::ffff:127.0.0.1', 'loopback'],
+  ])('FR-004: o MCP aceita %s (%s) sem allowlist', (address) => {
+    expect(blockedReason(address, none, mcp)).toBeNull();
+  });
+
+  it.each([
+    ['169.254.169.254', 'linkLocal'],
+    ['fe80::1', 'linkLocal'],
+    ['0.0.0.0', 'unspecified'],
+    ['224.0.0.1', 'multicast'],
+    ['64:ff9b::7f00:1', 'rfc6052'],
+  ])('FR-004: o MCP continua bloqueando %s (%s)', (address, range) => {
+    expect(blockedReason(address, none, mcp)).toContain(range);
+  });
+
+  it('FR-004: loopback sem allowlist só com allowLoopback', async () => {
+    const guard = createHttpGuard();
+    await expect(guard.fetch(`${base}/x`)).rejects.toThrow(SsrfBlockedError);
+    await expect(guard.fetch(`${base}/x`, { allowPrivateNetworks: true })).rejects.toThrow(
+      'loopback',
+    );
+    const res = await guard.fetch(`${base}/x`, mcp);
+    expect(await res.json()).toMatchObject({ url: '/x' });
+    await guard.close();
+  });
+});

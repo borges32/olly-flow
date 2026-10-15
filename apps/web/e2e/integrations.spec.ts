@@ -238,3 +238,36 @@ test.describe('spec 004 — integrações pelo editor', () => {
     });
   });
 });
+
+test.describe('spec 016 — FR-008 (14/10/2026): credencial Agentix com Bearer JWT', () => {
+  test('o formulário mostra a chave ou o token conforme a autenticação, e o token não volta', async ({
+    page,
+  }) => {
+    await loginViaUi(page, 'editor', `/credentials?project=${projectId}`);
+    await page.getByRole('button', { name: 'Nova credencial' }).click();
+    const form = page.getByTestId('credential-form');
+    await form.getByLabel('Nome').fill('Agentix JWT E2E');
+    await form.getByLabel('Tipo').selectOption('agentixApi');
+    await form.getByLabel('URL base *').fill('https://agentix.interno/v2/api');
+    // Padrão: chave de API.
+    await expect(form.getByLabel('Chave da API')).toBeVisible();
+    await expect(form.getByLabel('Token JWT')).toHaveCount(0);
+    await form.getByLabel('Autenticação').selectOption('bearerJwt');
+    await expect(form.getByLabel('Chave da API')).toHaveCount(0);
+    await form.getByLabel('Token JWT').fill('eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJlMmUifQ.assinatura');
+    await form.getByRole('button', { name: 'Salvar' }).click();
+    await expect(page.getByText('Credencial criada')).toBeVisible();
+
+    const credentials = (await editor.call('GET', `/projects/${projectId}/credentials`))
+      .body as CredentialSummary[];
+    const saved = credentials.find((c) => c.name === 'Agentix JWT E2E');
+    expect(saved?.publicFields).toMatchObject({ authentication: 'bearerJwt' });
+    expect(saved?.publicFields).not.toHaveProperty('token');
+    expect(saved?.secretFieldsSet).toEqual(['token']);
+
+    // Ao editar, o token não volta e o campo da chave continua oculto.
+    await page.getByRole('button', { name: 'Editar Agentix JWT E2E' }).click();
+    await expect(page.getByLabel('Token JWT')).toHaveValue('');
+    await expect(page.getByLabel('Chave da API')).toHaveCount(0);
+  });
+});

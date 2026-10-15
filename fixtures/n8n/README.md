@@ -2,7 +2,7 @@
 
 Workflows de referência da POC com N8N, usados como **suíte de compatibilidade** (ADR-0001): o Olly Flow precisa produzir, para a mesma entrada, a mesma saída que o N8N produziu. Os casos alimentam os testes do motor (specs 002+) e do importador (spec 012).
 
-> Os workflows reais da POC ainda não foram exportados (pré-requisito humano do [roadmap](../../docs/roadmap.md)). Até lá existem só exemplos **sintéticos**: `exemplo-set-if`, `exemplo-webhook-code` e `exemplo-output-parsers` (spec 018).
+> Os workflows reais da POC ainda não foram exportados (pré-requisito humano do [roadmap](../../docs/roadmap.md)). Até lá existem só exemplos **sintéticos**: `exemplo-set-if`, `exemplo-webhook-code`, `exemplo-output-parsers` (spec 018) e `exemplo-chat-trigger` (spec 021).
 
 ## Formato (FR-016 da spec 001)
 
