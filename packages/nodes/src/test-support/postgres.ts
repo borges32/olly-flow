@@ -10,9 +10,12 @@ export interface ExternalPostgres {
   stop(): Promise<void>;
 }
 
-/** Banco "externo" dos nós Postgres (plan §9): um PostgreSQL 16 descartável. */
+/** Banco "externo" dos nós Postgres (plan §9): um PostgreSQL descartável (14.18 por padrão, a versão mínima). */
 export async function startExternalPostgres(): Promise<ExternalPostgres> {
-  const container = await new PostgreSqlContainer('postgres:16-alpine').start();
+  const container = await new PostgreSqlContainer(
+    // Versão mínima suportada (docs/arquitetura/stack.md); OLLY_TEST_POSTGRES_IMAGE troca.
+    process.env.OLLY_TEST_POSTGRES_IMAGE ?? 'postgres:14.18-alpine',
+  ).start();
   const data = {
     host: container.getHost(),
     port: container.getPort(),

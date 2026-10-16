@@ -10,11 +10,18 @@ export interface TestDatabase {
   stop(): Promise<void>;
 }
 
-/** Sobe um PostgreSQL 16 descartável (Testcontainers). Somente para testes de integração. */
+/**
+ * Imagem do PostgreSQL dos testes de integração: a versão mínima suportada (14.18, a de produção;
+ * docs/arquitetura/stack.md), para nenhuma migration ou consulta depender de versão posterior.
+ * `OLLY_TEST_POSTGRES_IMAGE` troca a versão (ex.: `postgres:16-alpine`).
+ */
+export const TEST_POSTGRES_IMAGE = process.env.OLLY_TEST_POSTGRES_IMAGE ?? 'postgres:14.18-alpine';
+
+/** Sobe um PostgreSQL descartável (Testcontainers). Somente para testes de integração. */
 export async function startTestDatabase(
   options: { migrate?: boolean; seed?: boolean } = {},
 ): Promise<TestDatabase> {
-  const container = await new PostgreSqlContainer('postgres:16-alpine').start();
+  const container = await new PostgreSqlContainer(TEST_POSTGRES_IMAGE).start();
   const connectionString = container.getConnectionUri();
   const db = createDb({ connectionString, max: 5 });
   if (options.migrate ?? true) await migrateToLatest(db);

@@ -383,8 +383,15 @@ export class McpCatalogService {
             destructive: policy.destructive,
             updated_by: ctx.userId,
           })
+          // Índice único parcial do caso (global ou do projeto): compatível com o PostgreSQL 14
+          // (migrations 0010 e 0017), que não tem `UNIQUE NULLS NOT DISTINCT`.
           .onConflict((oc) =>
-            oc.columns(['server_id', 'project_id', 'tool_name']).doUpdateSet({
+            (projectId === null
+              ? oc.columns(['server_id', 'tool_name']).where('project_id', 'is', null)
+              : oc
+                  .columns(['server_id', 'project_id', 'tool_name'])
+                  .where('project_id', 'is not', null)
+            ).doUpdateSet({
               allowed: policy.allowed,
               destructive: policy.destructive,
               updated_by: ctx.userId,

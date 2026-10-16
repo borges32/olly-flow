@@ -23,11 +23,11 @@
 | `credentials` | Credenciais cifradas por projeto (`data_encrypted` = envelope AES-256-GCM, `key_version` da chave mestra); nome único no projeto | 004 | `key_provider` (`env` \| `vault`, 009): checkpoint da rotação e da migração. Ver [docs/credenciais.md](../credenciais.md) |
 | `execution_payloads` | Payload do gatilho para o worker | 006 | Ou object storage se grande |
 | `execution_state` | Estado serializado do motor para retomada (`waiting`): snapshot, dados do disparo e valores entregues aos nós | 008 | `resume_at` (próxima retomada por tempo); removido no fim da execução. Usado pelo Wait e pela aprovação humana (spec 011) |
-| `group_role_mappings` | Grupo do IdP → papel (`project_id` nulo = global) | 009 | Único por (grupo, projeto) |
+| `group_role_mappings` | Grupo do IdP → papel (`project_id` nulo = global) | 009 | Único por (grupo, projeto) e um global por grupo (índices únicos parciais, compatíveis com o PostgreSQL 14; migrations 0009 e 0017) |
 | `publish_requests` | Pedidos de aprovação de publicação (versão, mensagem, autor, decisão, comentário) | 009 | `CHECK decided_by <> requested_by`; um pendente por workflow |
 | `masking_rules` | Regras de mascaramento LGPD (`field` \| `pattern`; `redact` \| `partial` \| `hash`) globais ou por projeto | 009 | Regras padrão (`builtin`) semeadas na migration `0009_governanca` |
-| `mcp_servers` | Catálogo de servidores MCP (`project_id` nulo = global) | 010 | Somente `streamableHttp` \| `sse`; status `pending` \| `active` \| `disabled`; `tools_snapshot` (aprovado) e `snapshot_pending_diff` (mudança a revisar); `credential_id`; `insecure_tls` (não verificar o certificado, migration 0016); único por (projeto, nome) |
-| `mcp_tool_policies` | Política de tool por servidor e projeto (`project_id` nulo = global; a do projeto prevalece) | 010 | `allowed`, `destructive`; sem registro = negado |
+| `mcp_servers` | Catálogo de servidores MCP (`project_id` nulo = global) | 010 | Somente `streamableHttp` \| `sse`; status `pending` \| `active` \| `disabled`; `tools_snapshot` (aprovado) e `snapshot_pending_diff` (mudança a revisar); `credential_id`; `insecure_tls` (não verificar o certificado, migration 0016); único por (projeto, nome) e por nome entre os globais (índices únicos parciais; migrations 0010 e 0017) |
+| `mcp_tool_policies` | Política de tool por servidor e projeto (`project_id` nulo = global; a do projeto prevalece) | 010 | `allowed`, `destructive`; sem registro = negado; uma política por tool no projeto e uma global (índices únicos parciais; migrations 0010 e 0017) |
 | `mcp_calls` | Registro de cada chamada MCP | 010 | Argumentos e erro mascarados; `project_id` (retenção); sem FK para `executions` (particionada) |
 | `agent_steps` | Passos dos agentes (`model` \| `tool` \| `approval` \| `final` \| `error`), por execução, nó, `run_index`, item e `step_index` | 011 | Conteúdo mascarado, apagado com os dados da execução (`retention.dataDays`); a linha sai com os metadados. `project_id`; sem FK para `executions` (particionada) |
 | `agent_memory` | Memória persistente de conversa: `(project_id, session_key, message JSONB)` com a mensagem serializada do LangChain | 011 | Isolada por projeto; retenção `retention.memoryDays` (padrão `OLLY_RETENTION_MEMORY_DAYS`) |
@@ -97,6 +97,8 @@ CREATE TABLE execution_payloads (            -- 0007_queue (spec 006)
 -- executor_can_read_data, save_execution_data, retention; node_executions.data_masked; credentials.key_provider;
 -- tabelas group_role_mappings, publish_requests, masking_rules (ver docs/governanca.md e docs/lgpd.md)
 -- 0010_mcp (spec 010): mcp_servers, mcp_tool_policies, mcp_calls (ver docs/mcp-governanca.md)
+-- 0017_postgres14_unique (15/10/2026): restrições UNIQUE NULLS NOT DISTINCT (PostgreSQL 15+)
+--   trocadas por índices únicos parciais nos bancos já migrados (0009 e 0010 já criam os índices)
 -- 0011_execution_state (spec 008, parte): execution_state; executions.parent_execution_id, depth, retry_of
 CREATE TABLE audit_log (                      -- sem FK em user_id: o registro sobrevive a users
   id BIGSERIAL PRIMARY KEY, user_id UUID, action TEXT NOT NULL, entity_type TEXT,

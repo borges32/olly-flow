@@ -9,7 +9,10 @@ name: olly-flow
 
 services:
   postgres:
-    image: postgres:16-alpine
+    # A aplicação roda no PostgreSQL 14.18 ou superior (produção: 14.18). Para simular a produção:
+    # POSTGRES_IMAGE=postgres:14.18-alpine, com um volume novo (`docker compose down -v`), porque
+    # os dados da 16 não abrem na 14.
+    image: ${POSTGRES_IMAGE:-postgres:16-alpine}
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-olly}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-olly}

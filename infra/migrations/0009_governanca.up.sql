@@ -12,9 +12,15 @@ CREATE TABLE group_role_mappings (
   project_id UUID        REFERENCES projects (id) ON DELETE CASCADE,
   role_id    INT         NOT NULL REFERENCES roles (id),
   created_by UUID        REFERENCES users (id) ON DELETE SET NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE NULLS NOT DISTINCT (idp_group, project_id)
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- Um mapeamento por grupo e projeto, e um global (`project_id` NULL) por grupo. Dois índices
+-- parciais em vez de `UNIQUE NULLS NOT DISTINCT`, que exige PostgreSQL 15 (a versão mínima
+-- suportada é a 14.18; ver 0017).
+CREATE UNIQUE INDEX group_role_mappings_project_uq ON group_role_mappings (idp_group, project_id)
+  WHERE project_id IS NOT NULL;
+CREATE UNIQUE INDEX group_role_mappings_global_uq ON group_role_mappings (idp_group)
+  WHERE project_id IS NULL;
 
 -- Configurações de governança do projeto (FR-011, FR-012, FR-017, FR-019). `retention` vazio
 -- usa os padrões da configuração (OLLY_RETENTION_DATA_DAYS / OLLY_RETENTION_METADATA_DAYS).

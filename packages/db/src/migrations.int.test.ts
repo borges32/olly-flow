@@ -87,6 +87,7 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
       'Up 0014_trace_id',
       'Up 0015_local_users',
       'Up 0016_mcp_insecure_tls',
+      'Up 0017_postgres14_unique',
     ]);
     expect(await publicTables()).toEqual(TABLES);
   });
@@ -98,6 +99,7 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
   it('FR-009/SC-003: down reverte tudo e up reaplica sem erro', async () => {
     const reverted = await migrateDown(t.db, { all: true });
     expect(reverted).toEqual([
+      'Down 0017_postgres14_unique',
       'Down 0016_mcp_insecure_tls',
       'Down 0015_local_users',
       'Down 0014_trace_id',
@@ -132,10 +134,101 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
       return rows[0]?.n;
     };
     expect(await column()).toBe(1);
+    await migrateDown(t.db); // 0017 (compatibilidade com o PostgreSQL 14)
     expect(await migrateDown(t.db)).toEqual(['Down 0016_mcp_insecure_tls']);
     expect(await column()).toBe(0);
     expect(await publicTables()).toEqual(TABLES);
     await migrateToLatest(t.db);
+  });
+
+  it('PostgreSQL 14 (15/10/2026): as migrations rodam na versão mínima suportada (14.18)', async () => {
+    const { rows } = await sql<{ v: number }>`
+      SELECT current_setting('server_version_num')::int AS v`.execute(t.db);
+    // Sem OLLY_TEST_POSTGRES_IMAGE, os testes usam a 14.18 (docs/arquitetura/stack.md).
+    expect(rows[0]?.v).toBeGreaterThanOrEqual(140018);
+    expect(await publicTables()).toEqual(TABLES);
+  });
+
+  it('PostgreSQL 14 (15/10/2026): índices parciais mantêm a unicidade global e por projeto (antes NULLS NOT DISTINCT)', async () => {
+    const violation = async (query: ReturnType<typeof sql>) =>
+      query.execute(t.db).then(
+        () => null,
+        (e: unknown) => (e as { code?: string }).code ?? 'erro',
+      );
+    await sql`INSERT INTO roles (name) VALUES ('papel-teste') ON CONFLICT DO NOTHING`.execute(t.db);
+    const role = await sql<{ id: number }>`SELECT id FROM roles WHERE name = 'papel-teste'`.execute(
+      t.db,
+    );
+    const roleId = role.rows[0]?.id ?? 0;
+    const project = await sql<{ id: string }>`
+      INSERT INTO projects (name) VALUES ('Unicidade') RETURNING id`.execute(t.db);
+    const projectId = project.rows[0]?.id ?? '';
+    const mapping = (projectOrNull: string | null) => sql`
+      INSERT INTO group_role_mappings (idp_group, project_id, role_id)
+      VALUES ('grupo-x', ${projectOrNull}, ${roleId})`;
+    expect(await violation(mapping(null))).toBeNull();
+    // Dois globais do mesmo grupo: recusado (como NULLS NOT DISTINCT).
+    expect(await violation(mapping(null))).toBe('23505');
+    expect(await violation(mapping(projectId))).toBeNull();
+    expect(await violation(mapping(projectId))).toBe('23505');
+
+    const server = await sql<{ id: string }>`
+      INSERT INTO mcp_servers (name, transport, url) VALUES ('srv', 'streamableHttp', 'http://x')
+      RETURNING id`.execute(t.db);
+    const serverId = server.rows[0]?.id ?? '';
+    expect(
+      await violation(sql`INSERT INTO mcp_servers (name, transport, url)
+        VALUES ('srv', 'streamableHttp', 'http://y')`),
+    ).toBe('23505');
+    // Upsert da política global pelo índice parcial (o que o catálogo MCP faz).
+    const upsertGlobal = (allowed: boolean) => sql`
+      INSERT INTO mcp_tool_policies (server_id, project_id, tool_name, allowed)
+      VALUES (${serverId}, NULL, 'soma', ${allowed})
+      ON CONFLICT (server_id, tool_name) WHERE project_id IS NULL DO UPDATE SET allowed = EXCLUDED.allowed`;
+    await upsertGlobal(false).execute(t.db);
+    await upsertGlobal(true).execute(t.db);
+    const policies = await sql<{ n: number; allowed: boolean }>`
+      SELECT count(*)::int AS n, bool_and(allowed) AS allowed FROM mcp_tool_policies
+      WHERE server_id = ${serverId}`.execute(t.db);
+    expect(policies.rows[0]).toEqual({ n: 1, allowed: true });
+
+    await sql`DELETE FROM mcp_tool_policies`.execute(t.db);
+    await sql`DELETE FROM mcp_servers`.execute(t.db);
+    await sql`DELETE FROM group_role_mappings`.execute(t.db);
+    await sql`DELETE FROM projects WHERE id = ${projectId}`.execute(t.db);
+  });
+
+  it('PostgreSQL 14 (15/10/2026): 0017 troca as restrições únicas antigas pelos índices parciais', async () => {
+    expect(await migrateDown(t.db)).toEqual(['Down 0017_postgres14_unique']);
+    // Estado de um banco migrado antes da mudança: restrições únicas com os nomes gerados.
+    await sql`
+      DROP INDEX group_role_mappings_project_uq, group_role_mappings_global_uq,
+        mcp_servers_project_name_uq, mcp_servers_global_name_uq,
+        mcp_tool_policies_project_uq, mcp_tool_policies_global_uq;
+      ALTER TABLE group_role_mappings ADD CONSTRAINT group_role_mappings_idp_group_project_id_key
+        UNIQUE (idp_group, project_id);
+      ALTER TABLE mcp_servers ADD CONSTRAINT mcp_servers_project_id_name_key UNIQUE (project_id, name);
+      ALTER TABLE mcp_tool_policies ADD CONSTRAINT mcp_tool_policies_server_id_project_id_tool_name_key
+        UNIQUE (server_id, project_id, tool_name)`.execute(t.db);
+    await migrateToLatest(t.db);
+    const constraints = await sql<{ conname: string }>`
+      SELECT conname FROM pg_constraint WHERE contype = 'u'
+        AND conrelid::regclass::text IN ('group_role_mappings', 'mcp_servers', 'mcp_tool_policies')`.execute(
+      t.db,
+    );
+    expect(constraints.rows).toEqual([]);
+    const indexes = await sql<{ indexname: string }>`
+      SELECT indexname FROM pg_indexes WHERE indexname LIKE '%\_uq' ORDER BY indexname`.execute(
+      t.db,
+    );
+    expect(indexes.rows.map((r) => r.indexname)).toEqual([
+      'group_role_mappings_global_uq',
+      'group_role_mappings_project_uq',
+      'mcp_servers_global_name_uq',
+      'mcp_servers_project_name_uq',
+      'mcp_tool_policies_global_uq',
+      'mcp_tool_policies_project_uq',
+    ]);
   });
 
   it('spec 014: down de 0015 remove só as colunas de usuário local e as sessões', async () => {
@@ -149,6 +242,7 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
       return rows[0]?.n;
     };
     expect(await columns()).toBe(5);
+    await migrateDown(t.db); // 0017 (compatibilidade com o PostgreSQL 14)
     await migrateDown(t.db); // 0016 (spec 010, mcp_servers.insecure_tls)
     expect(await migrateDown(t.db)).toEqual(['Down 0015_local_users']);
     expect(await columns()).toBe(0);
@@ -157,6 +251,7 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
   });
 
   it('spec 012: down de 0014 remove só executions.trace_id', async () => {
+    await migrateDown(t.db); // 0017 (compatibilidade com o PostgreSQL 14)
     await migrateDown(t.db); // 0016 (spec 010, mcp_servers.insecure_tls)
     await migrateDown(t.db); // 0015 (spec 014)
     const column = async () => {
@@ -173,6 +268,7 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
   });
 
   it('spec 011: down de 0013 remove só o cadastro de modelos (começa vazio)', async () => {
+    await migrateDown(t.db); // 0017 (compatibilidade com o PostgreSQL 14)
     await migrateDown(t.db); // 0016 (spec 010, mcp_servers.insecure_tls)
     await migrateDown(t.db); // 0015 (spec 014)
     await migrateDown(t.db); // 0014 (spec 012)
@@ -184,6 +280,7 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
   });
 
   it('spec 011: down de 0012 remove as tabelas do agente e as colunas de projeto', async () => {
+    await migrateDown(t.db); // 0017 (compatibilidade com o PostgreSQL 14)
     await migrateDown(t.db); // 0016 (spec 010, mcp_servers.insecure_tls)
     await migrateDown(t.db); // 0015 (spec 014)
     await migrateDown(t.db); // 0014 (spec 012)
@@ -204,6 +301,7 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
   });
 
   it('spec 008: down de 0011 remove execution_state e as colunas de sub-workflow', async () => {
+    await migrateDown(t.db); // 0017 (compatibilidade com o PostgreSQL 14)
     await migrateDown(t.db); // 0016 (spec 010, mcp_servers.insecure_tls)
     await migrateDown(t.db); // 0015 (spec 014)
     await migrateDown(t.db); // 0014 (spec 012)
@@ -224,6 +322,7 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
   });
 
   it('spec 010: down de 0010 remove só as tabelas do MCP', async () => {
+    await migrateDown(t.db); // 0017 (compatibilidade com o PostgreSQL 14)
     await migrateDown(t.db); // 0016 (spec 010, mcp_servers.insecure_tls)
     await migrateDown(t.db); // 0015 (spec 014)
     await migrateDown(t.db); // 0014 (spec 012)
@@ -256,6 +355,7 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
     const rules = await sql<{ n: number }>`
       SELECT count(*)::int AS n FROM masking_rules WHERE builtin`.execute(t.db);
     expect(rules.rows[0]?.n).toBe(14);
+    await migrateDown(t.db); // 0017 (compatibilidade com o PostgreSQL 14)
     await migrateDown(t.db); // 0016 (spec 010, mcp_servers.insecure_tls)
     await migrateDown(t.db); // 0015 (spec 014)
     await migrateDown(t.db); // 0014 (spec 012)
@@ -270,6 +370,7 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
   });
 
   it('FR-014 (spec 007): down de 0008 remove só a coluna error_workflow_id', async () => {
+    await migrateDown(t.db); // 0017 (compatibilidade com o PostgreSQL 14)
     await migrateDown(t.db); // 0016 (spec 010, mcp_servers.insecure_tls)
     await migrateDown(t.db); // 0015 (spec 014)
     await migrateDown(t.db); // 0014 (spec 012)
@@ -292,6 +393,7 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
   });
 
   it('FR-001/FR-005/FR-012 (spec 006): down de 0007 remove só a tabela de payloads, o batimento e a cota', async () => {
+    await migrateDown(t.db); // 0017 (compatibilidade com o PostgreSQL 14)
     await migrateDown(t.db); // 0016 (spec 010, mcp_servers.insecure_tls)
     await migrateDown(t.db); // 0015 (spec 014)
     await migrateDown(t.db); // 0014 (spec 012)
@@ -320,6 +422,7 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
   });
 
   it('FR-001/FR-012 (spec 005): down de 0006 remove só as colunas de publicação e console', async () => {
+    await migrateDown(t.db); // 0017 (compatibilidade com o PostgreSQL 14)
     await migrateDown(t.db); // 0016 (spec 010, mcp_servers.insecure_tls)
     await migrateDown(t.db); // 0015 (spec 014)
     await migrateDown(t.db); // 0014 (spec 012)
@@ -351,6 +454,7 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
   });
 
   it('FR-001 (spec 004): down de 0005 remove só a tabela credentials', async () => {
+    await migrateDown(t.db); // 0017 (compatibilidade com o PostgreSQL 14)
     await migrateDown(t.db); // 0016 (spec 010, mcp_servers.insecure_tls)
     await migrateDown(t.db); // 0015 (spec 014)
     await migrateDown(t.db); // 0014 (spec 012)
@@ -370,6 +474,7 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
   });
 
   it('FR-020 (spec 003): down de 0004 remove só a coluna reused', async () => {
+    await migrateDown(t.db); // 0017 (compatibilidade com o PostgreSQL 14)
     await migrateDown(t.db); // 0016 (spec 010, mcp_servers.insecure_tls)
     await migrateDown(t.db); // 0015 (spec 014)
     await migrateDown(t.db); // 0014 (spec 012)
@@ -398,6 +503,7 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
   });
 
   it('FR-001/FR-002 (spec 002): down de 0003 e 0002 remove só as tabelas delas', async () => {
+    await migrateDown(t.db); // 0017 (compatibilidade com o PostgreSQL 14)
     await migrateDown(t.db); // 0016 (spec 010, mcp_servers.insecure_tls)
     await migrateDown(t.db); // 0015 (spec 014)
     await migrateDown(t.db); // 0014 (spec 012)

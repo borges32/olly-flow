@@ -11,7 +11,10 @@ let pools: PoolManager;
 let credentials: CredentialResolver;
 
 beforeAll(async () => {
-  container = await new PostgreSqlContainer('postgres:16-alpine').start();
+  container = await new PostgreSqlContainer(
+    // Versão mínima suportada (docs/arquitetura/stack.md); OLLY_TEST_POSTGRES_IMAGE troca.
+    process.env.OLLY_TEST_POSTGRES_IMAGE ?? 'postgres:14.18-alpine',
+  ).start();
   const data = {
     host: container.getHost(),
     port: container.getPort(),

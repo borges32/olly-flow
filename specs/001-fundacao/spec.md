@@ -123,3 +123,4 @@ Canvas, workflows, execução, nós concretos e fila.
 | 03/10/2026 | Criação a partir do prompt da Sprint 0 | Migração para SDD |
 | 03/10/2026 | Status `Implementada`; sem mudança de comportamento. Desvios de plano registrados em [report.md](report.md) | Implementação da spec |
 | 03/10/2026 | Ponto em aberto resolvido: CI no GitHub Actions | Decisão humana |
+| 15/10/2026 | Versão mínima do PostgreSQL: **14.18** (a de produção), no lugar da 16. Testes de integração na 14.18 por padrão (`OLLY_TEST_POSTGRES_IMAGE` para outra versão); compose de desenvolvimento na 16, configurável (`POSTGRES_IMAGE`). Migrations 0009 e 0010 ajustadas e migration 0017 nova (ver specs 009 e 010) | Pedido do PO: produção no PostgreSQL 14.18 |

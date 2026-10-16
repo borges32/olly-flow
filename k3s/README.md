@@ -27,7 +27,7 @@ olly-flow-api / olly-flow-worker ──▶ olly-flow-minio :9000 (S3, volume per
 
 | Serviço | Uso | Variáveis |
 |---|---|---|
-| **PostgreSQL 16** (ex.: Azure Database for PostgreSQL) | Banco da aplicação | `DATABASE_URL` |
+| **PostgreSQL 14.18 ou superior** (ex.: Azure Database for PostgreSQL) | Banco da aplicação | `DATABASE_URL` |
 | **Vault** (opcional, [ADR-0007](../docs/adr/0007-gestao-de-segredos.md)) | Chave das credenciais com `OLLY_KEY_PROVIDER=vault` | `OLLY_VAULT_*` |
 | **IdP OIDC** (opcional, [ADR-0005](../docs/adr/0005-autenticacao-oidc.md)) | Login institucional com `OLLY_IDP_ENABLED=true` | `OIDC_*` |
 | **Coletor OpenTelemetry** (opcional) | Telemetria | `OTEL_*` |

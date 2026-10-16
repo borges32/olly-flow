@@ -9,7 +9,7 @@
 | Runtime | Node.js 22 LTS, TypeScript 5 com `strict: true` |
 | Monorepo | pnpm workspaces + Turborepo |
 | API | NestJS (adapter Fastify), validação com **zod**, logger **pino** (`nestjs-pino`) |
-| Banco | PostgreSQL 16 com **Kysely** e migrations Kysely em `infra/migrations` (SQL puro permitido, por exemplo para partições) |
+| Banco | **PostgreSQL 14.18 ou superior** (produção: 14.18; testes de integração na 14.18, a versão mínima, com `OLLY_TEST_POSTGRES_IMAGE` para outra; compose de desenvolvimento na 16, com `POSTGRES_IMAGE`). Migrations e consultas não usam recursos posteriores à 14 (ex.: `UNIQUE NULLS NOT DISTINCT`, `MERGE`). **Kysely** e migrations Kysely em `infra/migrations` (SQL puro permitido, por exemplo para partições) |
 | Fila | Redis 7 + **BullMQ** (a partir da spec 006) |
 | Tempo real | `@nestjs/websockets` + socket.io |
 | Autenticação | OIDC. Frontend com `oidc-client-ts` (Authorization Code + PKCE). API valida JWT com `jose` via JWKS. Keycloak local em desenvolvimento |

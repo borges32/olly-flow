@@ -23,9 +23,13 @@ CREATE TABLE mcp_servers (
   approved_by           UUID        REFERENCES users (id) ON DELETE SET NULL,
   approved_at           TIMESTAMPTZ,
   created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE NULLS NOT DISTINCT (project_id, name)
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- Nome único por projeto e entre os globais (`project_id` NULL). Índices parciais em vez de
+-- `UNIQUE NULLS NOT DISTINCT` (PostgreSQL 15+; ver 0017).
+CREATE UNIQUE INDEX mcp_servers_project_name_uq ON mcp_servers (project_id, name)
+  WHERE project_id IS NOT NULL;
+CREATE UNIQUE INDEX mcp_servers_global_name_uq ON mcp_servers (name) WHERE project_id IS NULL;
 
 -- Políticas de tool (FR-002): sem registro = negado. A do projeto prevalece sobre a global
 -- (`project_id` NULL).
@@ -37,9 +41,14 @@ CREATE TABLE mcp_tool_policies (
   allowed     BOOLEAN     NOT NULL DEFAULT false,
   destructive BOOLEAN     NOT NULL DEFAULT false,
   updated_by  UUID        REFERENCES users (id) ON DELETE SET NULL,
-  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE NULLS NOT DISTINCT (server_id, project_id, tool_name)
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- Uma política por tool no projeto e uma global (`project_id` NULL). Índices parciais em vez de
+-- `UNIQUE NULLS NOT DISTINCT` (PostgreSQL 15+; ver 0017); o upsert usa o índice do caso.
+CREATE UNIQUE INDEX mcp_tool_policies_project_uq ON mcp_tool_policies (server_id, project_id, tool_name)
+  WHERE project_id IS NOT NULL;
+CREATE UNIQUE INDEX mcp_tool_policies_global_uq ON mcp_tool_policies (server_id, tool_name)
+  WHERE project_id IS NULL;
 
 -- Registro de cada chamada MCP (FR-011). Sem FK para `executions` (particionada); removido com
 -- os metadados da execução pela retenção (spec 009).
