@@ -38,7 +38,9 @@ export function matchesConditions(
   const conditions = conditionsOf(resolved);
   const combinator = resolved?.combinator === 'or' ? 'or' : 'and';
   const results = conditions.map((c, k) => {
-    const type = c.operator?.type as ConditionType;
+    // Sem operador (ou sem tipo/operação), vale o padrão que o formulário mostra: string, equals.
+    const type = (c.operator?.type ?? 'string') as ConditionType;
+    const operation: unknown = c.operator?.operation ?? 'equals';
     if (!CONDITION_TYPES.includes(type)) {
       throw new NodeParameterError(
         `${path}[${String(k)}].operator.type`,
@@ -50,7 +52,7 @@ export function matchesConditions(
         left: c.leftValue,
         right: c.rightValue,
         type,
-        operation: String(c.operator?.operation),
+        operation: String(operation),
         looseLeft: loose || !isExpression(rawConditions[k]?.leftValue),
         looseRight: loose || !isExpression(rawConditions[k]?.rightValue),
       });

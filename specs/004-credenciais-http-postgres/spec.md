@@ -59,7 +59,7 @@ Como **editor**, quero configurar novas tentativas, timeout e o comportamento em
 - **FR-005**: O sistema DEVE permitir testar uma credencial.
 - **FR-006**: Criação, alteração, exclusão e teste de credencial DEVEM ser auditados, sem os valores.
 - **FR-007**: O uso de credencial em nós DEVE exigir a permissão `credential:use`; a gestão, `credential:manage`.
-- **FR-008**: Toda chamada HTTP de saída DEVE ser bloqueada quando qualquer IP resolvido ou destino de redirect for loopback, privado, link-local, CGNAT, ULA ou não especificado, salvo allowlist configurada.
+- **FR-008**: Toda chamada HTTP de saída DEVE ser bloqueada quando qualquer IP resolvido ou destino de redirect for loopback, privado, link-local, CGNAT, ULA ou não especificado, salvo allowlist configurada. O item `*` na allowlist libera qualquer destino (decisão da operação, com aviso no log ao iniciar); o protocolo continua restrito a HTTP e HTTPS.
 - **FR-009**: O nó `http.request` DEVE suportar: métodos, query, headers, corpos (JSON, form, multipart, raw, binário), autenticação por credencial, timeout, redirects, resposta completa, formato de resposta, opção de não falhar em status de erro e envio em lotes. Executa uma requisição por item.
 - **FR-010**: Respostas binárias DEVEM ser armazenadas no object storage e referenciadas no item.
 - **FR-011**: O nó `postgres.query` DEVE executar SQL com parâmetros posicionais vindos de expressões, uma vez para todos os itens ou por item, com limite de linhas e timeout de comando.
@@ -108,3 +108,4 @@ Nenhum.
 |---|---|---|
 | 03/10/2026 | Criação a partir do prompt da Sprint 3 | Migração para SDD |
 | 03/10/2026 | Permissões RBAC explicitadas no plano (seção e tarefa T089), sem mudança de requisito | Decisão humana sobre permissões por spec |
+| 16/10/2026 | FR-008: o item `*` em `OLLY_HTTP_ALLOWLIST` libera qualquer destino (inclusive loopback, redes privadas e link-local), com aviso no log da API e do worker ao iniciar. O padrão continua sendo a allowlist vazia. A chamada continua passando pelo filtro (Art. III, item 5 da constituição): protocolo HTTP/HTTPS, limite de redirects e remoção das credenciais entre origens | Pedido do PO: liberar tudo com `*` |

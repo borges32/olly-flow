@@ -67,7 +67,7 @@
 ### §4 Guard anti-SSRF (`packages/nodes/src/shared/http-guard.ts`)
 - `lookup` customizado do undici (`connect.lookup`): resolve todos os A/AAAA, valida cada um com `ipaddr.js` e conecta no IP validado.
 - **Bloqueados:** `loopback`, `private`, `linkLocal`, `carrierGradeNat`, `uniqueLocal`, `unspecified`, `reserved`, `broadcast` e `multicast`.
-- **Allowlist:** `OLLY_HTTP_ALLOWLIST` (hosts e CIDRs separados por vírgula).
+- **Allowlist:** `OLLY_HTTP_ALLOWLIST` (hosts e CIDRs separados por vírgula). O item `*` libera qualquer endereço; a API e o worker registram um aviso ao iniciar (Histórico 16/10/2026).
 - **Redirects:** tratados manualmente (`redirect: 'manual'`), revalidando cada `Location` até `maxRedirects`.
 - **Exporta:** `guardedFetch(url, init, opts)` e `assertDestinationAllowed(url)`, reutilizados pelo MCP (spec 010).
 
@@ -132,7 +132,7 @@
 |---|---|---|
 | `OLLY_MASTER_KEY` | — (obrigatória) | KEK base64 de 32 bytes (provedor `env`) |
 | `OLLY_KEY_PROVIDER` | `env` | Provedor da chave mestra |
-| `OLLY_HTTP_ALLOWLIST` | vazio | Hosts/CIDRs internos liberados |
+| `OLLY_HTTP_ALLOWLIST` | vazio | Hosts/CIDRs internos liberados; `*` libera qualquer destino |
 | `OLLY_HTTP_MAX_RESPONSE_MB` | 50 | Limite de resposta |
 | `OLLY_PG_POOL_MAX` | 5 | Conexões por credencial |
 
@@ -182,3 +182,4 @@ Executor e visualizador não recebem nenhuma das duas. Nenhuma permissão nova �
 |---|---|---|
 | 03/10/2026 | Seção "Permissões RBAC" e tarefa T089 | Decisão humana: cada spec acrescenta e garante as permissões que cria |
 | 04/10/2026 | Detalhes de implementação definidos no início da implementação (ver §10) | Lacunas do plano encontradas ao implementar |
+| 16/10/2026 | §4: `*` na allowlist libera qualquer endereço (`parseAllowlist` → `any`), com aviso no log ao criar o filtro | Spec 004, Histórico 16/10/2026 |

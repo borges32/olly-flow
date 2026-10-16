@@ -89,13 +89,21 @@ export function fieldKind(schema: ParamSchema): FieldKind {
   }
 }
 
-/** Item novo de uma lista de objetos, com os defaults do schema. */
+/**
+ * Item novo de uma lista de objetos, com os defaults do schema, inclusive os dos objetos
+ * aninhados (ex.: o operador da condição do If). Sem eles, o formulário mostraria o padrão sem
+ * gravá-lo.
+ */
 export function newArrayItem(itemSchema: ParamSchema): Record<string, unknown> {
   const item: Record<string, unknown> = {};
   for (const [key, def] of Object.entries(itemSchema.properties ?? {})) {
     const prop = asSchema(def);
     if (prop.default !== undefined) item[key] = structuredClone(prop.default);
     else if (prop.type === 'string') item[key] = '';
+    else if (prop.type === 'object' && prop.properties) {
+      const nested = newArrayItem(prop);
+      if (Object.keys(nested).length > 0) item[key] = nested;
+    }
   }
   return item;
 }

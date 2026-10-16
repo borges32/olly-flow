@@ -14,6 +14,7 @@ import {
   builtinCredentialTypes,
   fakeLlmCredential,
   createBuiltinNodes,
+  ALLOW_ANY,
   createHttpGuard,
   createNodeRegistry,
   type CredentialTypeDescription,
@@ -64,7 +65,15 @@ export class NodeTypesController {
     {
       provide: HTTP_GUARD,
       inject: [APP_CONFIG],
-      useFactory: (config: AppConfig) => createHttpGuard({ allowlist: config.http.allowlist }),
+      useFactory: (config: AppConfig) => {
+        // Spec 004 (Histórico 16/10/2026): `*` desliga o bloqueio de destinos internos.
+        if (config.http.allowlist.includes(ALLOW_ANY)) {
+          new Logger('HttpGuard').warn(
+            'OLLY_HTTP_ALLOWLIST contém "*": as chamadas HTTP de saída aceitam qualquer destino, inclusive a rede interna, loopback e o endereço de metadados da nuvem',
+          );
+        }
+        return createHttpGuard({ allowlist: config.http.allowlist });
+      },
     },
     {
       provide: POOL_MANAGER,

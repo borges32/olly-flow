@@ -103,6 +103,10 @@ Qualquer parâmetro string pode ser uma expressão (`=...`), inclusive dentro de
   - **sub-nós:** modelo, memória, ferramentas e parsers ficam embaixo do nó pai, lado a lado;
   - **alcance:** com dois ou mais nós selecionados, só eles (e os sub-nós deles); senão, o workflow inteiro. O canto superior esquerdo fica onde estava;
   - **desfazer:** Ctrl+Z desfaz num passo. O botão não aparece na tela somente leitura.
+- **Próximo nó (spec 024):** na execução de teste nó a nó (botão ▶ do nó, ou depois da chamada de teste do webhook), os nós que esperam a execução ficam com a borda índigo e o selo **próximo**, e as conexões até eles ficam animadas. Regras:
+  - **quem é o próximo:** um nó que ainda não executou e recebe uma conexão de uma saída com itens de um nó executado com sucesso. No If e no Switch, só o ramo que recebeu itens; a saída de erro conta quando tem itens;
+  - **sub-nós** (modelo, memória, ferramentas, parsers) não são destacados: executam junto com o nó pai;
+  - **sem destaque** durante a execução, sem execução no editor e depois de um nó com erro.
 - **Baixar os dados (spec 019):** no painel do nó, os dados de **Entrada** e de **Saída** têm o botão **Baixar**, que salva os itens exibidos num arquivo JSON, igual à visão JSON e aceito pelo editor de dados fixados. Detalhes:
   - **o que vai no arquivo:** a saída e a origem da entrada selecionadas no painel. O botão só aparece quando há itens;
   - **nome do arquivo:** `<nó>-entrada.json`, `<nó>-saida.json` ou `<nó>-saida-fixada.json`. Acrescenta a saída (`-Verdadeiro`) quando o nó tem mais de uma, e a iteração do laço (`-execucao-2`) quando o nó executou várias vezes. Com a origem num nó anterior, o arquivo é `<anterior>-saida.json`;

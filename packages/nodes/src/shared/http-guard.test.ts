@@ -132,6 +132,34 @@ describe('spec 004 — FR-008/SC-003: filtro anti-SSRF', () => {
   });
 });
 
+describe('spec 004 (Histórico 16/10/2026) — FR-008: `*` na allowlist libera qualquer destino', () => {
+  it.each(['127.0.0.1', '10.0.0.1', '192.168.1.10', '169.254.169.254', '::1', 'fd00::1'])(
+    'FR-008: com `*`, %s é aceito',
+    (ip) => {
+      expect(blockedReason(ip, parseAllowlist(['*']))).toBeNull();
+      expect(blockedReason(ip, parseAllowlist([]))).not.toBeNull();
+    },
+  );
+
+  it('FR-008: com `*` (inclusive junto de outros itens), nome que resolve para rede interna e redirect interno passam; o protocolo continua validado', async () => {
+    const guard = createHttpGuard({
+      allowlist: ['api.exemplo', ' * '],
+      resolve: () => Promise.resolve(['127.0.0.1', '10.0.0.1']),
+    });
+    await expect(guard.assertDestinationAllowed('http://banco.interno/x')).resolves.toBeUndefined();
+    const res = await guard.fetch(`${base}/redirect-local`);
+    expect(await res.json()).toMatchObject({ url: '/ok' });
+    await expect(guard.assertDestinationAllowed('ftp://banco.interno/x')).rejects.toThrow(
+      /protocolo ftp: não permitido/,
+    );
+    await guard.close();
+  });
+
+  it('FR-008: `*` dentro de um nome ou CIDR não é curinga', () => {
+    expect(blockedReason('10.0.0.1', parseAllowlist(['*.interno']))).not.toBeNull();
+  });
+});
+
 describe('spec 016 — FR-013 e FR-002/FR-008: redes internas e TLS por chamada', () => {
   const none = parseAllowlist([]);
   const internal = { allowPrivateNetworks: true };

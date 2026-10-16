@@ -22,7 +22,7 @@ export class SsrfBlockedError extends Error {
 export type Resolver = (hostname: string) => Promise<string[]>;
 
 export interface HttpGuardOptions {
-  /** Hosts e CIDRs internos liberados (`OLLY_HTTP_ALLOWLIST`). */
+  /** Hosts e CIDRs internos liberados (`OLLY_HTTP_ALLOWLIST`); `*` libera qualquer destino. */
   allowlist?: readonly string[];
   /** Resolução de nomes (padrão: `dns.lookup` com todos os endereços). Substituível em testes. */
   resolve?: Resolver;
@@ -31,19 +31,26 @@ export interface HttpGuardOptions {
 interface Allowlist {
   hosts: Set<string>;
   cidrs: [ipaddr.IPv4 | ipaddr.IPv6, number][];
+  /** `*` (spec 004, Histórico 16/10/2026): qualquer endereço, inclusive loopback e link-local. */
+  any: boolean;
 }
+
+/** Item `*` da allowlist: libera qualquer destino (decisão da operação, registrada no log). */
+export const ALLOW_ANY = '*';
 
 export function parseAllowlist(entries: readonly string[] = []): Allowlist {
   const hosts = new Set<string>();
   const cidrs: Allowlist['cidrs'] = [];
+  let any = false;
   for (const raw of entries.map((e) => e.trim()).filter(Boolean)) {
-    if (raw.includes('/')) cidrs.push(ipaddr.parseCIDR(raw));
+    if (raw === ALLOW_ANY) any = true;
+    else if (raw.includes('/')) cidrs.push(ipaddr.parseCIDR(raw));
     else if (ipaddr.isValid(raw)) {
       const ip = ipaddr.parse(raw);
       cidrs.push([ip, ip.kind() === 'ipv4' ? 32 : 128]);
     } else hosts.add(raw.toLowerCase());
   }
-  return { hosts, cidrs };
+  return { hosts, cidrs, any };
 }
 
 /** Endereço IPv4 de um IPv6 mapeado (`::ffff:a.b.c.d`), para julgar pelo IPv4. */
@@ -88,7 +95,7 @@ export function blockedReason(
 ): string | null {
   if (!ipaddr.isValid(address)) return 'endereço inválido';
   const ip = normalize(address);
-  if (inAllowlist(ip, allowlist)) return null;
+  if (allowlist.any || inAllowlist(ip, allowlist)) return null;
   const range = ip.range();
   if (range === 'unicast') return null;
   if (options.allowPrivateNetworks && PRIVATE_NETWORK_RANGES.has(range)) return null;

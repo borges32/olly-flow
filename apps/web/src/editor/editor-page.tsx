@@ -65,6 +65,7 @@ import { WorkflowEdgeView, type OllyFlowEdge } from './workflow-edge';
 import { WorkflowNodeView, type OllyFlowNode } from './workflow-node';
 import { edgeLoopInfo, invalidConnectionReason } from './loops';
 import { connectionRejection, isSubNodeEdge, isSubNodePort } from './subnodes';
+import { nextNodes } from './next-nodes';
 import { tidyUp } from './tidy-up';
 import { WorkflowSettingsButton } from './workflow-settings';
 import { VersionHistoryPanel, type DiffView } from './version-history';
@@ -218,6 +219,17 @@ export function Editor({
     () => (diffView ? diffCanvas(diffView.diff, diffView.from, diffView.to) : null),
     [diffView],
   );
+  // Spec 024: nós que esperam a execução no teste nó a nó, e as conexões até eles.
+  const pending = useMemo(
+    () =>
+      nextNodes({
+        nodes,
+        edges,
+        run,
+        isSubNodeEdge: (e) => isSubNodeEdge(typesByName, nodes, e),
+      }),
+    [nodes, edges, run, typesByName],
+  );
   const flowNodes = useMemo<OllyFlowNode[]>(
     () =>
       canvasDiff
@@ -245,11 +257,22 @@ export function Editor({
               errors: errorsByNode.get(node.id) ?? [],
               run: run.nodes[node.id],
               pinned: node.id in pinData,
+              ...(pending.nodeIds.has(node.id) && { next: true }),
             },
             selected: selection.nodeIds.includes(node.id),
             ...(measured[node.id] && { measured: measured[node.id] }),
           })),
-    [nodes, typesByName, errorsByNode, selection.nodeIds, measured, run.nodes, pinData, canvasDiff],
+    [
+      nodes,
+      typesByName,
+      errorsByNode,
+      selection.nodeIds,
+      measured,
+      run.nodes,
+      pinData,
+      canvasDiff,
+      pending,
+    ],
   );
   const loopEdges = useMemo(() => edgeLoopInfo(nodes, edges), [nodes, edges]);
   const flowEdges = useMemo<OllyFlowEdge[]>(
@@ -278,8 +301,9 @@ export function Editor({
             target: e.to,
             targetHandle: e.toPort,
             selected: selection.edgeIds.includes(e.id),
-            // Spec 006, FR-013: aresta animada enquanto o nó de destino executa.
-            animated: run.nodes[e.to]?.status === 'running',
+            // Spec 006, FR-013: aresta animada enquanto o nó de destino executa; spec 024: até o
+            // próximo nó a executar.
+            animated: run.nodes[e.to]?.status === 'running' || pending.edgeIds.has(e.id),
             data: {
               hovered: hoveredEdgeId === e.id,
               readOnly,
@@ -300,6 +324,7 @@ export function Editor({
       canvasDiff,
       typesByName,
       nodes,
+      pending,
     ],
   );
   const timeline = useMemo(

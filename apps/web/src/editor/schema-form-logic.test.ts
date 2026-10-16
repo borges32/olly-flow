@@ -66,6 +66,30 @@ describe('spec 002 — FR-009: painel gerado pelo schema', () => {
       }),
     ).toEqual({ name: '', type: 'string' });
   });
+
+  it('FR-009 (correção 16/10/2026): item novo grava os defaults dos objetos aninhados (operador da condição do If)', () => {
+    expect(
+      newArrayItem({
+        type: 'object',
+        properties: {
+          leftValue: { type: 'string', default: '' },
+          operator: {
+            type: 'object',
+            properties: {
+              type: { type: 'string', enum: ['string', 'number'], default: 'string' },
+              operation: { type: 'string', default: 'equals' },
+            },
+          },
+          extra: { type: 'object', properties: { semDefault: { type: 'number' } } },
+          rightValue: { type: 'string', default: '' },
+        },
+      }),
+    ).toEqual({
+      leftValue: '',
+      operator: { type: 'string', operation: 'equals' },
+      rightValue: '',
+    });
+  });
 });
 
 describe('spec 010 — FR-009: formulário a partir do inputSchema da tool MCP', () => {

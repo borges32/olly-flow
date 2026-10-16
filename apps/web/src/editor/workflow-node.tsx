@@ -4,6 +4,7 @@ import { resolveNodePorts, type WorkflowNode } from '@olly/shared-types';
 import {
   AlertTriangle,
   Check,
+  ChevronsRight,
   Hourglass,
   Loader2,
   Minus,
@@ -30,6 +31,8 @@ export type OllyNodeData = {
   pinned: boolean;
   /** Comparação de versões (spec 009, FR-010). */
   diffStatus?: DiffStatus;
+  /** Spec 024: espera a execução no teste nó a nó. */
+  next?: boolean;
 };
 
 const DIFF_LABEL: Record<DiffStatus, string> = {
@@ -123,7 +126,7 @@ export const WorkflowNodeView = memo(function WorkflowNodeView({
   data,
   selected,
 }: NodeProps<OllyFlowNode>) {
-  const { node, description, errors, run, pinned, diffStatus } = data;
+  const { node, description, errors, run, pinned, diffStatus, next } = data;
   const actions = useNodeActions();
   // Portas efetivas: dinâmicas (Merge, Switch) e de erro (spec 007).
   const ports = description ? resolveNodePorts(description, node) : { inputs: [], outputs: [] };
@@ -145,6 +148,7 @@ export const WorkflowNodeView = memo(function WorkflowNodeView({
       data-diff={diffStatus}
       data-subnode={isSubNode || undefined}
       data-unsupported={unsupported || undefined}
+      data-next={next || undefined}
       title={hasError ? errors.join('\n') : undefined}
       // Portas espaçadas: o nó cresce com o número de entradas, saídas e sub-nós.
       style={nodeMinSize({
@@ -162,6 +166,8 @@ export const WorkflowNodeView = memo(function WorkflowNodeView({
         unsupported && 'border-dashed border-amber-500',
         run?.status === 'error' && 'border-destructive',
         run?.status === 'running' && 'border-primary ring-2 ring-primary/30',
+        // Spec 024: cor própria, distinta de execução, sucesso, erro e comparação.
+        next && 'border-indigo-500 ring-4 ring-indigo-500/30 dark:border-indigo-400',
         diffStatus === 'added' && 'border-emerald-500 ring-2 ring-emerald-500/30',
         diffStatus === 'changed' && 'border-amber-500 ring-2 ring-amber-500/30',
         diffStatus === 'removed' && 'border-dashed border-destructive opacity-60',
@@ -222,6 +228,15 @@ export const WorkflowNodeView = memo(function WorkflowNodeView({
         </span>
       )}
       {run && <RunStatus run={run} />}
+      {next && (
+        <span
+          data-testid="node-next"
+          title="Próximo nó a executar: use o botão ▶ do nó"
+          className="absolute -bottom-2.5 left-2 flex items-center gap-0.5 rounded-full border border-indigo-500 bg-card px-1.5 py-0.5 text-[10px] font-medium text-indigo-700 shadow-sm dark:border-indigo-400 dark:text-indigo-300"
+        >
+          <ChevronsRight className="size-3" /> próximo
+        </span>
+      )}
       {actions.canExecute && (
         // Executa só este nó, reaproveitando os anteriores (FR-020), como o "Execute step" do N8N.
         <div

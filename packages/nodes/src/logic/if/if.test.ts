@@ -143,4 +143,15 @@ describe('spec 003 — FR-010: logic.if', () => {
       one({ leftValue: true, operator: { type: 'boolean', operation: 'gt' } }),
     ).rejects.toThrow(/não existe para o tipo boolean/);
   });
+
+  it('FR-010 (correção 16/10/2026): condição salva sem operador usa o padrão do formulário (string, equals)', async () => {
+    // Condição criada pelo "Adicionar" do formulário antes da correção: sem `operator`.
+    const items = [{ json: { rota: 'coleta' } }, { json: { rota: 'nao_encontrado' } }];
+    const noOperator = (left: unknown) => [{ leftValue: left, rightValue: 'coleta' }];
+    const out = await run(items, (i) => noOperator(items[i]?.json.rota) as unknown as Condition[], {
+      raw: noOperator('={{ $json.rota }}') as unknown as Condition[],
+    });
+    expect(out.true).toEqual([{ json: { rota: 'coleta' }, pairedItem: { item: 0 } }]);
+    expect(out.false).toEqual([{ json: { rota: 'nao_encontrado' }, pairedItem: { item: 1 } }]);
+  });
 });

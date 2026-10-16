@@ -291,3 +291,111 @@ test.describe('spec 019 — baixar os dados do nó', () => {
     expect(pinned.items).toEqual(montar.items);
   });
 });
+
+test.describe('spec 024 — próximo nó na execução nó a nó', () => {
+  test('FR-001/FR-002/SC-001: destaca o próximo nó, só no ramo do If com itens, e o destaque passa adiante', async ({
+    page,
+  }) => {
+    const branch = (id: string, name: string, x: number, y: number) => ({
+      id,
+      type: 'data.set',
+      name,
+      params: { fields: [{ name: 'ramo', type: 'string', value: name }] },
+      position: [x, y] as [number, number],
+    });
+    const wf = await createWorkflow(admin, projectId, 'Próximo nó', {
+      ...definition,
+      nodes: [...definition.nodes, branch('a', 'Sim', 780, -80), branch('b', 'Não', 780, 80)],
+      edges: [
+        ...definition.edges,
+        { id: 'e3', from: 'i', fromPort: 'true', to: 'a', toPort: 'main' },
+        { id: 'e4', from: 'i', fromPort: 'false', to: 'b', toPort: 'main' },
+      ],
+      // Só um adulto: todos os itens vão para o ramo Verdadeiro.
+      pinData: { m: [{ json: { nome: 'Ana', sobrenome: 'Souza', idade: 34 } }] },
+    });
+    await loginViaUi(page, 'editor', `/workflows/${wf.id}`);
+    const node = (name: string) => page.getByTestId(`node-${name}`);
+    const pending = page.locator('[data-next]');
+    const runNode = async (name: string) => {
+      // Selecionado, o botão ▶ fica visível sem depender do mouse sobre o nó.
+      await node(name).click();
+      await node(name)
+        .getByRole('button', { name: `Executar o nó ${name}` })
+        .click();
+      await expect(status(page, name)).toHaveAttribute('data-status', 'success');
+    };
+
+    // Sem execução, nenhum destaque (FR-003).
+    await expect(node('Montar')).toBeVisible();
+    await expect(pending).toHaveCount(0);
+
+    await runNode('Montar');
+    await expect(pending).toHaveCount(1);
+    await expect(node('Adulto?')).toHaveAttribute('data-next', 'true');
+    await expect(node('Adulto?').getByTestId('node-next')).toHaveText('próximo');
+
+    // Depois do If, só o ramo com itens.
+    await runNode('Adulto?');
+    await expect(node('Sim')).toHaveAttribute('data-next', 'true');
+    await expect(node('Não')).not.toHaveAttribute('data-next');
+    await expect(pending).toHaveCount(1);
+
+    await runNode('Sim');
+    await expect(pending).toHaveCount(0);
+  });
+});
+
+test.describe('spec 003 — If com condição criada no formulário', () => {
+  test('FR-010 (correção 16/10/2026): a condição adicionada pelo formulário grava o operador e o If encaminha os itens', async ({
+    page,
+  }) => {
+    const wf = await createWorkflow(admin, projectId, 'If pelo formulário', {
+      nodes: [
+        definition.nodes[0] as WorkflowDefinition['nodes'][number],
+        {
+          id: 'i',
+          type: 'logic.if',
+          name: 'Rota',
+          params: { conditions: { combinator: 'and', conditions: [] } },
+          position: [260, 0],
+        },
+      ],
+      edges: [{ id: 'e1', from: 'm', fromPort: 'main', to: 'i', toPort: 'main' }],
+      settings: {},
+      pinData: definition.pinData,
+    });
+    await loginViaUi(page, 'editor', `/workflows/${wf.id}`);
+    await page.getByTestId('node-Rota').dblclick();
+    const panel = page.getByTestId('parameter-panel');
+    await panel.getByRole('button', { name: 'Adicionar' }).click();
+    await panel
+      .getByTestId('param-conditions.conditions.0.leftValue-mode')
+      .getByRole('button', { name: 'Expressão' })
+      .click();
+    await panel.getByTestId('param-conditions.conditions.0.leftValue').fill('{{ $json.nome }}');
+    await panel.getByTestId('param-conditions.conditions.0.rightValue').fill('Ana');
+    await expect(panel.getByTestId('param-conditions.conditions.0.operator.type')).toHaveValue(
+      'string',
+    );
+
+    await page.getByRole('button', { name: 'Executar este nó' }).click();
+    const output = page.getByTestId('ndv-output');
+    await expect(output.getByRole('tab', { name: 'Verdadeiro (1)' })).toBeVisible();
+    await expect(output.getByRole('tab', { name: 'Falso (1)' })).toBeVisible();
+    await page.keyboard.press('Escape');
+
+    // O operador foi gravado com o padrão mostrado na tela.
+    await page.keyboard.press('Control+s');
+    await expect(page.getByText('Workflow salvo')).toBeVisible();
+    const saved = await admin.call('GET', `/workflows/${wf.id}`);
+    const rota = (saved.body as { definition: WorkflowDefinition }).definition.nodes.find(
+      (n) => n.id === 'i',
+    );
+    expect(rota?.params).toMatchObject({
+      conditions: {
+        conditions: [{ rightValue: 'Ana', operator: { type: 'string', operation: 'equals' } }],
+      },
+    });
+  });
+});

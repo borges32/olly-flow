@@ -103,3 +103,4 @@ Nenhum.
 |---|---|---|
 | 03/10/2026 | Criação a partir do prompt da Sprint 1 | Migração para SDD |
 | 03/10/2026 | Status `Implementada`; sem mudança de comportamento. Desvios de plano registrados em [report.md](report.md) | Implementação da spec |
+| 16/10/2026 | Correção (FR-009): o item novo de uma lista ("Adicionar") passa a gravar também os valores padrão dos objetos aninhados. Antes, o formulário mostrava o padrão (ex.: tipo `string` e operação `equals` da condição do If) sem gravá-lo, e o If falhava com "tipo desconhecido undefined". Teste: `schema-form-logic.test.ts` › "FR-009 (correção 16/10/2026)…" | Erro relatado pelo PO no If |
