@@ -5,6 +5,7 @@ import {
   inferSchema,
   insertExpression,
   suggest,
+  previewJsonIssue,
 } from './expression-utils';
 
 const items = [
@@ -99,5 +100,18 @@ describe('spec 003 — FR-017/FR-018: schema, arrastar campo e autocomplete', ()
     expect(suggest('={{ $', ctx)?.items.length).toBeGreaterThan(5);
     expect(suggest('=$json.', ctx)).toBeNull();
     expect(suggest('={{ $json.nome }} $json.', ctx)).toBeNull();
+  });
+});
+
+describe('spec 004 — FR-009 (Histórico 19/10/2026): aviso de JSON inválido no resultado', () => {
+  it('FR-009: avisa só quando o texto parece JSON e é inválido', () => {
+    expect(previewJsonIssue('{"a": 1}')).toBeNull();
+    expect(previewJsonIssue('texto comum')).toBeNull();
+    expect(previewJsonIssue({ a: 1 })).toBeNull();
+    // Quebra de linha crua num texto: a Requisição HTTP corrige, sem aviso.
+    expect(previewJsonIssue('{"m": "linha 1\nlinha 2"}')).toBeNull();
+    expect(previewJsonIssue('{"m": "o "x" caiu"}')).toMatch(
+      /^JSON inválido na linha 1, coluna \d+/,
+    );
   });
 });

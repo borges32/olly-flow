@@ -1,4 +1,5 @@
 import type { BinaryRef, Item, NodeOutput } from '@olly/shared-types';
+import { jsonTextErrorMessage, parseJsonText } from '@olly/shared-types';
 import { FormData, Headers, type Response } from 'undici';
 import type { ResolvedCredential } from '../../credentials/definitions.js';
 import {
@@ -164,12 +165,13 @@ async function buildBody(
     case 'json': {
       const raw = ctx.getParam('jsonBody', i);
       let value: unknown = raw;
-      if (typeof raw === 'string') {
-        try {
-          value = raw.trim() === '' ? {} : JSON.parse(raw);
-        } catch {
-          throw new NodeParameterError('jsonBody', 'JSON inválido');
-        }
+      if (typeof raw === 'string' && raw.trim() === '') value = {};
+      else if (typeof raw === 'string') {
+        // Histórico 19/10/2026: quebras de linha cruas dentro de textos (ex.: Markdown inserido
+        // por expressão entre aspas) são escapadas; o que continuar inválido diz onde e por quê.
+        const parsed = parseJsonText(raw);
+        if (!parsed.ok) throw new NodeParameterError('jsonBody', jsonTextErrorMessage(parsed));
+        value = parsed.value;
       }
       if (!headers.has('content-type')) headers.set('content-type', 'application/json');
       return JSON.stringify(value);

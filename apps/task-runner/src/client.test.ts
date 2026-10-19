@@ -16,7 +16,7 @@ const data: ExpressionData = {
   paired: [],
   vars: {},
   env: {},
-  execution: { id: 'e', mode: 'test' },
+  execution: { id: 'e', mode: 'test', startedAt: '2026-10-19T12:00:00.000Z', elapsedMs: 0 },
   workflow: { id: 'w', name: 'W', active: false },
   timezone: 'UTC',
 };

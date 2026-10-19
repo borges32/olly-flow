@@ -31,7 +31,7 @@ interface Session {
 
 const WARM_UP = `(() => {
   globalThis.__olly_data = { nodeName: '', params: {}, input: [{ json: { a: [1, { b: 2 }] } }], nodes: {}, paired: [],
-    vars: {}, env: {}, execution: { id: '', mode: 'test' }, workflow: { id: '', name: '', active: false }, timezone: 'UTC' };
+    vars: {}, env: {}, execution: { id: '', mode: 'test', startedAt: '', elapsedMs: 0 }, workflow: { id: '', name: '', active: false }, timezone: 'UTC' };
   __olly_freeze();
   const c = __olly_ctx(0);
   return __olly_s(c.$json) + __olly_s(c.$now) + JSON.stringify(__olly_out(c.$input.all()));

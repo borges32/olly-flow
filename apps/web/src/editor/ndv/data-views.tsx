@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { fieldExpression, inferSchema, scalarText, type SchemaField } from '../expression-utils';
 import { downloadJson } from '../workflow-file-io';
 import { dataFileName, itemsFileContent } from './data-download';
+import { expandJsonStrings } from './json-strings';
 import { FIELD_MIME } from './expression-context';
 
 export type DragSource = { kind: 'input' } | { kind: 'node'; name: string };
@@ -125,6 +126,45 @@ function SchemaTree({
         );
       })}
     </ul>
+  );
+}
+
+/**
+ * Visão JSON (FR-017). Histórico 19/10/2026: campos de texto com JSON (objeto ou lista) aparecem
+ * expandidos, com aviso de quais são e o botão para ver o texto original; os dados não mudam.
+ */
+function JsonView({ items, testId }: { items: Item[]; testId: string }) {
+  const [expand, setExpand] = useState(true);
+  const expanded = useMemo(() => expandJsonStrings(items.map((i) => i.json)), [items]);
+  const shown = expand ? expanded.value : items.map((i) => i.json);
+  return (
+    <div className="grid gap-2">
+      {expanded.paths.length > 0 && (
+        <div
+          data-testid={`${testId}-json-strings`}
+          className="flex flex-wrap items-center gap-2 rounded-md border border-dashed px-2 py-1.5 text-[11px] text-muted-foreground"
+        >
+          <span className="min-w-0 flex-1">
+            {expand ? 'JSON em texto exibido expandido' : 'Campos com JSON em texto'}:{' '}
+            <code className="font-mono">{expanded.paths.join(', ')}</code>. Nos nós seguintes
+            continuam texto (use <code className="font-mono">JSON.parse(...)</code>).
+          </span>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-6 px-2 text-[11px]"
+            onClick={() => {
+              setExpand((v) => !v);
+            }}
+          >
+            {expand ? 'Mostrar como texto' : 'Expandir JSON'}
+          </Button>
+        </div>
+      )}
+      <pre data-testid={`${testId}-json`} className="font-mono text-xs whitespace-pre-wrap">
+        {JSON.stringify(shown, null, 2)}
+      </pre>
+    </div>
   );
 }
 
@@ -257,13 +297,7 @@ export function DataPanel({
         ) : view === 'table' ? (
           <TableView items={items} source={source} />
         ) : view === 'json' ? (
-          <pre data-testid={`${testId}-json`} className="font-mono text-xs whitespace-pre-wrap">
-            {JSON.stringify(
-              items.map((i) => i.json),
-              null,
-              2,
-            )}
-          </pre>
+          <JsonView items={items} testId={testId} />
         ) : (
           <SchemaTree fields={inferSchema(items)} items={items} source={source} />
         )}

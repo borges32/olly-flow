@@ -571,6 +571,8 @@ export class ExecutionsService implements OnModuleInit, OnModuleDestroy {
       {
         executionId: body.executionId ?? previewId,
         mode: 'test',
+        // A prévia não roda dentro da execução: o tempo decorrido aparece como 0.
+        startedAt: new Date().toISOString(),
         workflow: { id: workflowId, name: workflow.name, active: false },
         vars: {},
         env: exposedEnv(process.env),

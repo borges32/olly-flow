@@ -11,7 +11,12 @@ export function expressionData(overrides: Partial<ExpressionData> = {}): Express
     paired: [],
     vars: {},
     env: {},
-    execution: { id: 'exec-1', mode: 'test' },
+    execution: {
+      id: 'exec-1',
+      mode: 'test',
+      startedAt: '2026-10-19T12:00:00.000Z',
+      elapsedMs: 1500,
+    },
     workflow: { id: 'wf-1', name: 'Fluxo', active: false },
     timezone: 'America/Sao_Paulo',
     ...overrides,

@@ -8,6 +8,10 @@ const MAX_STEPS = 10_000;
 /**
  * Item correspondente em `targetId` para o item de entrada `itemIndex` de `startId` (FR-004):
  * sobe pela origem de cada item e pelo `pairedItem` das saídas até chegar ao nó alvo.
+ *
+ * Correção 19/10/2026: se a cadeia se rompe (ex.: um nó agregou vários itens num só sem
+ * informar a origem) e o nó alvo produziu um único item, ele é o correspondente: não há outro
+ * possível (como no N8N). Com mais de um item no alvo, o erro sugere `.first()`/`.all()`.
  */
 export function resolvePairedItem(
   def: WorkflowDefinition,
@@ -19,6 +23,35 @@ export function resolvePairedItem(
 ): PairedResolution {
   const names = new Map(def.nodes.map((n) => [n.id, n.name]));
   const name = (id: string) => names.get(id) ?? id;
+  const resolved = followPairedItems(def, registry, view, startId, itemIndex, targetId, name);
+  if (!('error' in resolved)) return resolved;
+  const only = singleItem(view.outputOf(targetId));
+  if (only) return only;
+  return {
+    error:
+      `${resolved.error}. Para usar um item específico, use $('${name(targetId)}').first() ` +
+      `(ou .all() para todos)`,
+  };
+}
+
+/** Porta e índice do único item da saída, se ela tiver exatamente um. */
+function singleItem(output: NodeOutput | undefined): { port: string; index: number } | undefined {
+  const ports = Object.entries(output ?? {}).filter(([, items]) => items.length > 0);
+  const [only] = ports;
+  return ports.length === 1 && only && only[1].length === 1
+    ? { port: only[0], index: 0 }
+    : undefined;
+}
+
+function followPairedItems(
+  def: WorkflowDefinition,
+  registry: NodeRegistry,
+  view: RunView,
+  startId: string,
+  itemIndex: number,
+  targetId: string,
+  name: (id: string) => string,
+): PairedResolution {
   const target = name(targetId);
   let nodeId = startId;
   let port = 'main';

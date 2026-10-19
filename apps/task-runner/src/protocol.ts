@@ -9,7 +9,12 @@ const expressionDataSchema = z.object({
   paired: z.array(z.record(z.string(), z.unknown())),
   vars: z.record(z.string(), z.unknown()),
   env: z.record(z.string(), z.string()),
-  execution: z.object({ id: z.string(), mode: z.enum(['test', 'production']) }),
+  execution: z.object({
+    id: z.string(),
+    mode: z.enum(['test', 'production']),
+    startedAt: z.string(),
+    elapsedMs: z.number(),
+  }),
   workflow: z.object({ id: z.string(), name: z.string(), active: z.boolean() }),
   timezone: z.string(),
   // Spec 007: `$loop` dentro de laços.

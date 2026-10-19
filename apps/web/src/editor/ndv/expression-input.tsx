@@ -1,13 +1,13 @@
 import type { ExpressionPreviewResponse } from '@olly/shared-types';
 import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent } from 'react';
 import { cn } from '@/lib/utils';
-import { insertExpression, suggest, type Suggestion } from '../expression-utils';
+import { insertExpression, previewJsonIssue, suggest, type Suggestion } from '../expression-utils';
 import { FIELD_MIME, useExpressionHelpers } from './expression-context';
 
-const formatValue = (value: unknown): string => {
+const formatValue = (value: unknown, pretty = false): string => {
   if (value === undefined) return 'undefined';
   if (typeof value === 'string') return value;
-  return JSON.stringify(value);
+  return pretty ? JSON.stringify(value, null, 2) : JSON.stringify(value);
 };
 
 /**
@@ -35,6 +35,8 @@ export function ExpressionInput({
   const [menu, setMenu] = useState<{ from: number; items: Suggestion[] } | null>(null);
   const [active, setActive] = useState(0);
   const [result, setResult] = useState<ExpressionPreviewResponse | null>(null);
+  // Histórico 19/10/2026: o resultado pode ser aberto por inteiro (ex.: o corpo JSON gerado).
+  const [expanded, setExpanded] = useState(false);
   const text = value.slice(1);
 
   useEffect(() => {
@@ -156,16 +158,34 @@ export function ExpressionInput({
         </ul>
       )}
       {result && (
-        <p
-          data-testid={`${testId}-preview`}
-          className={cn(
-            'truncate font-mono text-xs',
-            result.ok ? 'text-muted-foreground' : 'text-destructive',
+        <div className="grid gap-1">
+          <button
+            type="button"
+            data-testid={`${testId}-preview`}
+            aria-expanded={expanded}
+            title={expanded ? 'Recolher o resultado' : 'Ver o resultado completo'}
+            onClick={() => {
+              setExpanded((v) => !v);
+            }}
+            className={cn(
+              'text-left font-mono text-xs',
+              expanded ? 'max-h-60 overflow-auto whitespace-pre-wrap break-words' : 'truncate',
+              result.ok ? 'text-muted-foreground' : 'text-destructive',
+            )}
+          >
+            {result.ok
+              ? `Resultado: ${formatValue(result.value, expanded)}`
+              : `Erro: ${result.error.message}`}
+          </button>
+          {result.ok && previewJsonIssue(result.value) && (
+            <p
+              data-testid={`${testId}-preview-json`}
+              className="text-xs break-words text-amber-700 dark:text-amber-400"
+            >
+              {previewJsonIssue(result.value)}
+            </p>
           )}
-          title={result.ok ? formatValue(result.value) : result.error.message}
-        >
-          {result.ok ? `Resultado: ${formatValue(result.value)}` : `Erro: ${result.error.message}`}
-        </p>
+        </div>
       )}
     </div>
   );

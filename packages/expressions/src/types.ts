@@ -32,7 +32,14 @@ export interface ExpressionData {
   paired: Record<string, PairedResolution>[];
   vars: Record<string, unknown>;
   env: Record<string, string>;
-  execution: { id: string; mode: 'test' | 'production' };
+  execution: {
+    id: string;
+    mode: 'test' | 'production';
+    /** Início da execução (ISO). */
+    startedAt: string;
+    /** Milissegundos desde o início até o nó avaliar as expressões. */
+    elapsedMs: number;
+  };
   workflow: { id: string; name: string; active: boolean };
   timezone: string;
   /** Spec 007, FR-007: laço que contém o nó (`$loop`); ausente fora de laços. */

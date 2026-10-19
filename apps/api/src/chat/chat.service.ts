@@ -461,6 +461,7 @@ export class ChatService {
       {
         executionId,
         mode: 'production',
+        startedAt: new Date().toISOString(),
         workflow: { id: target.workflow.id, name: target.workflow.name, active: true },
         vars: {},
         env: exposedEnv(process.env),

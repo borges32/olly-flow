@@ -94,6 +94,13 @@ export class ExecutionRunner {
     // Em sequência: uma conexão do pool por vez no início da execução.
     const masker = await this.masking.forProject(workflow.projectId);
     const savePolicy = await this.savePolicy(job);
+    // `$execution.startedAt`/`elapsedMs`: o início gravado (numa retomada, o original), o mesmo
+    // da duração na lista de execuções.
+    const started = await this.db
+      .selectFrom('executions')
+      .select('started_at')
+      .where('id', '=', executionId)
+      .executeTakeFirst();
     // Spec 009, FR-015: nós reaproveitados com campos mascarados (preenchido ao carregar).
     const reusedMasked = new Set<string>();
     const recorder = new ExecutionRecorder(
@@ -178,6 +185,7 @@ export class ExecutionRunner {
       const result = await runWorkflow(job.definition, this.registry, {
         executionId,
         mode: job.mode,
+        ...(started && { executionStartedAt: started.started_at }),
         workflowId: workflow.id,
         workflowName: workflow.name,
         evaluator: this.evaluator,

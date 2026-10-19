@@ -204,6 +204,11 @@ export interface RunOptions {
   runData?: Record<string, ReusedNodeRun>;
   executionId?: string;
   mode?: 'test' | 'production';
+  /**
+   * Início da execução, para `$execution.startedAt`/`elapsedMs` (numa retomada, o início
+   * original). Padrão: o início desta chamada do motor.
+   */
+  executionStartedAt?: Date;
   workflowId?: string;
   workflowName?: string;
   /** Avaliador de expressões (task runner). Obrigatório se o workflow tiver expressões. */
@@ -604,6 +609,7 @@ export async function runWorkflow(
   }
 
   const executionId = options.executionId ?? 'local';
+  const executionStartedAt = (options.executionStartedAt ?? new Date()).toISOString();
   const vars: Record<string, unknown> = resume ? structuredClone(resume.snapshot.vars) : {};
   const expressionScope = (nodeId: string): ExpressionScope => {
     const loop = state.innermostLoop(nodeId);
@@ -622,6 +628,7 @@ export async function runWorkflow(
   const baseScope = (): ExpressionScope => ({
     executionId,
     mode: options.mode ?? 'test',
+    startedAt: executionStartedAt,
     workflow: {
       id: options.workflowId ?? 'local',
       name: options.workflowName ?? '',

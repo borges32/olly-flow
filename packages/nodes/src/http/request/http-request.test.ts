@@ -175,6 +175,25 @@ describe('spec 004 — FR-009: nó http.request', () => {
     ).toBe('q1');
   });
 
+  it('FR-009 (Histórico 19/10/2026): corpo JSON com texto de várias linhas é enviado; JSON inválido diz onde', async () => {
+    const send = (jsonBody: string) =>
+      run({ url: `${base}/echo`, method: 'POST', sendBody: true, contentType: 'json', jsonBody })
+        .out;
+    // Markdown inserido por expressão entre aspas: a quebra de linha fica crua no JSON.
+    const markdown = '## O que está acontecendo\n- o serviço `rast-bff` caiu';
+    const sent = (await jsonOf(send(`{"messageText": "${markdown}", "users": ["a@x.br"]}`)))[0] as {
+      body: string;
+    };
+    expect(JSON.parse(sent.body)).toEqual({
+      messageText: '## O que está acontecendo\n- o serviço `rast-bff` caiu',
+      users: ['a@x.br'],
+    });
+    // Aspas dentro do texto: continua inválido, com linha, coluna, trecho e a dica.
+    await expect(send('{"messageText": "o serviço "rast-bff" caiu"}')).rejects.toThrow(
+      /JSON inválido na linha 1, coluna \d+, perto de «.*rast-bff.*».*JSON\.stringify/,
+    );
+  });
+
   it('FR-009: corpos JSON (texto ou objeto), form, raw e multipart com binário', async () => {
     const send = async (extra: Record<string, unknown>) =>
       (

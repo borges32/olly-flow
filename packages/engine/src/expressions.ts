@@ -20,6 +20,8 @@ import type { RunView } from './state.js';
 export interface ExpressionScope {
   executionId: string;
   mode: 'test' | 'production';
+  /** Início da execução (ISO), para `$execution.startedAt` e `$execution.elapsedMs`. */
+  startedAt: string;
   workflow: { id: string; name: string; active: boolean };
   vars: Record<string, unknown>;
   env: Record<string, string>;
@@ -83,7 +85,13 @@ export function buildExpressionData(
     paired,
     vars: structuredClone(scope.vars),
     env: scope.env,
-    execution: { id: scope.executionId, mode: scope.mode },
+    execution: {
+      id: scope.executionId,
+      mode: scope.mode,
+      // Histórico 19/10/2026: início e tempo decorrido até o nó avaliar as expressões.
+      startedAt: scope.startedAt,
+      elapsedMs: Math.max(0, Date.now() - Date.parse(scope.startedAt)),
+    },
     workflow: scope.workflow,
     timezone: scope.timezone,
     ...(scope.loop && { loop: structuredClone(scope.loop) }),

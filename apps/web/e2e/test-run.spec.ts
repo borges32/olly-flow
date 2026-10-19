@@ -451,3 +451,33 @@ test.describe('spec 025 — colunas do painel do nó', () => {
     await expect(first).toHaveAttribute('aria-valuenow', '32');
   });
 });
+
+test.describe('spec 003 — JSON em texto na visão JSON', () => {
+  test('FR-017 (Histórico 19/10/2026): campo com JSON em texto aparece expandido, com aviso e opção de ver o texto', async ({
+    page,
+  }) => {
+    const resposta = '{"plano": {"passos": 2}, "fontes": ["a", "b"]}';
+    const wf = await createWorkflow(admin, projectId, 'JSON em texto', {
+      nodes: [{ id: 'm', type: 'trigger.manual', name: 'Início', params: {}, position: [0, 0] }],
+      edges: [],
+      settings: {},
+      pinData: { m: [{ json: { output: resposta, nome: 'Ana' } }] },
+    });
+    await loginViaUi(page, 'editor', `/workflows/${wf.id}`);
+    await page.getByTestId('node-Início').dblclick();
+    const output = page.getByTestId('ndv-output');
+    await output.getByRole('tab', { name: 'JSON' }).click();
+
+    expect(await jsonView(output, 'ndv-output')).toEqual([
+      { output: { plano: { passos: 2 }, fontes: ['a', 'b'] }, nome: 'Ana' },
+    ]);
+    await expect(output.getByTestId('ndv-output-json-strings')).toContainText('output');
+
+    await output.getByRole('button', { name: 'Mostrar como texto' }).click();
+    expect(JSON.parse(await output.getByTestId('ndv-output-json').innerText()) as unknown).toEqual([
+      { output: resposta, nome: 'Ana' },
+    ]);
+    await output.getByRole('button', { name: 'Expandir JSON' }).click();
+    await expect(output.getByTestId('ndv-output-json')).toContainText('"passos": 2');
+  });
+});

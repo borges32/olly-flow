@@ -39,8 +39,26 @@ const setVarNode: NodeDefinition = {
     return Promise.resolve({ main: input.items });
   },
 };
+/** Nó de teste que repete cada item três vezes (com `pairedItem`). */
+const explodeNode: NodeDefinition = {
+  ...setNode,
+  type: 'data.explodirTeste',
+  execute: (input) =>
+    Promise.resolve({
+      main: input.items.flatMap((item, i) =>
+        [1, 2, 3].map((n) => ({ json: { ...item.json, n }, pairedItem: { item: i } })),
+      ),
+    }),
+};
+/** Nó de teste que agrega todos os itens num só, sem `pairedItem` (como um Code "todos os itens"). */
+const aggregateNode: NodeDefinition = {
+  ...setNode,
+  type: 'data.agregarTeste',
+  execute: (input) => Promise.resolve({ main: [{ json: { total: input.items.length } }] }),
+};
 const registry = new NodeRegistry();
-for (const n of [manualTrigger, setNode, filterNode, setVarNode]) registry.register(n);
+for (const n of [manualTrigger, setNode, filterNode, setVarNode, explodeNode, aggregateNode])
+  registry.register(n);
 
 const manual = (): WorkflowNode => ({
   id: 'm',
@@ -199,9 +217,76 @@ describe('spec 003 — HU-1: expressões no motor', () => {
     );
     expect(result.nodes.s?.output?.main?.[0]?.json.x).toBe('exec-9|test|Cadastro|https://x');
   });
+
+  it('FR-003 (Histórico 19/10/2026): $execution.startedAt e $execution.elapsedMs (tempo até o nó)', async () => {
+    const startedAt = new Date(Date.now() - 5000);
+    const fields = (id: string, name: string) =>
+      set(id, name, [
+        { name: 'inicio', type: 'string', value: '={{ $execution.startedAt }}' },
+        { name: 'decorrido', type: 'number', value: '={{ $execution.elapsedMs }}' },
+      ]);
+    const result = await runWorkflow(
+      def([manual(), fields('a', 'A'), fields('b', 'B')], [edge('m', 'a'), edge('a', 'b')]),
+      registry,
+      { evaluator, executionId: 'exec-t', executionStartedAt: startedAt },
+    );
+    const a = result.nodes.a?.output?.main?.[0]?.json as { inicio: string; decorrido: number };
+    const b = result.nodes.b?.output?.main?.[0]?.json as { inicio: string; decorrido: number };
+    expect(a.inicio).toBe(startedAt.toISOString());
+    expect(a.decorrido).toBeGreaterThanOrEqual(5000);
+    expect(a.decorrido).toBeLessThan(15_000);
+    // Cada nó vê o tempo até ele: nunca menor que o do nó anterior.
+    expect(b.decorrido).toBeGreaterThanOrEqual(a.decorrido);
+
+    // Sem o início informado, conta desde o início desta chamada do motor.
+    const local = await runWorkflow(def([manual(), fields('a', 'A')], [edge('m', 'a')]), registry, {
+      evaluator,
+    });
+    const json = local.nodes.a?.output?.main?.[0]?.json as { decorrido: number };
+    expect(json.decorrido).toBeGreaterThanOrEqual(0);
+    expect(json.decorrido).toBeLessThan(5000);
+  });
 });
 
 describe('spec 003 — HU-1.2: paired items através do logic.if', () => {
+  it('FR-004 (correção 19/10/2026): depois de um nó que agrega sem vínculo, $("Nó").item usa o único item do nó', async () => {
+    const node = (id: string, name: string, type: string): WorkflowNode => ({
+      id,
+      type,
+      name,
+      params: {},
+      position: [0, 0],
+    });
+    const flow = () =>
+      def(
+        [
+          manual(),
+          node('x', 'Explodir', 'data.explodirTeste'),
+          node('g', 'Agregar Envelopes', 'data.agregarTeste'),
+          set('f', 'Formata', [
+            { name: 'email', type: 'string', value: "={{ $('Início').item.json.email }}" },
+          ]),
+        ],
+        [edge('m', 'x'), edge('x', 'g'), edge('g', 'f')],
+      );
+    // Um item no Webhook/Início: não há dúvida de qual é.
+    const one = await runWorkflow(flow(), registry, {
+      evaluator,
+      pinData: { m: [{ json: { email: 'ana@x.br' } }] },
+    });
+    expect(one.status).toBe('success');
+    expect(one.nodes.f?.output?.main?.[0]?.json).toMatchObject({ total: 3, email: 'ana@x.br' });
+
+    // Dois itens: ambíguo; o erro explica e sugere .first() ou .all().
+    const two = await runWorkflow(flow(), registry, {
+      evaluator,
+      pinData: { m: [{ json: { email: 'ana@x.br' } }, { json: { email: 'bia@x.br' } }] },
+    });
+    expect(two.status).toBe('error');
+    expect(two.error?.message).toContain('não indica de qual item veio');
+    expect(two.error?.message).toContain('.first()');
+  });
+
   it('FR-004/FR-010: depois do If, $("Busca").item ainda aponta o item de origem', async () => {
     const reg = createNodeRegistry();
     const result = await runWorkflow(

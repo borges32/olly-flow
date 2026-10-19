@@ -1,4 +1,4 @@
-import type { Item } from '@olly/shared-types';
+import { jsonTextErrorMessage, parseJsonText, type Item } from '@olly/shared-types';
 
 export type FieldType = 'string' | 'number' | 'boolean' | 'object' | 'array' | 'null';
 
@@ -173,4 +173,16 @@ export function scalarText(value: unknown): string {
   if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint')
     return String(value);
   return JSON.stringify(value);
+}
+
+/**
+ * Histórico 19/10/2026 (spec 004, FR-009): resultado em texto que parece JSON (começa com `{` ou
+ * `[`) mas não é válido: a mensagem diz onde, antes de executar.
+ */
+export function previewJsonIssue(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return null;
+  const parsed = parseJsonText(trimmed);
+  return parsed.ok ? null : jsonTextErrorMessage(parsed);
 }

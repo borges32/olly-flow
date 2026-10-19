@@ -31,6 +31,7 @@ No editor, cada campo tem o alternador **Fixo | Expressão**. Em modo expressão
 | `$vars` | Variáveis da execução, gravadas pelo nó **Definir variável** (`data.setVariable`) |
 | `$env` | Somente variáveis de ambiente com prefixo `OLLY_EXPOSED_`, sem o prefixo (`OLLY_EXPOSED_API_URL` → `$env.API_URL`) |
 | `$execution.id`, `$execution.mode` | Execução atual (`test` ou `production`) |
+| `$execution.startedAt`, `$execution.elapsedMs` | Início da execução (ISO) e milissegundos decorridos até o nó avaliar as expressões (o tempo do fluxo até aquele nó). Numa execução retomada depois de uma espera, conta desde o início original. No nó de código, é o tempo no início do nó. Na prévia do editor, o decorrido aparece como 0. Ex.: `{{ Math.round($execution.elapsedMs / 1000) }} s` ou `{{ DateTime.fromISO($execution.startedAt).toFormat('HH:mm:ss') }}`. Não existe no N8N |
 | `$workflow.id`, `$workflow.name`, `$workflow.active` | Workflow atual |
 | `$parameter` | Parâmetros do nó atual (sem resolver) |
 | `$now`, `$today` | `DateTime` (Luxon) de agora e de hoje à meia-noite, no fuso `OLLY_TIMEZONE` (padrão `America/Sao_Paulo`) |
@@ -45,7 +46,7 @@ Erro na expressão do parâmetro "fields[0].value" do nó "Busca" (item 0): Cann
 Trecho: {{ $json.a.b }}
 ```
 
-`$('Nó').item` falha com mensagem clara quando não há caminho de *paired items* até o nó (ex.: o nó não é ancestral, ou um nó no caminho não informou de qual item cada saída veio).
+`$('Nó').item` falha com mensagem clara quando não há caminho de *paired items* até o nó (ex.: o nó não é ancestral, ou um nó no caminho não informou de qual item cada saída veio, como um código que agrega vários itens num só). Exceção (19/10/2026): se o nó indicado produziu **um único item** (ex.: o Webhook), ele é usado, porque não há outro possível. Com vários itens, a mensagem sugere `$('Nó').first()` (o primeiro) ou `$('Nó').all()` (todos).
 
 ## Segurança e limites
 
