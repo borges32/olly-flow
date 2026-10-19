@@ -41,7 +41,7 @@ function ranWith(
         dataTruncated: false,
         error: null,
         executionId: 'exec-1',
-        signature: nodeSignature(n, es, pinData),
+        signature: nodeSignature(n, es, pinData, ns),
         ...overrides[n.id],
       },
     ]),
@@ -93,6 +93,57 @@ describe('spec 003 — FR-020: plano de reaproveitamento ao executar um nó', ()
     const extra = [...nodes, node('x')];
     const es = [...edges, edge('m', 'x')];
     expect(Object.keys(planReuse('a', extra, es, {}, ranWith(extra, es)))).toEqual(['m']);
+  });
+
+  // Correção 19/10/2026: sub-nós (modelo, memória, ferramentas) executam dentro do pai e nunca
+  // têm execução própria; antes, impediam o reaproveitamento do pai e de tudo depois dele.
+  describe('FR-020 (correção 19/10/2026): nó com sub-nós de IA', () => {
+    const ai = (from: string, port: string): Edge => ({
+      id: `${from}-agent`,
+      from,
+      fromPort: port,
+      to: 'agent',
+      toPort: port,
+    });
+    // m → agent → a → b, com modelo e memória ligados ao agent.
+    const aiNodes = [
+      node('m'),
+      node('agent'),
+      node('a'),
+      node('b'),
+      node('modelo'),
+      node('memoria'),
+    ];
+    const aiEdges = [
+      edge('m', 'agent'),
+      edge('agent', 'a'),
+      edge('a', 'b'),
+      ai('modelo', 'ai_languageModel'),
+      ai('memoria', 'ai_memory'),
+    ];
+    // Sub-nós não aparecem na execução (não têm linha própria).
+    const ran = () => {
+      const run = ranWith(aiNodes, aiEdges);
+      delete run.modelo;
+      delete run.memoria;
+      return run;
+    };
+
+    it('FR-020: o pai e os seguintes são reaproveitados', () => {
+      expect(planReuse('b', aiNodes, aiEdges, {}, ran())).toEqual({
+        m: 'exec-1',
+        agent: 'exec-1',
+        a: 'exec-1',
+      });
+    });
+
+    it('FR-020: alterar um sub-nó invalida o pai (e os seguintes)', () => {
+      const run = ran();
+      const changed = aiNodes.map((n) =>
+        n.id === 'modelo' ? node('modelo', { model: 'outro' }) : n,
+      );
+      expect(planReuse('b', changed, aiEdges, {}, run)).toEqual({ m: 'exec-1' });
+    });
   });
 
   it('FR-020: downstreamOf inclui o nó e todos os que dependem dele', () => {

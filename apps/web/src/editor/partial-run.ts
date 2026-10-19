@@ -2,17 +2,33 @@ import type { Edge, Item, WorkflowNode } from '@olly/shared-types';
 import type { NodeRunView } from './store';
 
 /**
+ * Conexão de sub-nó (modelo, memória, ferramenta, output parser; spec 011): a saída do sub-nó é
+ * `ai_*`. O sub-nó executa dentro do nó pai e não tem execução própria.
+ */
+const isSubNodeEdge = (e: Edge) => e.fromPort.startsWith('ai_');
+
+/**
  * Assinatura do que determina a saída de um nó: tipo, parâmetros, desabilitado, configurações,
- * dados fixados e conexões de entrada. Mudou desde a execução → os dados dela estão velhos.
+ * dados fixados, conexões de entrada e, para os sub-nós ligados a ele, a assinatura de cada um
+ * (alterar o modelo ou a memória muda o resultado do Agent). Mudou desde a execução → os dados
+ * dela estão velhos.
  */
 export function nodeSignature(
   node: WorkflowNode,
   edges: Edge[],
   pinData: Record<string, Item[]>,
+  nodes: readonly WorkflowNode[] = [],
+  seen: ReadonlySet<string> = new Set(),
 ): string {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const visited = new Set([...seen, node.id]);
   const incoming = edges
     .filter((e) => e.to === node.id)
-    .map((e) => `${e.from}:${e.fromPort}>${e.toPort}`)
+    .map((e) => {
+      const ref = `${e.from}:${e.fromPort}>${e.toPort}`;
+      const sub = isSubNodeEdge(e) && !visited.has(e.from) ? byId.get(e.from) : undefined;
+      return sub ? `${ref}=${nodeSignature(sub, edges, pinData, nodes, visited)}` : ref;
+    })
     .sort();
   return JSON.stringify([
     node.type,
@@ -30,7 +46,7 @@ export function nodeSignatures(
   edges: Edge[],
   pinData: Record<string, Item[]>,
 ): Record<string, string> {
-  return Object.fromEntries(nodes.map((n) => [n.id, nodeSignature(n, edges, pinData)]));
+  return Object.fromEntries(nodes.map((n) => [n.id, nodeSignature(n, edges, pinData, nodes)]));
 }
 
 function walk(start: string, edges: Edge[], direction: 'up' | 'down'): Set<string> {
@@ -78,8 +94,9 @@ export function planReuse(
       view?.status === 'success' &&
       !view.dataTruncated &&
       view.executionId !== undefined &&
-      view.signature === nodeSignature(node, edges, pinData) &&
-      edges.filter((e) => e.to === id).every((e) => reusable(e.from));
+      view.signature === nodeSignature(node, edges, pinData, nodes) &&
+      // Sub-nós não têm execução própria: entram pela assinatura do pai.
+      edges.filter((e) => e.to === id && !isSubNodeEdge(e)).every((e) => reusable(e.from));
     memo.set(id, ok);
     return ok;
   };

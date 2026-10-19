@@ -142,6 +142,49 @@ describe('spec 022 — nó PostgreSQL único', () => {
     expect(await names()).toEqual([]);
   });
 
+  it('FR-004 (correção 19/10/2026): sem linhas no resultado, emite { success: true } como o N8N e o fluxo segue', async () => {
+    const success = [{ json: { success: true }, pairedItem: { item: 0 } }];
+    // Excluir sem linhas atingidas (o caso do "Deleta memoria").
+    expect(
+      await run({
+        operation: 'deleteTable',
+        deleteCommand: 'delete',
+        table: 'clientes',
+        where: [{ column: 'nome', condition: 'equal', value: 'Ninguém' }],
+      }),
+    ).toEqual({ main: success });
+    // SQL sem RETURNING.
+    expect(
+      await run({
+        operation: 'executeQuery',
+        query: "UPDATE clientes SET cidade = 'Recife' WHERE nome = 'Ninguém'",
+      }),
+    ).toEqual({ main: success });
+    // Selecionar sem linhas.
+    expect(
+      await run({
+        operation: 'select',
+        table: 'clientes',
+        where: [{ column: 'idade', condition: '>', value: 200 }],
+      }),
+    ).toEqual({ main: success });
+    // Por item: só o item sem linhas ganha o sucesso, na posição dele.
+    const del = (nome: string) => ({
+      operation: 'deleteTable',
+      deleteCommand: 'delete',
+      table: 'clientes',
+      where: [{ column: 'nome', condition: 'equal', value: nome }],
+    });
+    const perItem = await run(
+      [del('Ninguém'), del('Davi')],
+      [{ json: { nome: 'Ninguém' } }, { json: { nome: 'Davi' } }],
+    );
+    expect(perItem.main?.map((i) => [i.json.success ?? i.json.nome, i.pairedItem])).toEqual([
+      [true, { item: 0 }],
+      ['Davi', { item: 1 }],
+    ]);
+  });
+
   it('SC-001/FR-004: esvaziar com reinício das sequências e cascata; remover a tabela', async () => {
     const truncated = await run(
       {

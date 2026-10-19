@@ -1,7 +1,8 @@
 import { POSTGRES_NODE_TYPE } from '@olly/shared-types';
 import type { JSONSchema7 } from 'json-schema';
 import { NodeParameterError } from '../../errors.js';
-import type { NodeContext, NodeDefinition } from '../../types.js';
+import type { Item, NodeOutput } from '@olly/shared-types';
+import type { NodeContext, NodeDefinition, NodeExecuteInput } from '../../types.js';
 import { postgresQueryParamsSchema } from '../query/definition.js';
 import { executePostgresQuery } from '../query/execute.js';
 import { postgresWriteParamsSchema } from '../write/definition.js';
@@ -197,6 +198,61 @@ function withOptionsFrom(ctx: NodeContext, param: string): NodeContext {
  * Nó PostgreSQL único, como o "Postgres" do N8N (spec 022): executar consulta, selecionar,
  * inserir, atualizar, upsert e excluir.
  */
+/**
+ * Correção 19/10/2026: como o N8N (e como o "Executar consulta" já fazia), o item de entrada
+ * cuja operação não devolveu nenhuma linha (DELETE que não atingiu linhas, UPDATE sem
+ * correspondência, seleção vazia) gera `{ success: true }`, vinculado a ele, na posição dele, e
+ * o fluxo segue. Itens que foram para a saída de erro não ganham o item de sucesso.
+ */
+export function withSuccessItems(input: NodeExecuteInput, output: NodeOutput): NodeOutput {
+  const covered = new Set<number>();
+  for (const items of Object.values(output))
+    for (const item of items) {
+      const paired = item.pairedItem;
+      if (paired && !Array.isArray(paired)) covered.add(paired.item);
+    }
+  if (input.items.every((_, i) => covered.has(i))) return output;
+  const byItem = new Map<number, Item[]>();
+  const unpaired: Item[] = [];
+  for (const item of output.main ?? []) {
+    const paired = item.pairedItem;
+    if (paired && !Array.isArray(paired)) {
+      byItem.set(paired.item, [...(byItem.get(paired.item) ?? []), item]);
+    } else unpaired.push(item);
+  }
+  const main = input.items.flatMap((_, i) =>
+    covered.has(i)
+      ? (byItem.get(i) ?? [])
+      : [{ json: { success: true }, pairedItem: { item: i } } satisfies Item],
+  );
+  return { ...output, main: [...main, ...unpaired] };
+}
+
+function runOperation(
+  operation: Operation,
+  input: NodeExecuteInput,
+  ctx: NodeContext,
+  deps: PostgresDatabaseDeps,
+): Promise<NodeOutput> {
+  switch (operation) {
+    case 'executeQuery':
+      return executePostgresQuery(input, withOptionsFrom(ctx, 'queryOptions'), deps);
+    case 'insert':
+    case 'update':
+    case 'upsert':
+      return executePostgresWrite(input, withOptionsFrom(ctx, 'writeOptions'), deps);
+    case 'select':
+      return executeSelect(input, ctx, deps);
+    case 'deleteTable':
+      return executeDelete(input, ctx, deps);
+    default:
+      throw new NodeParameterError(
+        'operation',
+        `operação desconhecida ${JSON.stringify(operation)}`,
+      );
+  }
+}
+
 export function createPostgresDatabaseNode(deps: PostgresDatabaseDeps): NodeDefinition {
   return {
     type: POSTGRES_NODE_TYPE,
@@ -212,24 +268,23 @@ export function createPostgresDatabaseNode(deps: PostgresDatabaseDeps): NodeDefi
     supportsParallelItems: true,
     credentialTypes: ['postgres'],
     paramsSchema: postgresDatabaseParamsSchema,
-    execute: (input, ctx) => {
+    execute: async (input, ctx) => {
       const operation = (ctx.getParam('operation', 0) ?? 'insert') as Operation;
+      const output = await runOperation(operation, input, ctx, deps);
       switch (operation) {
+        // Já emite `{ success: true }` por item, inclusive no modo "uma vez" (spec 004).
         case 'executeQuery':
-          return executePostgresQuery(input, withOptionsFrom(ctx, 'queryOptions'), deps);
-        case 'insert':
-        case 'update':
-        case 'upsert':
-          return executePostgresWrite(input, withOptionsFrom(ctx, 'writeOptions'), deps);
+          return output;
+        // Uma consulta por item: cada item sem linhas ganha o seu.
         case 'select':
-          return executeSelect(input, ctx, deps);
         case 'deleteTable':
-          return executeDelete(input, ctx, deps);
+          return withSuccessItems(input, output);
+        // Gravação em lote vincula as linhas ao primeiro item quando não há correspondência
+        // um a um: só a saída toda vazia (ex.: UPDATE sem correspondência) ganha o sucesso.
         default:
-          throw new NodeParameterError(
-            'operation',
-            `operação desconhecida ${JSON.stringify(operation)}`,
-          );
+          return Object.values(output).every((items) => items.length === 0)
+            ? withSuccessItems(input, output)
+            : output;
       }
     },
   };
