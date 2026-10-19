@@ -291,8 +291,7 @@ function convertHttpParams(
       options.batchSize = batch.batchSize;
     if (num(batch.batchInterval) !== undefined) options.batchIntervalMs = batch.batchInterval;
   }
-  if (o.allowUnauthorizedCerts === true)
-    warnings.push('Ignorar certificado inválido não é suportado');
+  if (o.allowUnauthorizedCerts === true) options.allowUnauthorizedCerts = true;
   if (o.proxy) warnings.push('Proxy por nó não é suportado');
   out.options = options;
   return { params: out, credentials };

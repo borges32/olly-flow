@@ -168,6 +168,7 @@ describe('spec 015 — FR-023: conversão dos nós e das conexões do N8N', () =
             },
             options: {
               timeout: 5000,
+              allowUnauthorizedCerts: true,
               response: { response: { neverError: true, responseFormat: 'json' } },
             },
           },
@@ -185,8 +186,15 @@ describe('spec 015 — FR-023: conversão dos nós e das conexões do N8N', () =
       sendBody: true,
       contentType: 'json',
       jsonBody: '={{ ({ "nome": ($json.nome), "fixo": "x" }) }}',
-      options: { timeout: 5000, neverError: true, responseFormat: 'json' },
+      options: {
+        timeout: 5000,
+        neverError: true,
+        responseFormat: 'json',
+        // Spec 004 (Histórico 19/10/2026): "Ignore SSL Issues" do N8N.
+        allowUnauthorizedCerts: true,
+      },
     });
+    expect(report.nodes.withWarnings.find((w) => w.node === 'HTTP')).toBeUndefined();
     expect(report.credentialsToCreate).toEqual([
       {
         name: 'Chave da API',

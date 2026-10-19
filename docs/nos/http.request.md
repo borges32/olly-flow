@@ -25,6 +25,7 @@ Chama uma API HTTP para cada item de entrada, com autenticação por credencial,
 | `options.outputBinaryField` | Propriedade binária da saída (padrão `data`) |
 | `options.neverError` | Status 4xx/5xx viram saída normal |
 | `options.batchSize`, `options.batchIntervalMs` | Requisições simultâneas por lote (padrão 1, uma por vez) e espera entre lotes |
+| `options.allowUnauthorizedCerts` | "Ignorar problemas de SSL (inseguro)": aceita certificado autoassinado, expirado ou emitido para outro nome, só nesta requisição. O filtro anti-SSRF continua valendo. Equivale ao "Ignore SSL Issues" do N8N (importado e exportado) |
 
 ## Comportamento
 
@@ -33,6 +34,7 @@ Chama uma API HTTP para cada item de entrada, com autenticação por credencial,
 - **Binário:** o conteúdo vai para o object storage (MinIO/S3) e o item guarda só a referência em `binary.<campo>` (`{ id, mimeType, fileName, size }`).
 - **Limite de resposta:** `OLLY_HTTP_MAX_RESPONSE_MB` (padrão 50 MB); acima disso a requisição é abortada.
 - **Status ≥ 400** (sem `neverError`): erro com o código e um trecho do corpo (até 500 caracteres).
+- **Certificado inválido** (sem `allowUnauthorizedCerts`): erro `Certificado SSL inválido (motivo)`, que indica a opção "Ignorar problemas de SSL".
 - **Filtro anti-SSRF:** toda requisição e todo redirect passam pelo filtro. Destinos em loopback, redes privadas, link-local (inclusive `169.254.169.254`), CGNAT, ULA, endereço não especificado, reservados ou multicast são bloqueados com a mensagem `Destino bloqueado pelo filtro de rede (host): motivo`. O filtro valida cada IP resolvido no momento da conexão, o que impede DNS rebinding. Hosts e CIDRs internos podem ser liberados em `OLLY_HTTP_ALLOWLIST`. Com `*` na lista, o filtro aceita qualquer destino, inclusive a rede interna, loopback e o endereço de metadados da nuvem; só o protocolo (HTTP/HTTPS) continua validado, e a API e o worker registram um aviso ao iniciar.
 - **Redirect para outra origem:** os cabeçalhos `Authorization` e `Cookie` não são reenviados.
 - **OAuth2 client credentials:** o token é obtido no servidor de autorização (também pelo filtro) e reaproveitado em memória até 30 s antes de vencer. Alterar a credencial invalida o token.

@@ -183,3 +183,4 @@ Executor e visualizador não recebem nenhuma das duas. Nenhuma permissão nova �
 | 03/10/2026 | Seção "Permissões RBAC" e tarefa T089 | Decisão humana: cada spec acrescenta e garante as permissões que cria |
 | 04/10/2026 | Detalhes de implementação definidos no início da implementação (ver §10) | Lacunas do plano encontradas ao implementar |
 | 16/10/2026 | §4: `*` na allowlist libera qualquer endereço (`parseAllowlist` → `any`), com aviso no log ao criar o filtro | Spec 004, Histórico 16/10/2026 |
+| 19/10/2026 | `options.allowUnauthorizedCerts` → `insecureTls` do filtro (spec 016) na chamada do nó; erro de certificado (códigos `*CERT*`, `*SELF_SIGNED*`, `*LEAF_SIGNATURE*`) vira `NodeExecutionError` com a indicação da opção | Spec 004, Histórico 19/10/2026 |

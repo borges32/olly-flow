@@ -36,9 +36,19 @@ interface Options {
   neverError: boolean;
   batchSize: number;
   batchIntervalMs: number;
+  allowUnauthorizedCerts: boolean;
 }
 
 const BODYLESS = new Set(['GET', 'HEAD']);
+
+/** Erros de verificação do certificado (Node/OpenSSL): a opção "Ignorar problemas de SSL" resolve. */
+const isCertificateError = (error: Error) => {
+  const code = (error as { code?: unknown }).code;
+  return (
+    typeof code === 'string' &&
+    (code.includes('CERT') || code.includes('SELF_SIGNED') || code.includes('LEAF_SIGNATURE'))
+  );
+};
 const ERROR_SNIPPET = 500;
 
 const text = (v: unknown) =>
@@ -66,6 +76,7 @@ function readOptions(raw: unknown): Options {
     neverError: o.neverError === true,
     batchSize: int(o.batchSize, 1, 1),
     batchIntervalMs: int(o.batchIntervalMs, 0, 0),
+    allowUnauthorizedCerts: o.allowUnauthorizedCerts === true,
   };
 }
 
@@ -248,6 +259,8 @@ async function requestItem(
       signal,
       followRedirects: options.followRedirects,
       maxRedirects: options.maxRedirects,
+      // Só a verificação do certificado desta requisição; o filtro anti-SSRF continua igual.
+      insecureTls: options.allowUnauthorizedCerts,
     });
   } catch (error) {
     if (signal.aborted && !ctx.signal.aborted) {
@@ -255,7 +268,13 @@ async function requestItem(
     }
     // O fetch do undici embrulha a causa (ex.: bloqueio do filtro de rede no lookup).
     const cause = (error as { cause?: unknown }).cause;
-    throw cause instanceof Error ? cause : error;
+    const reason = cause instanceof Error ? cause : error;
+    if (reason instanceof Error && isCertificateError(reason)) {
+      throw new NodeExecutionError(
+        `Certificado SSL inválido (${reason.message}): se o servidor é confiável, ative "Ignorar problemas de SSL" nas opções do nó`,
+      );
+    }
+    throw reason;
   }
   const raw = await readLimited(response, deps.maxResponseBytes);
   const contentType = response.headers.get('content-type') ?? '';

@@ -311,6 +311,36 @@ describe('spec 004 — FR-009: nó http.request', () => {
     ).rejects.toThrow(/loopback/);
   });
 
+  it('FR-009 (Histórico 19/10/2026): "Ignorar problemas de SSL" aceita certificado autoassinado; o filtro de rede continua valendo', async () => {
+    const { createServer: createHttpsServer } = await import('node:https');
+    const { TEST_TLS_CERT, TEST_TLS_KEY } = await import('../../ai/testing/test-tls.js');
+    const tls = createHttpsServer({ cert: TEST_TLS_CERT, key: TEST_TLS_KEY }, (_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ seguro: false }));
+    });
+    await new Promise<void>((r) => tls.listen(0, '127.0.0.1', r));
+    const url = `https://127.0.0.1:${String((tls.address() as AddressInfo).port)}/`;
+    try {
+      // Padrão: o certificado é verificado e a requisição falha.
+      const strict = run({ url }).out;
+      await expect(strict).rejects.toThrow(NodeExecutionError);
+      await expect(strict).rejects.toThrow(
+        /Certificado SSL inválido \(self-signed certificate\).*Ignorar problemas de SSL/,
+      );
+      expect(await jsonOf(run({ url, options: { allowUnauthorizedCerts: true } }).out)).toEqual([
+        { seguro: false },
+      ]);
+      // Sem a allowlist, o loopback continua bloqueado mesmo ignorando o certificado.
+      await expect(
+        run({ url, options: { allowUnauthorizedCerts: true } }, undefined, {
+          deps: deps({ guard: createHttpGuard() }),
+        }).out,
+      ).rejects.toThrow(/loopback/);
+    } finally {
+      tls.close();
+    }
+  });
+
   it('FR-009: lotes enviam `batchSize` requisições por vez com intervalo entre lotes', async () => {
     const items = [1, 2, 3, 4].map((n) => ({ json: { n } }));
     const started = Date.now();

@@ -151,6 +151,14 @@ export const httpRequestParamsSchema: JSONSchema7 = {
           minimum: 0,
           default: 0,
         },
+        // Spec 004 (Histórico 19/10/2026): "Ignore SSL Issues (Insecure)" do N8N.
+        allowUnauthorizedCerts: {
+          type: 'boolean',
+          title: 'Ignorar problemas de SSL (inseguro)',
+          description:
+            'Aceita certificado autoassinado, expirado ou de outro nome. O filtro de rede continua valendo.',
+          default: false,
+        },
       },
       additionalProperties: false,
     },
