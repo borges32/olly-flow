@@ -22,9 +22,9 @@ Como **analista**, quero escrever Python com pandas, com a mesma API do N8N, par
 1. **Dado** itens vindos do Postgres, **quando** agrego com pandas, **então** recebo os itens agregados.
 2. **Dado** código que tenta acessar a rede, ler arquivos do sistema ou criar processos, **quando** executo, **então** a operação é bloqueada e o erro aparece no log, sem afetar outras execuções.
 
-### HU-2 — Agendar workflows (P1) — passou para a spec 020 (13/10/2026)
+### HU-2 — Agendar workflows (P1) — fora do escopo (19/10/2026)
 
-O agendamento passou para a [spec 020](../020-schedule-trigger/spec.md) (Schedule Trigger como no N8N). O texto abaixo fica só como histórico.
+O agendamento passou para a spec 020 (Schedule Trigger como no N8N) em 13/10/2026, e a spec 020 foi removida em 19/10/2026 por decisão do PO: o agendamento de workflows está fora do escopo. O texto abaixo fica só como histórico.
 
 
 Como **editor**, quero acionar workflows por cron ou intervalo.
@@ -62,8 +62,8 @@ Como **editor**, quero que o HTTP Request colete todas as páginas automaticamen
 - **FR-004**: O nó `code.python` DEVE oferecer os modos "todos os itens" e "por item" e a API do N8N (`_input`, `_json`, `_('Nó')`, `_vars`, `_execution`, `_workflow`, `_now`, `_today`), com itens acessíveis por atributo e por chave e `print` capturado.
 - **FR-005**: O retorno Python DEVE ser normalizado como no nó JS.
 - **FR-006**: O cancelamento da execução DEVE encerrar o processo Python.
-- **FR-007** (passou para a spec 020): O gatilho `trigger.schedule` DEVE aceitar regras cron e de intervalo com fuso horário, criadas na publicação e removidas na despublicação, sem duplicidade entre workers.
-- **FR-008** (passou para a spec 020): O editor DEVE validar a expressão cron e mostrar as próximas 5 execuções.
+- **FR-007** (fora do escopo; ver histórico): O gatilho `trigger.schedule` DEVE aceitar regras cron e de intervalo com fuso horário, criadas na publicação e removidas na despublicação, sem duplicidade entre workers.
+- **FR-008** (fora do escopo; ver histórico): O editor DEVE validar a expressão cron e mostrar as próximas 5 execuções.
 - **FR-009**: O nó `flow.executeWorkflow` DEVE chamar um workflow publicado (respeitando as permissões do dono da execução), uma vez ou por item, aguardando ou não o término, e retornar a saída do último nó.
 - **FR-010**: Execuções de sub-workflow DEVEM ser vinculadas à execução pai. A profundidade de aninhamento DEVE ser limitada e a recursão direta detectada.
 - **FR-011**: O gatilho `trigger.executeWorkflow` DEVE receber os itens e, opcionalmente, validá-los contra um schema.
@@ -89,7 +89,7 @@ Como **editor**, quero que o HTTP Request colete todas as páginas automaticamen
 - **SC-001**: Python com pandas agrega dados do Postgres.
 - **SC-002**: Bateria de escape (≥ 30 casos) verde no CI.
 - **SC-003**: O runner recusa chamadas sem token.
-- **SC-004** (passou para a spec 020, SC-001): Agendamento de 1 min gera 3 execuções em 3 min com 2 workers.
+- **SC-004** (fora do escopo; ver histórico): Agendamento de 1 min gera 3 execuções em 3 min com 2 workers.
 - **SC-005**: Espera de 2 min retoma em outro worker.
 - **SC-006**: Sub-workflow por item preserva a ordem; a recursão é bloqueada.
 - **SC-007**: A reexecução não reexecuta os nós bem-sucedidos.
@@ -113,4 +113,5 @@ Nenhum.
 |---|---|---|
 | 03/10/2026 | Criação a partir do prompt da Sprint 7 | Migração para SDD |
 | 06/10/2026 | Implementação parcial antecipada: estado e retomada (FR-012), sub-workflow (FR-009 a FR-011) e `flow.wait` (T001, T040, T041), exigidos pela spec 011; o restante continua adiado | Decisão humana |
-| 13/10/2026 | HU-2 (agendamento), FR-007, FR-008 e SC-004 passaram para a [spec 020](../020-schedule-trigger/spec.md) (Schedule Trigger como no N8N), com as tarefas T020 a T022; os ids restantes foram mantidos | Pedido do PO: nó Schedule Trigger semelhante ao do N8N, em spec própria |
+| 13/10/2026 | HU-2 (agendamento), FR-007, FR-008 e SC-004 passaram para a spec 020 (Schedule Trigger como no N8N), com as tarefas T020 a T022; os ids restantes foram mantidos | Pedido do PO: nó Schedule Trigger semelhante ao do N8N, em spec própria |
+| 19/10/2026 | A spec 020 (Schedule Trigger), que recebeu a HU-2, FR-007, FR-008 e SC-004, foi removida: o agendamento de workflows fica fora do escopo | Decisão do PO: o Schedule Trigger não será implementado |

@@ -204,6 +204,17 @@ export interface ExecutionErrorInfo {
   reason?: 'cancelled' | 'timeout' | 'worker_lost';
 }
 
+/** Spec 026: subexecução criada por um nó desta execução ("Executar workflow", ferramenta). */
+export interface SubExecutionRef {
+  id: string;
+  workflowId: string;
+  workflowName: string;
+  /** Nó que a criou; `null` nas subexecuções anteriores à spec 026. */
+  nodeId: string | null;
+  status: ExecutionStatus;
+  startedAt: string;
+}
+
 /** `GET /executions/:id` (FR-014). */
 export interface ExecutionDetail {
   id: string;
@@ -222,6 +233,8 @@ export interface ExecutionDetail {
   /** Definição executada (pode ser um rascunho não salvo, nas execuções de teste). */
   definition: WorkflowDefinition | null;
   nodes: NodeExecutionDetail[];
+  /** Spec 026: subexecuções criadas por esta execução, em ordem de início. */
+  subExecutions: SubExecutionRef[];
 }
 
 /** Linha de `GET /executions` (spec 005, FR-013). */

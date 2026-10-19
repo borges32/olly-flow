@@ -40,6 +40,8 @@ let governed: ProjectSummary;
 let governedExecutionId: string;
 const users = {} as Record<Subject, TestUser>;
 let executionId: string;
+/** Execução de teste terminada (Manual → Set), num workflow novo do projeto. */
+let finishedExecution: () => Promise<string>;
 
 const definition: WorkflowDefinition = {
   nodes: [
@@ -174,6 +176,15 @@ const ACTIONS: Action[] = [
     run: async (u) => {
       const res = await u.call('GET', `/executions/${executionId}`);
       return ok(res.statusCode) && !res.json<ExecutionDetail>().dataRedacted;
+    },
+  },
+  {
+    // Spec 026, FR-005.
+    name: 'Excluir execuções',
+    permission: 'execution:delete',
+    run: async (u) => {
+      const id = await finishedExecution();
+      return ok((await u.call('DELETE', `/executions/${id}`)).statusCode);
     },
   },
   {
@@ -457,6 +468,7 @@ beforeAll(async () => {
     }
     return id;
   };
+  finishedExecution = async () => run(await newWorkflow());
   executionId = await run(await newWorkflow());
   governedExecutionId = await run(await newGovernedWorkflow());
 });

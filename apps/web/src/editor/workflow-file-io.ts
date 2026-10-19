@@ -102,7 +102,12 @@ export function parsePastedFile(
 
 /** Salva um JSON como arquivo no navegador (FR-006). */
 export function downloadJson(content: unknown, filename: string): void {
-  const blob = new Blob([JSON.stringify(content, null, 2)], { type: 'application/json' });
+  downloadFile(JSON.stringify(content, null, 2), filename, 'application/json');
+}
+
+/** Salva um texto como arquivo no navegador (spec 026: log em `.txt`). */
+export function downloadFile(content: string, filename: string, type: string): void {
+  const blob = new Blob([content], { type });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

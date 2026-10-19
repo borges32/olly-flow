@@ -106,7 +106,7 @@ Spec 011:
 |---|---|---|---|
 | `trigger.manual` | 002 | `http.request` | 004 |
 | `trigger.webhook` | 005 | `http.respondToWebhook` | 005 |
-| `trigger.schedule` | 020 (antes 008) | `postgres.database` (substitui `postgres.query` e `postgres.write`) | 022 (antes 004) |
+| | | `postgres.database` (substitui `postgres.query` e `postgres.write`) | 022 (antes 004) |
 | `trigger.error` | 007 | | |
 | `trigger.executeWorkflow` | 008 | `code.javascript` | 005 |
 | `data.set` | 002 | `code.python` | 008 |
@@ -132,12 +132,13 @@ Spec 011:
 | `workflow:publish`, `execution:readData` | 005 |
 | `audit:read` | 009 |
 | `mcp:manage` | 010 |
+| `execution:delete` | 026 |
 
 **Spec 004:** listar credenciais e usá-las em nós (associar ao salvar, catálogo do Postgres) exige `credential:use`; criar, editar, excluir e testar exige `credential:manage`. Sem `credential:use`, a execução de teste de um workflow com credenciais só aceita a versão salva.
 
 **Responsabilidade por spec (decisão de 03/10/2026):** cada spec acrescenta as permissões que cria ao catálogo, ao seed e a esta tabela, e as declara na seção "Permissões RBAC" do seu `plan.md`. As permissões das specs 002 a 009 já estão no catálogo e no seed desde a spec 001; essas specs apenas as aplicam e testam.
 
-Catálogo e papéis padrão em `packages/shared-types/src/rbac.ts` (seed da spec 001): `admin` tem todas; `editor`, todas exceto `user:manage`, `project:manage`, `audit:read` e `mcp:manage`; `executor`, `workflow:read`, `workflow:execute` e `execution:read`; `viewer`, `workflow:read` e `execution:read`. `mcp:manage` entrou no catálogo e no seed na spec 010, como permissão exclusiva do admin, e vale só no escopo da plataforma.
+Catálogo e papéis padrão em `packages/shared-types/src/rbac.ts` (seed da spec 001): `admin` tem todas; `editor`, todas exceto `user:manage`, `project:manage`, `audit:read` e `mcp:manage`; `executor`, `workflow:read`, `workflow:execute` e `execution:read`; `viewer`, `workflow:read` e `execution:read`. `mcp:manage` entrou no catálogo e no seed na spec 010, como permissão exclusiva do admin, e vale só no escopo da plataforma. `execution:delete` entrou na spec 026 (admin e editor; o db-init atualiza os papéis gravados).
 
 **Permissões efetivas (spec 002):** o grupo de administração do IdP (`OIDC_ADMIN_GROUP`, com o IdP ativado) ou `users.is_admin` (spec 014) concede todas as permissões em todos os projetos; os demais usuários têm as permissões do seu papel somente nos projetos dos quais são membros (`project_members`). `GET /api/v1/me` devolve `permissions: { global: Permission[], projects: { [projectId]: Permission[] } }` (`EffectivePermissions` em `@olly/shared-types`). Toda rota declara `@Public()`, `@Authenticated()`, `@RequireProjectMember(param)` ou `@RequirePermission(permissão, escopo)`; recurso de projeto do qual o usuário não é membro responde 404.
 
@@ -177,6 +178,7 @@ Matriz por papel: [`docs/rbac-matriz.md`](../rbac-matriz.md), gerada pelo teste 
 - Workflow de erro (spec 007): `settings.errorWorkflowId`, validado ao salvar (mesmo projeto, outro workflow, com `trigger.error`) e espelhado em `workflows.error_workflow_id`. As execuções disparadas por ele têm `triggerType: 'error'`.
 - Rotas (spec 006): `POST /executions/:id/cancel` (`workflow:execute`; 409 se já terminou; auditado como `execution.cancel`), `GET /projects/:id/queue-stats` (`execution:read`; `{ running, queued, limit, customLimit }`) e `PUT /projects/:id/quota { maxConcurrentExecutions: number | null }` (administração da plataforma; auditado como `project.quota`).
 - Webhooks: `/webhook/<path>` (publicado) e `/webhook-test/<path>` (escuta do editor), fora de `/api/v1`, com autenticação própria por credencial. Publicação: `POST /workflows/:id/publish { version?, message }` (mensagem obrigatória desde a spec 009) e `POST /workflows/:id/unpublish` (`workflow:publish`). Escuta: `POST`/`DELETE /workflows/:id/listen-test-webhook` (`workflow:execute`). Execuções: `GET /executions` (filtros e cursor; `execution:read`).
+- Spec 026: `DELETE /executions/:id` (`execution:delete`; 204; 409 `conflict` se `queued`, `running` ou `waiting`; remove a execução com nós, payloads, estado, chamadas MCP, passos do agente, pedidos de aprovação e objetos `executions/<id>/` do S3, preservando `llm_usage`; auditado como `execution.delete`). `GET /executions/:id` traz `subExecutions: { id, workflowId, workflowName, nodeId, status, startedAt }[]` (subexecuções criadas pela execução; `nodeId` = `executions.parent_node_id`).
 
 ## Governança e LGPD (spec 009)
 

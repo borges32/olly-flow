@@ -1,4 +1,14 @@
-import { Body, Controller, Get, HttpCode, Inject, Param, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Inject,
+  Param,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type {
   ExecutionDetail,
@@ -70,6 +80,14 @@ export class ExecutionsController {
   ): Promise<{ cancelled: true }> {
     await this.executions.cancel(audit, user, id);
     return { cancelled: true };
+  }
+
+  /** Spec 026, FR-005: exclui uma execução terminada com todos os seus dados. */
+  @RequirePermission('execution:delete', { execution: 'id' })
+  @HttpCode(204)
+  @Delete('executions/:id')
+  async remove(@Audit() audit: AuditContext, @Param('id') id: string): Promise<void> {
+    await this.executions.delete(audit, id);
   }
 
   /** Spec 006, FR-012: execuções do projeto em andamento e na fila, e a cota. */

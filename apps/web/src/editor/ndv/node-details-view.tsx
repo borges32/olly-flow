@@ -6,7 +6,7 @@ import {
   type WorkflowNode,
 } from '@olly/shared-types';
 import { Pin, PinOff, Play, X } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useApi } from '@/api/api-provider';
 import { Button } from '@/components/ui/button';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
@@ -18,6 +18,8 @@ import { useEditorStore } from '../store';
 import { DataPanel, type DragSource } from './data-views';
 import { ExpressionContext, type ExpressionHelpers } from './expression-context';
 import { AgentStepsPanel } from './agent-steps';
+import { ColumnHandle } from './column-handle';
+import { useColumnSizes } from './use-column-sizes';
 import { McpCallsPanel } from './mcp-calls';
 
 /** Saída do `console` do nó de código (spec 005, FR-012). */
@@ -219,6 +221,9 @@ export function NodeDetailsView({
   }, [ancestors, inputData, run, api, workflowId, node.id, previewExecutionId]);
 
   const store = useEditorStore.getState;
+  // Spec 025: larguras das colunas ajustáveis pelas divisórias.
+  const columns = useColumnSizes();
+  const grid = useRef<HTMLDivElement>(null);
 
   return (
     <DialogPrimitive.Root
@@ -267,7 +272,11 @@ export function NodeDetailsView({
               </Button>
             </DialogPrimitive.Close>
           </header>
-          <div className="grid min-h-0 flex-1 grid-cols-1 divide-y overflow-auto lg:grid-cols-[1fr_minmax(22rem,1.1fr)_1fr] lg:divide-x lg:divide-y-0 lg:overflow-hidden">
+          <div
+            ref={grid}
+            style={columns.style}
+            className="grid min-h-0 flex-1 grid-cols-1 divide-y overflow-auto lg:[grid-template-columns:var(--ndv-cols)] lg:divide-y-0 lg:overflow-hidden"
+          >
             <DataPanel
               title="Entrada"
               testId="ndv-input"
@@ -304,6 +313,13 @@ export function NodeDetailsView({
                 )
               }
             />
+            <ColumnHandle
+              handle={0}
+              label="Redimensionar entre Entrada e Parâmetros"
+              sizes={columns.sizes}
+              onResize={columns.update}
+              container={grid}
+            />
             <div className="min-h-0 overflow-y-auto">
               <ExpressionContext.Provider value={helpers}>
                 <ParameterPanel
@@ -317,6 +333,13 @@ export function NodeDetailsView({
                 />
               </ExpressionContext.Provider>
             </div>
+            <ColumnHandle
+              handle={1}
+              label="Redimensionar entre Parâmetros e Saída"
+              sizes={columns.sizes}
+              onResize={columns.update}
+              container={grid}
+            />
             {editingPin ? (
               <PinEditor
                 initial={pinned ?? outputData?.[firstPort] ?? []}
@@ -371,7 +394,7 @@ export function NodeDetailsView({
                     )
                   }
                   toolbar={
-                    <div className="flex gap-1">
+                    <div className="flex flex-wrap gap-1">
                       {canExecute && (
                         <Button
                           size="sm"

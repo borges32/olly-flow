@@ -130,7 +130,7 @@ Mensagens da mesma sessão rodam uma de cada vez (decisão do PO). A importaçã
 - **Fixtures reais:** workflows da POC com Chat Trigger em `fixtures/n8n/`, para confirmar a T002.
 - **NFR-001 e NFR-002:** conferir a página num celular e medir o tempo até a resposta em homologação.
 - **Custo do chat público sem autenticação:** limitado pela taxa por endereço e pelo limite mensal de tokens. `OLLY_REQUIRE_WEBHOOK_AUTH` bloqueia a publicação sem autenticação.
-- **Spec 020 (planejada):** o plano dela prevê a migration `0016`, que agora é a das alterações de MCP, e a exportação com o tipo do N8N. Os dois pontos precisam de ajuste antes de implementá-la.
+- ~~**Spec 020 (planejada):** o plano dela prevê a migration `0016`, que agora é a das alterações de MCP, e a exportação com o tipo do N8N. Os dois pontos precisam de ajuste antes de implementá-la.~~ A spec 020 foi removida em 19/10/2026 (decisão do PO).
 
 ## Como demonstrar
 

@@ -346,7 +346,11 @@ function createContext({
     maxLoopIterations: options.maxLoopIterations ?? DEFAULT_MAX_LOOP_ITERATIONS,
     runIndex,
     mcp: () => options.mcp ?? unavailable('Cliente MCP'),
-    subWorkflows: () => options.subWorkflows ?? unavailable('Sub-workflow'),
+    subWorkflows: () => {
+      const gateway = options.subWorkflows ?? unavailable('Sub-workflow');
+      // Spec 026: a subexecução guarda o nó que a criou (link no log da execução).
+      return { ...gateway, run: (request) => gateway.run({ ...request, nodeId: node.id }) };
+    },
     ...(resume && { resume }),
     subNodes,
     withFromAI,

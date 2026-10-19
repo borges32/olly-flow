@@ -399,3 +399,55 @@ test.describe('spec 003 — If com condição criada no formulário', () => {
     });
   });
 });
+
+test.describe('spec 025 — colunas do painel do nó', () => {
+  test('FR-001/FR-002/FR-003/SC-001: arrastar a divisória ajusta as colunas vizinhas, é lembrado, aceita teclado e o clique duplo volta ao padrão', async ({
+    page,
+  }) => {
+    const wf = await createWorkflow(admin, projectId, 'Colunas', definition);
+    await loginViaUi(page, 'editor', `/workflows/${wf.id}`);
+    const width = async (testId: string) =>
+      (await page.getByTestId(testId).boundingBox())?.width ?? 0;
+    await page.getByTestId('node-Montar').dblclick();
+    const handle = page.getByTestId('ndv-resize-1');
+    await expect(handle).toHaveAttribute('aria-valuenow', '36');
+    const before = {
+      input: await width('ndv-input'),
+      params: await width('parameter-panel'),
+      output: await width('ndv-output'),
+    };
+
+    // Arrastar 150 px para a direita: Parâmetros cresce, Saída diminui, Entrada não muda.
+    const box = await handle.boundingBox();
+    if (!box) throw new Error('divisória sem posição');
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2 + 150, box.y + box.height / 2, { steps: 5 });
+    await page.mouse.up();
+    const after = {
+      input: await width('ndv-input'),
+      params: await width('parameter-panel'),
+      output: await width('ndv-output'),
+    };
+    expect(after.params - before.params).toBeGreaterThan(130);
+    expect(before.output - after.output).toBeGreaterThan(130);
+    expect(Math.abs(after.input - before.input)).toBeLessThan(2);
+
+    // Fechar e abrir o painel de outro nó: a largura foi lembrada.
+    await page.keyboard.press('Escape');
+    await page.getByTestId('node-Adulto?').dblclick();
+    await expect.poll(() => width('parameter-panel')).toBeGreaterThan(after.params - 2);
+    expect(Math.abs((await width('parameter-panel')) - after.params)).toBeLessThan(2);
+
+    // Teclado: seta → move a divisória 2 pontos.
+    const first = page.getByTestId('ndv-resize-0');
+    await first.focus();
+    await page.keyboard.press('ArrowRight');
+    await expect(first).toHaveAttribute('aria-valuenow', '34');
+
+    // Clique duplo: volta ao padrão.
+    await page.getByTestId('ndv-resize-1').dblclick();
+    await expect(page.getByTestId('ndv-resize-1')).toHaveAttribute('aria-valuenow', '36');
+    await expect(first).toHaveAttribute('aria-valuenow', '32');
+  });
+});

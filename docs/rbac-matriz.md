@@ -15,6 +15,7 @@ Papéis por projeto. "Admin da plataforma" é o grupo de administração do IdP 
 | Publicar e despublicar | `workflow:publish` | ✅ | ✅ | ✅ | — | — | — |
 | Ver execuções | `execution:read` | ✅ | ✅ | ✅ | ✅ | ✅ | — |
 | Ver dados das execuções | `execution:readData` | ✅ | ✅ | ✅ | — | — | — |
+| Excluir execuções | `execution:delete` | ✅ | ✅ | ✅ | — | — | — |
 | Listar e usar credenciais | `credential:use` | ✅ | ✅ | ✅ | — | — | — |
 | Gerenciar credenciais | `credential:manage` | ✅ | ✅ | ✅ | — | — | — |
 | Gerenciar membros do projeto | `project:manage` | ✅ | ✅ | — | — | — | — |

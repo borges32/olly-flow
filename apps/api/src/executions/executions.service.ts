@@ -45,6 +45,7 @@ import { hasProjectPermission } from '../rbac/ability.factory.js';
 import { BINARY_STORAGE } from '../binary/binary.module.js';
 import type { S3BinaryStorage } from '../binary/s3-binary-store.js';
 import { readNodeData } from './node-data.js';
+import { purgeExecutions } from './purge.js';
 import { ExecutionDispatcher } from './dispatcher.js';
 import type { ExecutionJob } from './execution-job.js';
 import type { ListExecutionsQuery, PreviewBody, TestRunBody } from './executions.schemas.js';
@@ -416,6 +417,14 @@ export class ExecutionsService implements OnModuleInit, OnModuleDestroy {
       .orderBy('started_at')
       .orderBy('run_index')
       .execute();
+    // Spec 026: subexecuções (link no log), pelo índice de `parent_execution_id`.
+    const children = await this.db
+      .selectFrom('executions as e')
+      .innerJoin('workflows as w', 'w.id', 'e.workflow_id')
+      .select(['e.id', 'e.workflow_id', 'w.name', 'e.parent_node_id', 'e.status', 'e.started_at'])
+      .where('e.parent_execution_id', '=', executionId)
+      .orderBy('e.started_at')
+      .execute();
     return {
       id: execution.id,
       workflowId: execution.workflow_id,
@@ -457,7 +466,38 @@ export class ExecutionsService implements OnModuleInit, OnModuleDestroy {
           };
         }),
       ),
+      subExecutions: children.map((c) => ({
+        id: c.id,
+        workflowId: c.workflow_id,
+        workflowName: c.name,
+        nodeId: c.parent_node_id,
+        status: c.status as ExecutionStatus,
+        startedAt: c.started_at.toISOString(),
+      })),
     };
+  }
+
+  /**
+   * Spec 026, FR-005: exclui uma execução terminada com todos os seus dados (inclusive os
+   * objetos no armazenamento). Execução ativa: 409 (é preciso parar antes). Auditado.
+   */
+  async delete(ctx: AuditContext, executionId: string): Promise<void> {
+    const execution = await this.db
+      .selectFrom('executions')
+      .select(['status', 'workflow_id'])
+      .where('id', '=', executionId)
+      .executeTakeFirst();
+    if (!execution) throw new NotFoundError('Execução não encontrada');
+    if (['queued', 'running', 'waiting'].includes(execution.status)) {
+      throw new ConflictError('A execução ainda está ativa: pare-a antes de excluir');
+    }
+    await purgeExecutions(this.db, this.storage, [executionId], this.logger);
+    await this.audit.record(this.db, ctx, {
+      action: 'execution.delete',
+      entityType: 'execution',
+      entityId: executionId,
+      details: { workflowId: execution.workflow_id, status: execution.status },
+    });
   }
 
   /**

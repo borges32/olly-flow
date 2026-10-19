@@ -57,7 +57,7 @@ A importação é feita pela API (`POST /api/v1/projects/:id/workflows/import`, 
 
 - **Descartados:** `stickyNote` (com nota no relatório).
 - **Nós customizados:** os tipos com o prefixo `CUSTOM.` (nós customizados instalados no N8N) são reconhecidos como tipos do N8N; os que não têm conversão viram marcadores.
-- **Marcadores:** os demais tipos viram [nós marcadores](nos/placeholder.unsupported.md), com o JSON original. Exemplos: `scheduleTrigger` (o gatilho agendado ainda não existe; previsto na [spec 020](../specs/020-schedule-trigger/spec.md)), Slack, planilhas.
+- **Marcadores:** os demais tipos viram [nós marcadores](nos/placeholder.unsupported.md), com o JSON original. Exemplos: `scheduleTrigger` (o agendamento de workflows está fora do escopo), Slack, planilhas.
 
 ## Conexões, credenciais e expressões
 

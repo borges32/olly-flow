@@ -165,7 +165,8 @@ export function DataPanel({
   return (
     <section aria-label={title} data-testid={testId} className="flex min-h-0 flex-col">
       <header className="grid gap-2 border-b p-3">
-        <div className="flex items-center gap-2">
+        {/* Spec 025: numa coluna estreita, os botões passam para a linha de baixo. */}
+        <div className="flex flex-wrap items-center gap-2">
           <h3 className="flex-1 text-sm font-semibold">{title}</h3>
           {toolbar}
         </div>

@@ -103,6 +103,7 @@ Qualquer parâmetro string pode ser uma expressão (`=...`), inclusive dentro de
   - **sub-nós:** modelo, memória, ferramentas e parsers ficam embaixo do nó pai, lado a lado;
   - **alcance:** com dois ou mais nós selecionados, só eles (e os sub-nós deles); senão, o workflow inteiro. O canto superior esquerdo fica onde estava;
   - **desfazer:** Ctrl+Z desfaz num passo. O botão não aparece na tela somente leitura.
+- **Largura das colunas do painel do nó (spec 025):** as divisórias entre **Entrada**, **Parâmetros** e **Saída** podem ser arrastadas (ou movidas com ← e → quando focadas). Arrastar muda só as duas colunas vizinhas, com mínimo de 15% cada; o clique duplo numa divisória volta ao padrão. As larguras ficam guardadas no navegador e valem para o painel de qualquer nó. Na tela estreita, as colunas ficam empilhadas e sem divisórias.
 - **Próximo nó (spec 024):** na execução de teste nó a nó (botão ▶ do nó, ou depois da chamada de teste do webhook), os nós que esperam a execução ficam com a borda índigo e o selo **próximo**, e as conexões até eles ficam animadas. Regras:
   - **quem é o próximo:** um nó que ainda não executou e recebe uma conexão de uma saída com itens de um nó executado com sucesso. No If e no Switch, só o ramo que recebeu itens; a saída de erro conta quando tem itens;
   - **sub-nós** (modelo, memória, ferramentas, parsers) não são destacados: executam junto com o nó pai;

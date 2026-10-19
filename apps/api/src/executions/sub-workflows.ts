@@ -80,7 +80,13 @@ export class SubWorkflowService {
 
   private async run(
     parentExecutionId: string,
-    request: { workflowId: string; items: Item[]; wait: boolean; signal?: AbortSignal },
+    request: {
+      workflowId: string;
+      items: Item[];
+      wait: boolean;
+      signal?: AbortSignal;
+      nodeId?: string;
+    },
     runInline: InlineRunner,
   ): Promise<{ executionId: string; status: string; items: Item[] }> {
     const parent = await this.db
@@ -146,6 +152,7 @@ export class SubWorkflowService {
       definition,
       owner,
       parentExecutionId,
+      parentNodeId: request.nodeId ?? null,
       depth,
       status: request.wait ? 'running' : 'queued',
     });
@@ -237,6 +244,7 @@ export class SubWorkflowService {
     definition: WorkflowDefinition;
     owner: string | null;
     parentExecutionId: string;
+    parentNodeId: string | null;
     depth: number;
     status: 'running' | 'queued';
   }): Promise<string> {
@@ -253,6 +261,7 @@ export class SubWorkflowService {
           status: input.status,
           definition: JSON.stringify(input.definition),
           parent_execution_id: input.parentExecutionId,
+          parent_node_id: input.parentNodeId,
           depth: input.depth,
           ...(input.status === 'running' && { heartbeat_at: new Date() }),
         })

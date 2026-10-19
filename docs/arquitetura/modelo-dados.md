@@ -15,7 +15,7 @@
 | `workflows` | Cabeçalho do workflow; `version` = última versão salva | 002 | `published_version`, `active` (005); `error_workflow_id` (007) |
 | `workflow_versions` | Definição completa (JSONB) por versão | 002 | Mensagem de versão (009) |
 | `webhooks` | Rotas `path` + método → workflow/nó | 002 / 005 | Ativadas na publicação |
-| `executions` | Execução de workflow | 003 | **Particionada por mês** (`olly_ensure_partitions`). `project_id` copiado do workflow. `definition` (definição executada, spec 005). `heartbeat_at` (batimento do worker, spec 006). `trace_id` (012), `parent_execution_id` (008) |
+| `executions` | Execução de workflow | 003 | **Particionada por mês** (`olly_ensure_partitions`). `project_id` copiado do workflow. `definition` (definição executada, spec 005). `heartbeat_at` (batimento do worker, spec 006). `trace_id` (012), `parent_execution_id` (008), `parent_node_id` (026: nó da execução pai que criou a subexecução) |
 | `node_executions` | Execução de cada nó (por `run_index`) | 003 | **Particionada por mês**. `input_sources` (origem dos itens, para *paired items*), `pinned`, `reused` (saída reaproveitada de execução anterior, FR-020), `data_truncated`, `console` (saída do nó de código, spec 005). Spec 009: dados mascarados; `data_ref` (dados acima de `OLLY_INLINE_DATA_LIMIT` no object storage); `data_masked` (alterados pelo mascaramento: não são reaproveitados) |
 | `workflows.published_version`, `workflows.active` | Versão em produção e se as rotas estão ativas (spec 005, `0006_publish_console`) | 005 | |
 | `execution_payloads` | Dados do disparo de uma execução enfileirada (itens do gatilho, nó inicial, pinData, reaproveitamento): a fila leva só o id (spec 006, `0007_queue`). Acima de 1 MB, conteúdo no object storage (`data_ref`) | 006 | Sem FK (executions é particionada) |
@@ -100,6 +100,7 @@ CREATE TABLE execution_payloads (            -- 0007_queue (spec 006)
 -- 0017_postgres14_unique (15/10/2026): restrições UNIQUE NULLS NOT DISTINCT (PostgreSQL 15+)
 --   trocadas por índices únicos parciais nos bancos já migrados (0009 e 0010 já criam os índices)
 -- 0011_execution_state (spec 008, parte): execution_state; executions.parent_execution_id, depth, retry_of
+-- 0018_execution_parent_node (spec 026): executions.parent_node_id
 CREATE TABLE audit_log (                      -- sem FK em user_id: o registro sobrevive a users
   id BIGSERIAL PRIMARY KEY, user_id UUID, action TEXT NOT NULL, entity_type TEXT,
   entity_id TEXT, details JSONB, ip INET, created_at TIMESTAMPTZ DEFAULT now()

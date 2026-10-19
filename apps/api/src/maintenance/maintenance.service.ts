@@ -9,6 +9,7 @@ import type { S3BinaryStorage } from '../binary/s3-binary-store.js';
 import { APP_CONFIG, type AppConfig } from '../config/config.js';
 import { DB, REDIS } from '../core/tokens.js';
 import { executionPrefix } from '../executions/node-data.js';
+import { purgeExecutions } from '../executions/purge.js';
 
 const DAY_MS = 86_400_000;
 const LOCK_KEY = 'olly:retention-lock';
@@ -204,24 +205,17 @@ export class MaintenanceService {
         .limit(BATCH)
         .execute();
       if (rows.length === 0) return;
-      const ids = rows.map((r) => r.id);
-      report.metadataDeleted.objects += await this.deleteObjects(ids);
-      const nodes = await this.db
-        .deleteFrom('node_executions')
-        .where('execution_id', 'in', ids)
-        .executeTakeFirst();
-      await this.db.deleteFrom('execution_payloads').where('execution_id', 'in', ids).execute();
-      const calls = await this.db
-        .deleteFrom('mcp_calls')
-        .where('execution_id', 'in', ids)
-        .executeTakeFirst();
-      report.metadataDeleted.mcpCalls += Number(calls.numDeletedRows);
-      // Spec 011: passos do agente e pedidos de aprovação saem com a execução.
-      await this.db.deleteFrom('agent_steps').where('execution_id', 'in', ids).execute();
-      await this.db.deleteFrom('approval_requests').where('execution_id', 'in', ids).execute();
-      await this.db.deleteFrom('executions').where('id', 'in', ids).execute();
-      report.metadataDeleted.executions += ids.length;
-      report.metadataDeleted.nodes += Number(nodes.numDeletedRows);
+      // Spec 026: a mesma remoção completa da exclusão manual.
+      const purged = await purgeExecutions(
+        this.db,
+        this.storage,
+        rows.map((r) => r.id),
+        this.logger,
+      );
+      report.metadataDeleted.objects += purged.objects;
+      report.metadataDeleted.mcpCalls += purged.mcpCalls;
+      report.metadataDeleted.executions += purged.executions;
+      report.metadataDeleted.nodes += purged.nodes;
     }
   }
 

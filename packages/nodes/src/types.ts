@@ -168,6 +168,8 @@ export interface SubWorkflowGateway {
     /** Aguarda o fim e devolve os itens do último nó do filho. */
     wait: boolean;
     signal?: AbortSignal;
+    /** Spec 026: nó que chama (preenchido pelo motor); vai para `executions.parent_node_id`. */
+    nodeId?: string;
   }) => Promise<{ executionId: string; status: string; items: Item[] }>;
   /** Spec 011: nome e schema de entrada (do gatilho) do workflow publicado. */
   describe: (

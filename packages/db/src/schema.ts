@@ -343,6 +343,8 @@ export interface ExecutionsTable {
   heartbeat_at: ColumnType<Date | null, Date | null | undefined, Date | null>;
   /** Spec 008, FR-010: execução pai (sub-workflow) e profundidade de aninhamento. */
   parent_execution_id: ColumnType<string | null, string | null | undefined, string | null>;
+  /** Spec 026: nó da execução pai que criou esta subexecução. */
+  parent_node_id: ColumnType<string | null, string | null | undefined, string | null>;
   depth: Generated<number>;
   /** Spec 008, FR-014: execução reexecutada (reexecução ainda não implementada). */
   retry_of: ColumnType<string | null, string | null | undefined, string | null>;

@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
+import { ExecutionActions } from '@/executions/execution-actions';
 
 const dateFormat = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'medium' });
 const STATUS_LABEL: Record<ExecutionStatus, string> = {
@@ -19,6 +20,14 @@ const STATUS_LABEL: Record<ExecutionStatus, string> = {
   success: 'Sucesso',
   error: 'Erro',
   cancelled: 'Cancelada',
+};
+// Spec 026: gatilhos além de manual e webhook (antes, todos apareciam como "Manual").
+const TRIGGER_LABEL: Record<string, string> = {
+  manual: 'Manual',
+  webhook: 'Webhook',
+  subworkflow: 'Sub-workflow',
+  chat: 'Chat',
+  error: 'Gatilho de erro',
 };
 type Filter = 'project' | 'workflow' | 'status' | 'mode' | 'trigger' | 'from' | 'to';
 
@@ -274,14 +283,17 @@ export function ExecutionsPage() {
                   </Link>
                 </td>
                 <td className="px-4 py-2">{e.mode === 'test' ? 'Teste' : 'Produção'}</td>
-                <td className="px-4 py-2">{e.triggerType === 'webhook' ? 'Webhook' : 'Manual'}</td>
+                <td className="px-4 py-2">{TRIGGER_LABEL[e.triggerType] ?? e.triggerType}</td>
                 <td className="px-4 py-2 text-muted-foreground">
                   {dateFormat.format(new Date(e.startedAt))}
                 </td>
                 <td className="px-4 py-2 text-muted-foreground">{duration(e.durationMs)}</td>
                 <td className="px-2 py-1 text-right">
-                  {(e.status === 'queued' || e.status === 'running') && (
+                  {e.status === 'queued' || e.status === 'running' ? (
                     <StopButton executionId={e.id} projectId={e.projectId} />
+                  ) : (
+                    // Spec 026: Log e Excluir nas execuções terminadas.
+                    e.status !== 'waiting' && <ExecutionActions execution={e} />
                   )}
                 </td>
               </tr>

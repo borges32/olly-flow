@@ -28,6 +28,13 @@ describe('FR-010: matriz padrão de papéis', () => {
     ]);
   });
 
+  it('spec 026 — FR-005: execution:delete para admin e editor, não para executor e viewer', () => {
+    expect(DEFAULT_ROLE_PERMISSIONS.admin).toContain('execution:delete');
+    expect(DEFAULT_ROLE_PERMISSIONS.editor).toContain('execution:delete');
+    expect(DEFAULT_ROLE_PERMISSIONS.executor).not.toContain('execution:delete');
+    expect(DEFAULT_ROLE_PERMISSIONS.viewer).not.toContain('execution:delete');
+  });
+
   it('FR-010: toda permissão de papel pertence ao catálogo', () => {
     for (const perms of Object.values(DEFAULT_ROLE_PERMISSIONS)) {
       for (const p of perms) expect(isPermission(p)).toBe(true);

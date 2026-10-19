@@ -13,6 +13,8 @@ export const PERMISSIONS = [
   'workflow:publish',
   'execution:read',
   'execution:readData',
+  // Spec 026: excluir execuções terminadas (admin e editor por padrão).
+  'execution:delete',
   'credential:manage',
   'credential:use',
   'audit:read',
