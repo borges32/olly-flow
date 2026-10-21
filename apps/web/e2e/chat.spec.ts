@@ -215,3 +215,68 @@ test.describe('spec 021 — Chat Trigger', () => {
     await context.close();
   });
 });
+
+test.describe('spec 027 — chat em streaming', () => {
+  /** Chat Trigger (Streaming) → Esperar 2 s → resposta: o passo atual fica visível um tempo. */
+  const streamingChat = (): WorkflowDefinition => ({
+    nodes: [
+      {
+        id: 'chat',
+        type: 'trigger.chat',
+        name: 'Chat',
+        params: { webhookId: randomUUID(), public: true, options: { responseMode: 'streaming' } },
+        position: [0, 0],
+      },
+      {
+        id: 'wait',
+        type: 'flow.wait',
+        name: 'Analisando dados',
+        params: { resume: 'timeInterval', amount: 2, unit: 'seconds' },
+        position: [250, 0],
+      },
+      {
+        id: 'answer',
+        type: 'data.set',
+        name: 'Resposta',
+        params: { fields: [{ name: 'output', type: 'string', value: 'Análise pronta' }] },
+        position: [500, 0],
+      },
+    ],
+    edges: [
+      { id: 'e1', from: 'chat', fromPort: 'main', to: 'wait', toPort: 'main' },
+      { id: 'e2', from: 'wait', fromPort: 'main', to: 'answer', toPort: 'main' },
+    ],
+    settings: {},
+  });
+
+  test('SC-004/FR-005: o chat hospedado e o painel do editor mostram o passo atual e depois a resposta', async ({
+    page,
+    browser,
+  }) => {
+    const def = streamingChat();
+    const wf = await createWorkflow(editor, projectId, `Chat stream ${Date.now()}`, def);
+    expect(
+      (await editor.call('POST', `/workflows/${wf.id}/publish`, { message: 'Stream' })).status,
+    ).toBe(200);
+
+    // Chat hospedado, sem login.
+    const context = await browser.newContext();
+    const visitor = await context.newPage();
+    await visitor.goto(`/chat/${String(def.nodes[0]?.params.webhookId)}`);
+    await visitor.getByTestId('chat-input').fill('Como está o serviço?');
+    await visitor.getByTestId('chat-input').press('Enter');
+    await expect(visitor.getByTestId('chat-step')).toHaveText(/Executando: Analisando dados/);
+    await expect(visitor.getByTestId('chat-message-bot').last()).toHaveText('Análise pronta');
+    await expect(visitor.getByTestId('chat-step')).toHaveCount(0);
+    await context.close();
+
+    // Painel de chat do editor (execução de teste).
+    await loginViaUi(page, 'editor', `/workflows/${wf.id}`);
+    await page.getByRole('button', { name: 'Abrir chat' }).click();
+    const panel = page.getByTestId('chat-panel');
+    await panel.getByTestId('chat-input').fill('E agora?');
+    await panel.getByTestId('chat-input').press('Enter');
+    await expect(panel.getByTestId('chat-step')).toHaveText(/Executando: Analisando dados/);
+    await expect(panel.getByTestId('chat-message-bot').last()).toContainText('Análise pronta');
+  });
+});

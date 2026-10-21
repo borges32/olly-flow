@@ -2,7 +2,12 @@ import type { JSONSchema7, NodeDefinition } from '../../types.js';
 
 export const WEBHOOK_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD'] as const;
 export const WEBHOOK_AUTHENTICATIONS = ['none', 'headerAuth', 'basicAuth', 'hmac'] as const;
-export const WEBHOOK_RESPONSE_MODES = ['onReceived', 'lastNode', 'responseNode'] as const;
+export const WEBHOOK_RESPONSE_MODES = [
+  'onReceived',
+  'lastNode',
+  'responseNode',
+  'streaming',
+] as const;
 
 /** Tipo de credencial exigido por cada autenticação do webhook. */
 export const WEBHOOK_AUTH_CREDENTIAL: Record<string, string> = {
@@ -50,7 +55,7 @@ export const webhookTrigger: NodeDefinition = {
         type: 'string',
         title: 'Responder',
         description:
-          '`onReceived`: na hora (202 + id da execução); `lastNode`: com a saída do último nó; `responseNode`: pelo nó "Responder ao webhook".',
+          '`onReceived`: na hora (202 + id da execução); `lastNode`: com a saída do último nó; `responseNode`: pelo nó "Responder ao webhook"; `streaming`: os passos (nome de cada nó executado) aos poucos e a resposta no fim (spec 027). No `streaming`, quem chama vê os nomes dos nós.',
         enum: [...WEBHOOK_RESPONSE_MODES],
         default: 'onReceived',
       },

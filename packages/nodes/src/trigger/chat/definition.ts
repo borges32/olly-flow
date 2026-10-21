@@ -95,8 +95,8 @@ export const chatTrigger: NodeDefinition = {
           }),
           responseMode: text('Responder', 'lastNode', {
             description:
-              '`lastNode`: com a saída do último nó (`output` ou `text`); `responseNode`: pelo nó "Responder ao webhook".',
-            enum: ['lastNode', 'responseNode'],
+              '`lastNode`: com a saída do último nó (`output` ou `text`); `responseNode`: pelo nó "Responder ao webhook"; `streaming`: o chat mostra o passo atual (nome do nó em execução) enquanto espera e a resposta do último nó no fim (spec 027). No `streaming`, quem conversa vê os nomes dos nós.',
+            enum: ['lastNode', 'responseNode', 'streaming'],
           }),
         },
         additionalProperties: false,

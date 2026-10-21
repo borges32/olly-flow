@@ -2,7 +2,13 @@ import { ollyMetrics } from '@olly/telemetry';
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { chatSettings, ipInList, verifyWebhookAuth } from '@olly/nodes';
-import { CHAT_TRIGGER_TYPE, type Item, type WorkflowNode } from '@olly/shared-types';
+import {
+  CHAT_TRIGGER_TYPE,
+  RESPONSE_MODE_STREAMING,
+  type Item,
+  type WorkflowDefinition,
+  type WorkflowNode,
+} from '@olly/shared-types';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { BINARY_STORAGE } from '../binary/binary.module.js';
 import { ChatService, type ChatTarget } from '../chat/chat.service.js';
@@ -18,6 +24,7 @@ import { sendWebhookResponse } from './webhook-response.js';
 import { FixedWindowLimiter } from './rate-limiter.js';
 import { TestListeners } from './test-listeners.js';
 import { WebhookRegistry } from './webhook-registry.js';
+import { StreamResponder, streamResponseContent } from './stream-responder.js';
 
 /** Cabeçalhos que nunca vão para o item (credenciais do chamador). */
 const SENSITIVE_HEADERS = ['authorization', 'cookie', 'proxy-authorization', 'x-signature'];
@@ -30,7 +37,13 @@ interface Resolved {
   rateKey: string;
   /** Teste parado no Webhook: responde na hora, sem esperar os nós seguintes (HU-2.1). */
   stopAtNode: boolean;
-  launch(item: Item): Promise<{ executionId: string }>;
+  /** Definição executada (nomes dos nós no stream da spec 027). */
+  definition: WorkflowDefinition;
+  /** `beforeDispatch` (spec 027): assina os eventos antes do despacho. */
+  launch(
+    item: Item,
+    beforeDispatch?: (executionId: string) => void,
+  ): Promise<{ executionId: string }>;
   /** Rota de produção (o chat da spec 021 precisa do workflow publicado). */
   target?: ChatTarget;
 }
@@ -74,6 +87,7 @@ export class WebhookGateway {
     @Inject(CredentialsService) private readonly credentials: CredentialsService,
     @Inject(BINARY_STORAGE) private readonly binaries: S3BinaryStorage | null,
     @Inject(ChatService) private readonly chat: ChatService,
+    @Inject(StreamResponder) private readonly streams: StreamResponder,
   ) {}
 
   /** Registra as rotas num escopo do Fastify que recebe o corpo cru (HMAC sobre os bytes). */
@@ -113,7 +127,8 @@ export class WebhookGateway {
         workflowId: l.workflowId,
         rateKey: `test:${l.workflowId}:${l.node.id}`,
         stopAtNode: l.stopAtNode,
-        launch: async (item) => {
+        definition: l.definition,
+        launch: async (item, beforeDispatch) => {
           this.listeners.consume(l.workflowId);
           const run = await this.executions.startTestRun(
             l.audit,
@@ -127,6 +142,7 @@ export class WebhookGateway {
               type: 'webhook',
               triggerItems: [item],
               startNodeId: l.node.id,
+              ...(beforeDispatch && { beforeDispatch }),
             },
           );
           this.events.emit(
@@ -156,8 +172,9 @@ export class WebhookGateway {
       workflowId: r.workflow.id,
       rateKey: `prod:${r.key}`,
       stopAtNode: false,
+      definition: r.definition,
       target: { key: r.key, workflow: r.workflow, definition: r.definition, node: r.node },
-      launch: (item) =>
+      launch: (item, beforeDispatch) =>
         this.executions.launch({
           workflow: r.workflow,
           version: r.workflow.version,
@@ -166,6 +183,7 @@ export class WebhookGateway {
           triggerType: 'webhook',
           triggeredBy: null,
           job: { triggerItems: [item], startNodeId: r.node.id },
+          ...(beforeDispatch && { beforeDispatch }),
         }),
     };
   }
@@ -251,6 +269,23 @@ export class WebhookGateway {
       await reply
         .code(400)
         .send({ message: error instanceof Error ? error.message : 'Corpo inválido' });
+      return;
+    }
+
+    // Spec 027: resposta em streaming (a escuta parada no Webhook continua respondendo na hora).
+    if (
+      str(resolved.node.params.responseMode) === RESPONSE_MODE_STREAMING &&
+      !resolved.stopAtNode
+    ) {
+      await this.streams.stream(
+        reply,
+        resolved,
+        (beforeDispatch) => resolved.launch(item, beforeDispatch),
+        (result) =>
+          result.kind === 'response'
+            ? streamResponseContent(result.response)
+            : (result.outcome.lastOutput?.[0]?.json ?? {}),
+      );
       return;
     }
 

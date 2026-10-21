@@ -417,5 +417,7 @@ export interface QueueStats {
 
 /** `PUT /projects/:id/quota` (spec 006, FR-012): `null` volta ao padrão da plataforma. */
 export interface ProjectQuotaRequest {
-  maxConcurrentExecutions: number | null;
+  maxConcurrentExecutions?: number | null;
+  /** Spec 027 (FR-006): streams simultâneos (Webhook e chat em "Streaming"); `null` = padrão. */
+  maxWebhookStreams?: number | null;
 }

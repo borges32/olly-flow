@@ -8,7 +8,8 @@ export type ChatAuthentication = 'none' | 'basicAuth' | 'ollyUserAuth';
 
 /**
  * Configuração pública da página de chat hospedada (spec 021, FR-003, NFR-004): só o que a
- * página precisa, sem nomes de nós nem dados do workflow.
+ * página precisa, sem nomes de nós nem dados do workflow (no modo Streaming, da spec 027, os
+ * nomes dos nós executados chegam pelo stream).
  */
 export interface ChatConfig {
   title: string;
@@ -21,6 +22,8 @@ export interface ChatConfig {
   allowedFilesMimeTypes: string;
   authentication: ChatAuthentication;
   loadPreviousSession: boolean;
+  /** Spec 027: o `POST …/chat` responde em streaming (NDJSON com os passos e a resposta). */
+  streaming: boolean;
 }
 
 /** Resposta de uma mensagem do painel de chat do editor (spec 021, FR-002). */

@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { useLocation, useParams } from 'react-router';
 import { useAuth } from '@/auth/auth-provider';
+import { readChatStream } from '@/chat/chat-stream';
 import { chatEntry, historyMessage, replyText, type ChatEntry } from '@/chat/chat-entry';
 import { ChatComposer, ChatMessageList } from '@/chat/chat-view';
 import { Button } from '@/components/ui/button';
@@ -55,6 +56,8 @@ export function ChatPage() {
   const [messages, setMessages] = useState<ChatEntry[]>([]);
   const [freshConversation, setFreshConversation] = useState(false);
   const [pending, setPending] = useState(false);
+  // Spec 027: nó em execução, com o chat em Streaming.
+  const [step, setStep] = useState<string | null>(null);
   const [started, setStarted] = useState(false);
   const [needsLogin, setNeedsLogin] = useState<ChatAuthentication | null>(null);
   const [loginAttempt, setLoginAttempt] = useState(0);
@@ -129,10 +132,21 @@ export function ChatPage() {
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ action: 'sendMessage', sessionId, chatInput: text }),
           };
+    const streaming = opening.data?.kind === 'ready' && opening.data.config.streaming;
     void call(request)
       .then(async (res) => {
         if (res.status === 401) {
           setNeedsLogin(await authType(res));
+          return;
+        }
+        if (streaming && res.ok) {
+          const result = await readChatStream(res, setStep);
+          setMessages((m) => [
+            ...m,
+            result.ok
+              ? chatEntry('bot', replyText(result.body) || '(sem texto)')
+              : chatEntry('error', result.message),
+          ]);
           return;
         }
         const raw = await res.text();
@@ -157,6 +171,7 @@ export function ChatPage() {
       })
       .finally(() => {
         setPending(false);
+        setStep(null);
       });
   };
 
@@ -231,6 +246,7 @@ export function ChatPage() {
                 <ChatMessageList
                   messages={[...initial, ...history, ...messages]}
                   pending={pending}
+                  step={step}
                 />
                 <ChatComposer
                   placeholder={config.inputPlaceholder}

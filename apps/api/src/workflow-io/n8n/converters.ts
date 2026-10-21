@@ -764,7 +764,8 @@ const convertWebhook: Converter = (_node, p) => {
       `Autenticação "${auth}" do webhook não suportada: configure a autenticação de novo`,
     );
   let responseMode = str(p.responseMode, 'onReceived');
-  if (!['onReceived', 'lastNode', 'responseNode'].includes(responseMode)) {
+  if (responseMode === 'streaming') warnings.push(STREAMING_WARNING);
+  else if (!['onReceived', 'lastNode', 'responseNode'].includes(responseMode)) {
     warnings.push(`Modo de resposta "${responseMode}" convertido para "onReceived"`);
     responseMode = 'onReceived';
   }
@@ -1243,12 +1244,17 @@ const convertMcpClientTool: Converter = (_node, p) => {
 
 /** Motivo do marcador para o Agentix usado como ferramenta de um AI Agent (spec 016, FR-012). */
 /** Modos de resposta do Chat Trigger do N8N → Olly Flow (spec 021, FR-012). */
-const CHAT_RESPONSE_MODES: Record<string, 'lastNode' | 'responseNode'> = {
+const CHAT_RESPONSE_MODES: Record<string, 'lastNode' | 'responseNode' | 'streaming'> = {
   lastNode: 'lastNode',
   responseNode: 'responseNode',
   responseNodes: 'responseNode',
-  streaming: 'lastNode',
+  // Spec 027: o stream traz os passos, e não o texto do modelo aos poucos.
+  streaming: 'streaming',
 };
+
+/** Spec 027, FR-008: diferença do streaming do N8N, registrada como pendência na importação. */
+const STREAMING_WARNING =
+  'No Olly Flow, o streaming traz os passos do fluxo (nome de cada nó executado); a resposta completa chega no fim, sem o texto do modelo aos poucos';
 
 /**
  * Chat Trigger 1 a 1.3 (spec 021, FR-012): mesmos parâmetros; o `webhookId` do nó mantém a URL
@@ -1265,10 +1271,7 @@ const convertChatTrigger: Converter = (node, p) => {
     warnings.push(`Autenticação "${auth}" do chat não suportada: configure de novo`);
   const responseRaw = str(o.responseMode, 'lastNode');
   const responseMode = CHAT_RESPONSE_MODES[responseRaw] ?? 'lastNode';
-  if (responseRaw === 'streaming')
-    warnings.push(
-      'Resposta em streaming não existe no Olly Flow: a resposta chega de uma vez, ao fim do último nó',
-    );
+  if (responseRaw === 'streaming') warnings.push(STREAMING_WARNING);
   else if (responseRaw === 'responseNodes')
     warnings.push(
       'O modo "Using Response Nodes" usa o nó "Respond to Chat", que não existe no Olly Flow: responda com o nó "Responder ao webhook"',

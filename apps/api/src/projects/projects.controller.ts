@@ -92,7 +92,7 @@ export class ProjectsController {
     @Param('id') id: string,
     @Body(new ZodPipe(quotaBodySchema)) body: ProjectQuotaRequest,
   ): Promise<void> {
-    await this.projects.setQuota(audit, id, body.maxConcurrentExecutions);
+    await this.projects.setQuota(audit, id, body);
   }
 
   /** Spec 009: governança do projeto, visível a todos os membros (o editor mostra a política). */

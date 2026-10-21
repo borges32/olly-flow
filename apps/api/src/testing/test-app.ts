@@ -95,6 +95,8 @@ export async function startTestContext(
       responseTimeoutMs: 120_000,
       rateLimitPerMin: 120,
       requireAuth: false,
+      streamMaxPerProject: 20,
+      streamPingMs: 15_000,
     },
     chat: { maxMessageChars: 20_000 },
     code: { timeoutMs: 30_000, memoryMb: 128 },

@@ -133,7 +133,7 @@ Como **editor que migra do N8N**, quero que o Chat Trigger seja importado com a 
   - **"Usuário do Olly Flow"**: qualquer usuário ativo logado na plataforma, equivalente ao "n8n User Auth".
 
   Como no webhook (spec 005), com `OLLY_REQUIRE_WEBHOOK_AUTH` ligado, a publicação com "Nenhuma" é recusada.
-- **FR-005**: O modo de resposta DEVE ser "Quando o último nó terminar" (campo `output` ou `text` do último nó, ou o JSON dele) ou "Por nó de resposta" ("Responder ao webhook"), com tempo limite de resposta e mensagem de erro clara.
+- **FR-005**: O modo de resposta DEVE ser "Quando o último nó terminar" (campo `output` ou `text` do último nó, ou o JSON dele) ou "Por nó de resposta" ("Responder ao webhook"), com tempo limite de resposta e mensagem de erro clara. A spec 027 acrescenta o modo "Streaming" (passo atual enquanto espera e a resposta do último nó no fim).
 - **FR-006**: Com "Carregar sessão anterior" em "Da memória", o gatilho DEVE aceitar uma memória ligada a ele e devolver o histórico da sessão na ação `loadPreviousSession`. A validação DEVE exigir a memória.
 - **FR-007**: Com "Permitir envio de arquivos", o chat DEVE aceitar anexos dos tipos permitidos, até o limite de tamanho, guardados no object storage como binário do item.
 - **FR-008**: As execuções pelo chat público DEVEM ser execuções de produção com a origem "chat", com:
@@ -216,3 +216,4 @@ Nenhum. Respondidos pelo PO em 14/10/2026:
 | 14/10/2026 | Pedido do PO (tela do N8N): o chat do editor passa para a parte de baixo, ao lado de um painel de Logs dos nós (FR-002 alterado, FR-016 novo, SC-007 novo) | Testar o fluxo como no N8N, vendo os logs dos nós durante a conversa |
 | 14/10/2026 | Painel inferior com chat e logs implementado ([relatório](report.md)) | — |
 | 20/10/2026 | NFR-004: no modo de resposta "Streaming" (spec 027), a página hospedada mostra os nomes dos nós executados; nos demais modos, continua sem nomes de nós | Decisão do PO na criação da spec 027 |
+| 20/10/2026 | FR-005: modo de resposta "Streaming" (spec 027): a API do chat responde com os passos em NDJSON e a resposta no fim; a página hospedada, a incorporada e o painel do editor mostram o passo atual | Spec 027 |

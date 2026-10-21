@@ -580,6 +580,8 @@ describe('spec 005 — FR-006/NFR-001/FR-002: limites', () => {
         responseTimeoutMs: 300,
         rateLimitPerMin: 3,
         requireAuth: false,
+        streamMaxPerProject: 20,
+        streamPingMs: 15_000,
       },
     });
     user = await loginAs(small, { sub: 'a', email: 'a@t.local', groups: ['admin'] });
@@ -633,6 +635,8 @@ describe('spec 005 — FR-006/NFR-001/FR-002: limites', () => {
         responseTimeoutMs: 300,
         rateLimitPerMin: 3,
         requireAuth: true,
+        streamMaxPerProject: 20,
+        streamPingMs: 15_000,
       },
     });
     try {

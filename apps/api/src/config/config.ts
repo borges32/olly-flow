@@ -81,6 +81,9 @@ const envSchema = z.object({
   OLLY_WEBHOOK_MAX_BODY: z.coerce.number().positive().max(1024).default(16),
   OLLY_WEBHOOK_RESPONSE_TIMEOUT: z.coerce.number().positive().max(3600).default(120),
   OLLY_WEBHOOK_RATE_LIMIT_PER_MIN: z.coerce.number().int().min(1).default(120),
+  // Spec 027: resposta em streaming (limite por projeto e sinal periódico).
+  OLLY_WEBHOOK_STREAM_MAX_PER_PROJECT: z.coerce.number().int().min(1).max(10_000).default(20),
+  OLLY_WEBHOOK_STREAM_PING_SECONDS: z.coerce.number().int().min(1).max(300).default(15),
   // Spec 021, FR-009: tamanho máximo da mensagem do chat (caracteres).
   OLLY_CHAT_MAX_MESSAGE_CHARS: z.coerce.number().int().min(100).max(1_000_000).default(20_000),
   // Spec 015, NFR-002: limites da importação de workflows (bytes, nós, profundidade do JSON).
@@ -236,6 +239,10 @@ export interface AppConfig {
     responseTimeoutMs: number;
     rateLimitPerMin: number;
     requireAuth: boolean;
+    /** Spec 027: streams simultâneos por projeto sem limite próprio. */
+    streamMaxPerProject: number;
+    /** Spec 027: intervalo do sinal periódico do stream (e base da validade da vaga). */
+    streamPingMs: number;
   };
   /** Spec 021: chat (o tempo limite, o limite de taxa e o de arquivos são os do webhook). */
   chat: { maxMessageChars: number };
@@ -402,6 +409,8 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
       maxBodyBytes: Math.floor(e.OLLY_WEBHOOK_MAX_BODY * 1024 * 1024),
       responseTimeoutMs: Math.floor(e.OLLY_WEBHOOK_RESPONSE_TIMEOUT * 1000),
       rateLimitPerMin: e.OLLY_WEBHOOK_RATE_LIMIT_PER_MIN,
+      streamMaxPerProject: e.OLLY_WEBHOOK_STREAM_MAX_PER_PROJECT,
+      streamPingMs: e.OLLY_WEBHOOK_STREAM_PING_SECONDS * 1000,
       requireAuth: e.OLLY_REQUIRE_WEBHOOK_AUTH,
     },
     chat: { maxMessageChars: e.OLLY_CHAT_MAX_MESSAGE_CHARS },

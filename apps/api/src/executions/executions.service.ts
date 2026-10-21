@@ -66,6 +66,11 @@ export interface LaunchRequest {
   job?: Partial<
     Pick<ExecutionJob, 'triggerItems' | 'startNodeId' | 'pinData' | 'destinationNodeId' | 'reuse'>
   >;
+  /**
+   * Spec 027: chamado com o id da execução já gravada e antes do despacho; o stream assina os
+   * eventos aqui, sem perder os primeiros.
+   */
+  beforeDispatch?: (executionId: string) => void;
 }
 
 /** Execuções: início (teste e produção), log (FR-013/FR-014) e preview de expressões. */
@@ -144,6 +149,7 @@ export class ExecutionsService implements OnModuleInit, OnModuleDestroy {
       mode: req.mode,
       ...req.job,
     };
+    req.beforeDispatch?.(execution.id);
     try {
       await this.dispatcher.dispatch(job);
     } catch (error) {
@@ -220,7 +226,13 @@ export class ExecutionsService implements OnModuleInit, OnModuleDestroy {
     user: AuthenticatedUser,
     workflowId: string,
     body: TestRunBody,
-    trigger: { type: string; triggerItems?: Item[]; startNodeId?: string } = { type: 'manual' },
+    trigger: {
+      type: string;
+      triggerItems?: Item[];
+      startNodeId?: string;
+      /** Spec 027: ver `LaunchRequest.beforeDispatch`. */
+      beforeDispatch?: (executionId: string) => void;
+    } = { type: 'manual' },
   ): Promise<TestRunResponse> {
     this.validate(body.definition);
     const destination = body.destinationNodeId;
@@ -248,6 +260,7 @@ export class ExecutionsService implements OnModuleInit, OnModuleDestroy {
         ...(trigger.triggerItems && { triggerItems: trigger.triggerItems }),
         ...(trigger.startNodeId && { startNodeId: trigger.startNodeId }),
       },
+      ...(trigger.beforeDispatch && { beforeDispatch: trigger.beforeDispatch }),
     });
     await this.audit.record(this.db, ctx, {
       action: 'execution.manual',

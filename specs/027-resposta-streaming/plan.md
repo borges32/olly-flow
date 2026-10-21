@@ -38,7 +38,8 @@
 
 ### §1 Formato (NDJSON)
 
-- **Cabeçalhos:** `Content-Type: application/x-ndjson; charset=utf-8`, `Cache-Control: no-cache`, `X-Accel-Buffering: no` e `Transfer-Encoding: chunked`; status 200. O tipo exato do N8N é conferido na T001, e, se for outro, adotamos o dele.
+- **Cabeçalhos** (os do Webhook do N8N, conferidos na T001): `Content-Type: application/json; charset=utf-8`, `Transfer-Encoding: chunked`, `Cache-Control: no-cache` e `Connection: keep-alive`, mais `X-Accel-Buffering: no` (nginx); status 200.
+- **`timestamp`:** milissegundos desde 1970 (número), como no N8N; `itemIndex` sempre presente (0).
 - **Uma linha JSON por evento**, terminada em `\n`:
 
 | `type` | Quando | Campos |
@@ -168,3 +169,4 @@ Webhook e chat: autenticação própria (specs 005 e 021), sem mudança.
 |---|---|---|
 | 20/10/2026 | Criação do plano | Spec 027 |
 | 20/10/2026 | §1: `nodeName` em todo evento de nó, no `ping` (nós em execução) e no `item` final (nó que produziu a resposta) | Spec 027, histórico |
+| 20/10/2026 | T001: formato conferido no N8N (código do Webhook e exemplo do fórum): `Content-Type: application/json; charset=utf-8`; `metadata` com `nodeId`, `nodeName`, `itemIndex`, `runIndex` e `timestamp` em milissegundos | Implementação |

@@ -38,6 +38,9 @@ data:
   # Spec 005: webhooks de produção exigem autenticação.
   OLLY_REQUIRE_WEBHOOK_AUTH: 'true'
   OLLY_WEBHOOK_RATE_LIMIT_PER_MIN: '120'
+  # Spec 027: streams simultâneos por projeto (Webhook e chat em "Streaming") e sinal periódico (s).
+  OLLY_WEBHOOK_STREAM_MAX_PER_PROJECT: '20'
+  OLLY_WEBHOOK_STREAM_PING_SECONDS: '15'
 
   # Spec 006: fila, workers e cotas.
   OLLY_WORKER_CONCURRENCY: '20'

@@ -48,12 +48,17 @@ describe('spec 021 — nó Chat Trigger', () => {
       allowedFilesMimeTypes: 'image/*',
       authentication: 'basicAuth',
       loadPreviousSession: false,
+      streaming: false,
     });
     // Modo incorporado: sem mensagens iniciais; valores desconhecidos caem no padrão.
     const embedded = chatSettings({ params: { mode: 'webhook', authentication: 'x' } });
     expect(chatConfig(embedded).initialMessages).toEqual([]);
     expect(embedded.authentication).toBe('none');
     expect(embedded.options.responseMode).toBe('lastNode');
+    // Spec 027 (FR-005): o modo Streaming chega à página pela configuração pública.
+    const streamed = chatSettings({ params: { options: { responseMode: 'streaming' } } });
+    expect(streamed.options.responseMode).toBe('streaming');
+    expect(chatConfig(streamed).streaming).toBe(true);
     expect(isValidWebhookId('c0ffee00-1234')).toBe(true);
     expect(isValidWebhookId('../x')).toBe(false);
   });

@@ -108,6 +108,8 @@ metadata:
     app.kubernetes.io/component: web
   annotations:
     # Webhooks síncronos esperam até 120 s (OLLY_WEBHOOK_RESPONSE_TIMEOUT); o padrão do router é 30 s.
+    # Os mesmos 130 s valem como inatividade nos streams (spec 027): o sinal periódico a cada
+    # OLLY_WEBHOOK_STREAM_PING_SECONDS (15 s) mantém a conexão. Mantenha o timeout bem acima dele.
     haproxy.router.openshift.io/timeout: 130s
     # WebSocket dos eventos de execução: conexão longa.
     haproxy.router.openshift.io/timeout-tunnel: 1h

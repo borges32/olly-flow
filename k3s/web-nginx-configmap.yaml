@@ -44,6 +44,11 @@ data:
         proxy_set_header X-Request-Id $request_id;
         client_max_body_size 16m;
         proxy_read_timeout 130s;
+        # Spec 027: resposta em streaming (Webhook e chat) sem buffer nem compressão; o sinal
+        # periódico do stream (OLLY_WEBHOOK_STREAM_PING_SECONDS) renova o tempo de leitura.
+        proxy_buffering off;
+        proxy_cache off;
+        gzip off;
       }
 
       location /assets/ {

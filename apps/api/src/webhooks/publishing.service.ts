@@ -10,6 +10,7 @@ import {
 } from '@olly/nodes';
 import {
   CHAT_TRIGGER_TYPE,
+  RESPONSE_MODE_STREAMING,
   type PublishResponse,
   type WorkflowDefinition,
   type WorkflowIssue,
@@ -85,6 +86,18 @@ export async function webhookIssues(
           ),
         );
       }
+    }
+    // Spec 027, FR-007: no streaming, a resposta já começou quando o nó de resposta executa.
+    if (
+      node.params.responseMode === RESPONSE_MODE_STREAMING &&
+      definition.nodes.some((n) => n.type === 'http.respondToWebhook' && !n.disabled)
+    ) {
+      warnings.push(
+        issue(
+          'WEBHOOK_STREAM_RESPONSE_NODE',
+          'no modo Streaming, o corpo do "Responder ao webhook" vira a resposta final; status e cabeçalhos dele são ignorados',
+        ),
+      );
     }
     if (
       node.params.responseMode === 'responseNode' &&

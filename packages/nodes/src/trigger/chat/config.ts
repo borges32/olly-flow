@@ -22,7 +22,7 @@ export interface ChatOptions {
   showWelcomeScreen: boolean;
   getStarted: string;
   loadPreviousSession: 'notSupported' | 'memory';
-  responseMode: 'lastNode' | 'responseNode';
+  responseMode: 'lastNode' | 'responseNode' | 'streaming';
 }
 
 export interface ChatSettings {
@@ -65,7 +65,11 @@ export function chatSettings(node: Pick<WorkflowNode, 'params'>): ChatSettings {
         ['notSupported', 'memory'] as const,
         'notSupported',
       ),
-      responseMode: oneOf(o.responseMode, ['lastNode', 'responseNode'] as const, 'lastNode'),
+      responseMode: oneOf(
+        o.responseMode,
+        ['lastNode', 'responseNode', 'streaming'] as const,
+        'lastNode',
+      ),
     },
   };
 }
@@ -93,6 +97,7 @@ export function chatConfig(settings: ChatSettings): ChatConfig {
     allowedFilesMimeTypes: o.allowFileUploads ? o.allowedFilesMimeTypes : '',
     authentication: settings.authentication,
     loadPreviousSession: o.loadPreviousSession === 'memory',
+    streaming: o.responseMode === 'streaming',
   };
 }
 

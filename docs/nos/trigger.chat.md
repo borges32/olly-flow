@@ -26,7 +26,7 @@ Nenhum parâmetro aceita expressão: eles valem antes de existir um item.
 | `options.allowFileUploads`, `options.allowedFilesMimeTypes` | Anexos e tipos permitidos (vírgula, com curingas: `image/*,application/pdf`) |
 | `options.allowedOrigins` | CORS do endereço HTTP: origens separadas por vírgula, ou `*` (padrão) |
 | `options.loadPreviousSession` | `notSupported` (padrão) ou `memory`: ao voltar à página, o histórico da sessão vem da memória ligada a este nó |
-| `options.responseMode` | `lastNode` (padrão): responde com a saída do último nó. `responseNode`: quem responde é o nó **Responder ao webhook** |
+| `options.responseMode` | `lastNode` (padrão): responde com a saída do último nó. `responseNode`: quem responde é o nó **Responder ao webhook**. `streaming` (spec 027): o chat mostra o passo atual ("Executando: <nó>") enquanto espera e a resposta no fim; quem conversa vê os nomes dos nós |
 
 ## Item de saída
 
@@ -60,7 +60,8 @@ O painel do nó mostra as URLs do chat público, com o botão de copiar. A plata
 - **Enviar mensagem:** `{ "action": "sendMessage", "sessionId": "...", "chatInput": "..." }`, em JSON. Com arquivos, `multipart/form-data` com os campos `action`, `sessionId`, `chatInput` e os arquivos em `files`.
 - **Resposta:**
   - **`lastNode`:** o JSON do primeiro item do último nó; o texto do Agent está em `output`, o do Basic LLM Chain em `text`;
-  - **`responseNode`:** o que o nó **Responder ao webhook** definir.
+  - **`responseNode`:** o que o nó **Responder ao webhook** definir;
+  - **`streaming`** (spec 027): o `POST …/chat` responde no formato de streaming do Webhook (NDJSON com os passos; ver [trigger.webhook.md](trigger.webhook.md#resposta-em-streaming-spec-027)); o `item` final traz o mesmo corpo do `lastNode`. A configuração da página (`GET`) informa `streaming: true`, e a página hospedada, a incorporada e o painel do editor mostram o passo atual. O limite de streams do projeto vale também para o chat.
 - **Sessão anterior:** `{ "action": "loadPreviousSession", "sessionId": "..." }`. Responde `{ "data": [...] }`, com as mensagens no formato serializado do LangChain, sem executar o workflow.
 - **`GET`:** devolve a configuração da página (título, mensagens iniciais, opções), sem dados do workflow.
 

@@ -48,6 +48,8 @@ export interface ProjectsTable {
   created_at: GeneratedTimestamp;
   /** Cota de execuções simultâneas (spec 006, FR-012); `null` usa o padrão da configuração. */
   max_concurrent_executions: ColumnType<number | null, number | null | undefined, number | null>;
+  /** Spec 027 (FR-006): streams simultâneos; `null` usa o padrão da configuração. */
+  max_webhook_streams: ColumnType<number | null, number | null | undefined, number | null>;
   /** Spec 009: governança do projeto (FR-011, FR-012, FR-017, FR-019). */
   require_publish_approval: Generated<boolean>;
   executor_can_read_data: Generated<boolean>;

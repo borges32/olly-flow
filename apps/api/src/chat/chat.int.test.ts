@@ -8,6 +8,7 @@ import type {
   ExecutionList,
   ProjectSummary,
   PublishResponse,
+  StreamEvent,
   WorkflowDefinition,
   WorkflowDetail,
   WorkflowNode,
@@ -157,6 +158,8 @@ beforeAll(async () => {
       responseTimeoutMs: 1500,
       rateLimitPerMin: 4,
       requireAuth: true,
+      streamMaxPerProject: 20,
+      streamPingMs: 15_000,
     },
     chat: { maxMessageChars: 50 },
     http: { allowlist: ['127.0.0.1'], maxResponseBytes: 1024 * 1024 },
@@ -576,6 +579,49 @@ describe('spec 021 — chat publicado', () => {
     }
     // O limite (4 por minuto) inclui as duas recusadas acima.
     expect(codes).toEqual([200, 200, 429]);
+  });
+});
+
+describe('spec 027 — chat em streaming', () => {
+  it('FR-005/FR-002: a API do chat responde com os passos (nome dos nós) e a resposta do último nó no fim', async () => {
+    const trigger = chatNode({ public: true, options: { responseMode: 'streaming' } });
+    const def = await chatAgent(editor, project.id, trigger);
+    const { status } = await publish(editor, project.id, def);
+    expect(status).toBe(200);
+    const id = webhookIdOf(def);
+
+    const page = await ctx.app.inject({ method: 'GET', url: `/webhook/${id}/chat` });
+    expect(page.json<ChatConfig>().streaming).toBe(true);
+
+    const answer = await post(ctx, id, {
+      action: 'sendMessage',
+      sessionId: 's-1',
+      chatInput: 'Oi',
+    });
+    expect(answer.statusCode).toBe(200);
+    expect(answer.headers['content-type']).toBe('application/json; charset=utf-8');
+    const events = answer.body
+      .trim()
+      .split('\n')
+      .map((l) => JSON.parse(l) as StreamEvent)
+      .filter((e) => e.type !== 'ping');
+    const agent = def.nodes.find((n) => n.type === 'ai.agent')?.name;
+    expect(
+      events.map((e) =>
+        e.type === 'begin' || e.type === 'end' ? `${e.type}:${e.metadata.nodeName}` : e.type,
+      ),
+    ).toEqual([
+      'execution',
+      'execution',
+      'begin:Chat',
+      'end:Chat',
+      `begin:${String(agent)}`,
+      `end:${String(agent)}`,
+      'item',
+    ]);
+    const final = events.at(-1);
+    expect(final).toMatchObject({ type: 'item', metadata: { nodeName: agent, final: true } });
+    expect((final as { content: { output: string } }).content.output).toContain('Recebi: Oi');
   });
 });
 

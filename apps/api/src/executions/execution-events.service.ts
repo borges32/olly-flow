@@ -17,6 +17,12 @@ export interface ExecutionEventMessage {
   workflowId: string;
 }
 
+/** Ouvinte dos eventos de uma execução (spec 027). */
+export type ExecutionEventListener = <K extends keyof ExecutionEvents>(
+  event: K,
+  payload: ExecutionEvents[K],
+) => void;
+
 /** Destino dos eventos de execução: WebSocket na API; Redis no worker (spec 006). */
 export abstract class ExecutionEventSink {
   abstract emit<K extends keyof ExecutionEvents>(
@@ -68,6 +74,22 @@ export class ExecutionEventsService extends ExecutionEventSink {
   private readonly logger = new Logger('ExecutionEvents');
   private namespace?: Namespace;
   private publisher?: (message: string) => Promise<unknown>;
+  /** Spec 027: ouvintes por execução nesta instância (streams do webhook e do chat). */
+  private readonly listeners = new Map<string, Set<ExecutionEventListener>>();
+
+  /** Recebe os eventos da execução entregues a esta instância; devolve o cancelamento. */
+  listen(executionId: string, listener: ExecutionEventListener): () => void {
+    let set = this.listeners.get(executionId);
+    if (!set) {
+      set = new Set();
+      this.listeners.set(executionId, set);
+    }
+    set.add(listener);
+    return () => {
+      set.delete(listener);
+      if (set.size === 0) this.listeners.delete(executionId);
+    };
+  }
 
   attach(namespace: Namespace): void {
     this.namespace = namespace;
@@ -102,6 +124,13 @@ export class ExecutionEventsService extends ExecutionEventSink {
     payload: ExecutionEvents[K],
     workflowId: string,
   ): void {
+    for (const listener of this.listeners.get(payload.executionId) ?? []) {
+      try {
+        listener(event, payload);
+      } catch (error) {
+        this.logger.warn(`Ouvinte do evento ${event} falhou: ${String(error)}`);
+      }
+    }
     const rooms = [executionRoom(payload.executionId), workflowRoom(workflowId)];
     this.namespace?.to(rooms.map(dataRoom)).emit(event, payload);
     this.namespace?.to(rooms).emit(event, withoutData(event, payload));

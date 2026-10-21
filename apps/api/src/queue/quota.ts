@@ -16,13 +16,17 @@ end
 return 0
 `;
 
-const quotaKey = (projectId: string) => `olly:quota:${projectId}`;
-
 export class ProjectQuota {
   constructor(
     private readonly redis: Redis,
     private readonly leaseMs: number,
+    /** Spec 027: o mesmo semáforo conta os streams (`olly:streams`). */
+    private readonly prefix = 'olly:quota',
   ) {}
+
+  private key(projectId: string): string {
+    return `${this.prefix}:${projectId}`;
+  }
 
   /** Ocupa uma vaga do projeto para a execução; `false` se a cota está cheia. */
   async acquire(projectId: string, executionId: string, limit: number): Promise<boolean> {
@@ -30,7 +34,7 @@ export class ProjectQuota {
     const result = await this.redis.eval(
       ACQUIRE,
       1,
-      quotaKey(projectId),
+      this.key(projectId),
       now,
       now + this.leaseMs,
       limit,
@@ -44,12 +48,12 @@ export class ProjectQuota {
     const expires = Date.now() + this.leaseMs;
     await this.redis
       .multi()
-      .zadd(quotaKey(projectId), 'XX', expires, executionId)
-      .pexpire(quotaKey(projectId), this.leaseMs)
+      .zadd(this.key(projectId), 'XX', expires, executionId)
+      .pexpire(this.key(projectId), this.leaseMs)
       .exec();
   }
 
   async release(projectId: string, executionId: string): Promise<void> {
-    await this.redis.zrem(quotaKey(projectId), executionId);
+    await this.redis.zrem(this.key(projectId), executionId);
   }
 }

@@ -25,6 +25,7 @@ import {
   CHAT_MEMORY_PORT,
   CHAT_TRIGGER_ORIGIN,
   CHAT_TRIGGER_TYPE,
+  RESPONSE_MODE_STREAMING,
   type BinaryRef,
   type ChatTestReply,
   type ChatTestStart,
@@ -49,6 +50,7 @@ import { ExecutionsService } from '../executions/executions.service.js';
 import { EXPRESSION_EVALUATOR } from '../expressions/expressions.module.js';
 import { NODE_REGISTRY } from '../node-types/node-types.module.js';
 import { FixedWindowLimiter } from '../webhooks/rate-limiter.js';
+import { StreamResponder, streamResponseContent } from '../webhooks/stream-responder.js';
 import { sendWebhookResponse } from '../webhooks/webhook-response.js';
 
 /** Workflow publicado e nó de chat de uma rota `/webhook/<webhookId>/chat`. */
@@ -82,6 +84,8 @@ const LOCK_RETRY_MS = 200;
 const TEST_LOCK_PREFIX = 'olly:chat:test-run:';
 /** Libera o lock só se ainda for nosso (outro pedido pode tê-lo ganho após a expiração). */
 const RELEASE = `if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) end return 0`;
+/** Spec 027: renova a trava da sessão enquanto o stream durar (ela é da mesma mensagem). */
+const EXTEND = `if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('PEXPIRE', KEYS[1], ARGV[2]) end return 0`;
 
 const str = (v: unknown) => (typeof v === 'string' ? v : '');
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -111,6 +115,7 @@ export class ChatService {
     @Inject(EXPRESSION_EVALUATOR) private readonly evaluator: ExpressionEvaluator,
     @Inject(NODE_REGISTRY) private readonly registry: NodeRegistry,
     @Inject(BINARY_STORAGE) private readonly binaries: S3BinaryStorage | null,
+    @Inject(StreamResponder) private readonly streams: StreamResponder,
   ) {}
 
   /** Chat publicado (FR-003): `GET` devolve a configuração da página; `POST`, a resposta. */
@@ -169,6 +174,36 @@ export class ChatService {
     }
     try {
       const item = await this.buildItem(message);
+      // Spec 027 (FR-005): passos e resposta em streaming, com a mesma trava da sessão.
+      if (settings.options.responseMode === RESPONSE_MODE_STREAMING) {
+        const keep = setInterval(() => {
+          void this.redis.eval(EXTEND, 1, lockKey, token, this.lockTtlMs()).catch(() => undefined);
+        }, this.config.webhook.streamPingMs);
+        try {
+          await this.streams.stream(
+            reply,
+            { projectId: target.workflow.project_id, definition: target.definition },
+            (beforeDispatch) =>
+              this.executions.launch({
+                workflow: target.workflow,
+                version: target.workflow.version,
+                definition: target.definition,
+                mode: 'production',
+                triggerType: CHAT_TRIGGER_ORIGIN,
+                triggeredBy: user?.id ?? null,
+                job: { triggerItems: [item], startNodeId: target.node.id },
+                beforeDispatch,
+              }),
+            (result) =>
+              result.kind === 'response'
+                ? streamResponseContent(result.response)
+                : chatResponseBody(result.outcome.lastOutput),
+          );
+        } finally {
+          clearInterval(keep);
+        }
+        return;
+      }
       const { executionId } = await this.executions.launch({
         workflow: target.workflow,
         version: target.workflow.version,

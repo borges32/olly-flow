@@ -1057,7 +1057,8 @@ describe('spec 021 — FR-011/FR-012/FR-015/SC-004: Chat Trigger do N8N', () => 
     expect(byName('Chat')?.params).toMatchObject({
       mode: 'webhook',
       authentication: 'ollyUserAuth',
-      options: { responseMode: 'lastNode', loadPreviousSession: 'notSupported' },
+      // Spec 027 (FR-008): o modo Streaming é mantido.
+      options: { responseMode: 'streaming', loadPreviousSession: 'notSupported' },
     });
     expect(byName('Chat')?.params.options).not.toHaveProperty('customCss');
     const chat = report.nodes.withWarnings.find((w) => w.node === 'Chat')?.warnings ?? [];
@@ -1068,6 +1069,35 @@ describe('spec 021 — FR-011/FR-012/FR-015/SC-004: Chat Trigger do N8N', () => 
     ]);
     const memory = report.nodes.withWarnings.find((w) => w.node === 'Simple Memory')?.warnings;
     expect(memory).toEqual([expect.stringContaining('memória persistente')]);
+  });
+});
+
+describe('spec 027 — FR-008: modo Streaming do N8N', () => {
+  it('FR-008: Webhook e Chat Trigger em Streaming são importados nesse modo, com a pendência da diferença', () => {
+    const { byName, report } = importN8n({
+      nodes: [
+        node(
+          'Webhook',
+          'n8n-nodes-base.webhook',
+          { httpMethod: 'POST', path: 'investigar', responseMode: 'streaming' },
+          { typeVersion: 2 },
+        ),
+        node(
+          'Chat',
+          '@n8n/n8n-nodes-langchain.chatTrigger',
+          { public: true, options: { responseMode: 'streaming' } },
+          { typeVersion: 1.3, webhookId: 'c3d4e5f6-0000-4000-8000-000000000003' },
+        ),
+      ],
+      connections: {},
+    });
+    expect(byName('Webhook')?.params).toMatchObject({ responseMode: 'streaming' });
+    expect(byName('Chat')?.params).toMatchObject({ options: { responseMode: 'streaming' } });
+    for (const name of ['Webhook', 'Chat']) {
+      expect(report.nodes.withWarnings.find((w) => w.node === name)?.warnings).toEqual([
+        expect.stringContaining('o streaming traz os passos do fluxo'),
+      ]);
+    }
   });
 });
 

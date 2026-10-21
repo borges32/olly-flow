@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| **Status** | Planejada (plano e tarefas aguardando revisão) |
+| **Status** | Implementada |
 | **Fase** | 4 — Hardening (paridade com o N8N, operação) |
 | **Depende de** | 005, 006, 009, 015, 021 |
 | **Requisitos de produto** | PR-06 (parcial), PR-17 (parcial), PR-20 (parcial) |
@@ -137,3 +137,4 @@ Nenhum. Resolvido em 20/10/2026: nomes dos nós no chat público (spec 021, NFR-
 | 20/10/2026 | Criação da spec, com as decisões do PO (só passos, NDJSON próximo do N8N, só metadados, sem sub-workflows, Chat Trigger incluído, limite por projeto) | Avaliação de 19/10/2026: viável como modo de resposta, em vez de nó novo |
 | 20/10/2026 | Ponto em aberto resolvido: nomes dos nós permitidos no modo Streaming, inclusive no chat público (NFR-004 da spec 021 atualizada). Plano e tarefas criados. Status: Planejada | Decisão do PO |
 | 20/10/2026 | FR-002: o nome do nó (como no canvas) explícito em todo evento ligado a um nó, inclusive no sinal periódico (nó em execução) e na resposta final (nó que a produziu) | Pedido do PO: saber em que ponto do workflow a execução está |
+| 20/10/2026 | Implementação concluída ([relatório](report.md)) | — |

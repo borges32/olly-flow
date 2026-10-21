@@ -389,7 +389,7 @@ Inicia o workflow quando a URL `<origem>/webhook/<path>` recebe uma chamada (dep
 | `httpMethod` | `GET` \| `POST` \| `PUT` \| `PATCH` \| `DELETE` \| `HEAD` | `POST` | Método aceito |
 | `path` | texto | — | **Obrigatório**, sem expressão. Sem barras nas pontas (`pedidos`, `clientes/:id`, em que `:id` vira `params.id`). Aceita letras, números, `.`, `_`, `~` e `-`. Único entre os workflows publicados |
 | `authentication` | `none` \| `headerAuth` \| `basicAuth` \| `hmac` | `none` | Exige a credencial correspondente ([seção 6](#6-credenciais)) |
-| `responseMode` | `onReceived` \| `lastNode` \| `responseNode` | `onReceived` | `onReceived`: responde 200 na hora. `lastNode`: responde com a saída do último nó. `responseNode`: quem responde é o nó `http.respondToWebhook` |
+| `responseMode` | `onReceived` \| `lastNode` \| `responseNode` \| `streaming` | `onReceived` | `onReceived`: responde 200 na hora. `lastNode`: responde com a saída do último nó. `responseNode`: quem responde é o nó `http.respondToWebhook`. `streaming`: NDJSON com o início e o fim de cada nó (nome do nó) e a resposta do último nó no fim (spec 027) |
 | `options.allowedOrigins` | texto | `""` | Origens de CORS permitidas, separadas por vírgula |
 | `options.ipAllowlist` | texto | `""` | IPs ou faixas permitidas, separados por vírgula |
 
@@ -408,7 +408,7 @@ Inicia o workflow a cada mensagem de chat (painel do editor, página `<origem>/c
 | `options.showWelcomeScreen`, `options.allowFileUploads` | booleano | `false` | Tela de boas-vindas; anexos |
 | `options.allowedFilesMimeTypes`, `options.allowedOrigins` | texto | `*` | Tipos de arquivo; origens de CORS |
 | `options.loadPreviousSession` | `notSupported` \| `memory` | `notSupported` | `memory` exige uma memória ligada à entrada `ai_memory` do gatilho |
-| `options.responseMode` | `lastNode` \| `responseNode` | `lastNode` | Resposta pelo último nó ou pelo `http.respondToWebhook` |
+| `options.responseMode` | `lastNode` \| `responseNode` \| `streaming` | `lastNode` | Resposta pelo último nó, pelo `http.respondToWebhook` ou em streaming com os passos (spec 027) |
 
 #### `trigger.executeWorkflow` — Quando chamado por outro workflow
 

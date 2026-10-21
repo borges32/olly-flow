@@ -4,6 +4,7 @@ import { Link } from 'react-router';
 import { Button } from '@/components/ui/button';
 import { chatEntry, type ChatEntry } from '@/chat/chat-entry';
 import { ChatComposer, ChatMessageList } from '@/chat/chat-view';
+import { useEditorStore } from './store';
 import { useChatTest } from './use-chat-test';
 
 const newSession = () => crypto.randomUUID();
@@ -18,6 +19,15 @@ export function ChatColumn({ workflowId }: { workflowId: string }) {
   const [sessionId, setSessionId] = useState(newSession);
   const [messages, setMessages] = useState<ChatEntry[]>([]);
   const [pending, setPending] = useState(false);
+  // Spec 027 (FR-005): com o gatilho em Streaming, o nó em execução no teste (eventos do
+  // WebSocket que o editor já recebe), no lugar de "Respondendo…".
+  const step = useEditorStore((s) => {
+    const trigger = s.nodes.find((n) => n.type === 'trigger.chat' && !n.disabled);
+    const options = (trigger?.params.options ?? {}) as { responseMode?: unknown };
+    if (!pending || options.responseMode !== 'streaming') return null;
+    const running = Object.entries(s.run.nodes).find(([, v]) => v.status === 'running');
+    return running ? (s.nodes.find((n) => n.id === running[0])?.name ?? null) : null;
+  });
 
   const onSend = (text: string) => {
     setMessages((m) => [...m, chatEntry('user', text)]);
@@ -69,7 +79,7 @@ export function ChatColumn({ workflowId }: { workflowId: string }) {
           <RotateCcw />
         </Button>
       </header>
-      <ChatMessageList messages={messages} pending={pending} />
+      <ChatMessageList messages={messages} pending={pending} step={step} />
       <ChatComposer placeholder="Digite uma mensagem…" disabled={pending} onSend={onSend} />
     </section>
   );

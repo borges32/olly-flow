@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { Db } from '@olly/db';
 import type {
   ProjectMember,
+  ProjectQuotaRequest,
   ProjectSettings,
   ProjectSettingsUpdate,
   ProjectSummary,
@@ -183,24 +184,37 @@ export class ProjectsService {
   }
 
   /** Spec 006, FR-012: cota de execuções simultâneas (`null`: padrão da plataforma). */
-  async setQuota(ctx: AuditContext, projectId: string, limit: number | null): Promise<void> {
+  async setQuota(ctx: AuditContext, projectId: string, quota: ProjectQuotaRequest): Promise<void> {
+    const { maxConcurrentExecutions: executions, maxWebhookStreams: streams } = quota;
     await this.db.transaction().execute(async (trx) => {
       const before = await trx
         .selectFrom('projects')
-        .select('max_concurrent_executions')
+        .select(['max_concurrent_executions', 'max_webhook_streams'])
         .where('id', '=', projectId)
         .executeTakeFirst();
       if (!before) throw new NotFoundError('Projeto não encontrado');
       await trx
         .updateTable('projects')
-        .set({ max_concurrent_executions: limit })
+        .set({
+          ...(executions !== undefined && { max_concurrent_executions: executions }),
+          ...(streams !== undefined && { max_webhook_streams: streams }),
+        })
         .where('id', '=', projectId)
         .execute();
       await this.audit.record(trx, ctx, {
         action: 'project.quota',
         entityType: 'project',
         entityId: projectId,
-        details: { from: before.max_concurrent_executions, to: limit },
+        details: {
+          ...(executions !== undefined && {
+            from: before.max_concurrent_executions,
+            to: executions,
+          }),
+          // Spec 027, FR-006.
+          ...(streams !== undefined && {
+            maxWebhookStreams: { from: before.max_webhook_streams, to: streams },
+          }),
+        },
       });
     });
   }

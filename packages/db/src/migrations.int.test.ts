@@ -89,6 +89,7 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
       'Up 0016_mcp_insecure_tls',
       'Up 0017_postgres14_unique',
       'Up 0018_execution_parent_node',
+      'Up 0019_project_stream_limit',
     ]);
     expect(await publicTables()).toEqual(TABLES);
   });
@@ -100,6 +101,7 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
   it('FR-009/SC-003: down reverte tudo e up reaplica sem erro', async () => {
     const reverted = await migrateDown(t.db, { all: true });
     expect(reverted).toEqual([
+      'Down 0019_project_stream_limit',
       'Down 0018_execution_parent_node',
       'Down 0017_postgres14_unique',
       'Down 0016_mcp_insecure_tls',
@@ -136,9 +138,24 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
       return rows[0]?.n;
     };
     expect(await column()).toBe(1);
+    await migrateDown(t.db); // 0019 (spec 027, projects.max_webhook_streams)
     await migrateDown(t.db); // 0018 (spec 026, executions.parent_node_id)
     await migrateDown(t.db); // 0017 (compatibilidade com o PostgreSQL 14)
     expect(await migrateDown(t.db)).toEqual(['Down 0016_mcp_insecure_tls']);
+    expect(await column()).toBe(0);
+    expect(await publicTables()).toEqual(TABLES);
+    await migrateToLatest(t.db);
+  });
+
+  it('spec 027: down de 0019 remove só projects.max_webhook_streams', async () => {
+    const column = async () => {
+      const { rows } = await sql<{ n: number }>`
+        SELECT count(*)::int AS n FROM information_schema.columns
+        WHERE table_name = 'projects' AND column_name = 'max_webhook_streams'`.execute(t.db);
+      return rows[0]?.n;
+    };
+    expect(await column()).toBe(1);
+    expect(await migrateDown(t.db)).toEqual(['Down 0019_project_stream_limit']);
     expect(await column()).toBe(0);
     expect(await publicTables()).toEqual(TABLES);
     await migrateToLatest(t.db);
@@ -152,6 +169,7 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
       return rows[0]?.n;
     };
     expect(await column()).toBe(1);
+    await migrateDown(t.db); // 0019 (spec 027, projects.max_webhook_streams)
     expect(await migrateDown(t.db)).toEqual(['Down 0018_execution_parent_node']);
     expect(await column()).toBe(0);
     expect(await publicTables()).toEqual(TABLES);
@@ -216,6 +234,7 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
   });
 
   it('PostgreSQL 14 (15/10/2026): 0017 troca as restrições únicas antigas pelos índices parciais', async () => {
+    await migrateDown(t.db); // 0019 (spec 027, projects.max_webhook_streams)
     await migrateDown(t.db); // 0018 (spec 026, executions.parent_node_id)
     expect(await migrateDown(t.db)).toEqual(['Down 0017_postgres14_unique']);
     // Estado de um banco migrado antes da mudança: restrições únicas com os nomes gerados.
@@ -260,6 +279,7 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
       return rows[0]?.n;
     };
     expect(await columns()).toBe(5);
+    await migrateDown(t.db); // 0019 (spec 027, projects.max_webhook_streams)
     await migrateDown(t.db); // 0018 (spec 026, executions.parent_node_id)
     await migrateDown(t.db); // 0017 (compatibilidade com o PostgreSQL 14)
     await migrateDown(t.db); // 0016 (spec 010, mcp_servers.insecure_tls)
@@ -270,6 +290,7 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
   });
 
   it('spec 012: down de 0014 remove só executions.trace_id', async () => {
+    await migrateDown(t.db); // 0019 (spec 027, projects.max_webhook_streams)
     await migrateDown(t.db); // 0018 (spec 026, executions.parent_node_id)
     await migrateDown(t.db); // 0017 (compatibilidade com o PostgreSQL 14)
     await migrateDown(t.db); // 0016 (spec 010, mcp_servers.insecure_tls)
@@ -288,6 +309,7 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
   });
 
   it('spec 011: down de 0013 remove só o cadastro de modelos (começa vazio)', async () => {
+    await migrateDown(t.db); // 0019 (spec 027, projects.max_webhook_streams)
     await migrateDown(t.db); // 0018 (spec 026, executions.parent_node_id)
     await migrateDown(t.db); // 0017 (compatibilidade com o PostgreSQL 14)
     await migrateDown(t.db); // 0016 (spec 010, mcp_servers.insecure_tls)
@@ -301,6 +323,7 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
   });
 
   it('spec 011: down de 0012 remove as tabelas do agente e as colunas de projeto', async () => {
+    await migrateDown(t.db); // 0019 (spec 027, projects.max_webhook_streams)
     await migrateDown(t.db); // 0018 (spec 026, executions.parent_node_id)
     await migrateDown(t.db); // 0017 (compatibilidade com o PostgreSQL 14)
     await migrateDown(t.db); // 0016 (spec 010, mcp_servers.insecure_tls)
@@ -323,6 +346,7 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
   });
 
   it('spec 008: down de 0011 remove execution_state e as colunas de sub-workflow', async () => {
+    await migrateDown(t.db); // 0019 (spec 027, projects.max_webhook_streams)
     await migrateDown(t.db); // 0018 (spec 026, executions.parent_node_id)
     await migrateDown(t.db); // 0017 (compatibilidade com o PostgreSQL 14)
     await migrateDown(t.db); // 0016 (spec 010, mcp_servers.insecure_tls)
@@ -345,6 +369,7 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
   });
 
   it('spec 010: down de 0010 remove só as tabelas do MCP', async () => {
+    await migrateDown(t.db); // 0019 (spec 027, projects.max_webhook_streams)
     await migrateDown(t.db); // 0018 (spec 026, executions.parent_node_id)
     await migrateDown(t.db); // 0017 (compatibilidade com o PostgreSQL 14)
     await migrateDown(t.db); // 0016 (spec 010, mcp_servers.insecure_tls)
@@ -379,6 +404,7 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
     const rules = await sql<{ n: number }>`
       SELECT count(*)::int AS n FROM masking_rules WHERE builtin`.execute(t.db);
     expect(rules.rows[0]?.n).toBe(14);
+    await migrateDown(t.db); // 0019 (spec 027, projects.max_webhook_streams)
     await migrateDown(t.db); // 0018 (spec 026, executions.parent_node_id)
     await migrateDown(t.db); // 0017 (compatibilidade com o PostgreSQL 14)
     await migrateDown(t.db); // 0016 (spec 010, mcp_servers.insecure_tls)
@@ -395,6 +421,7 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
   });
 
   it('FR-014 (spec 007): down de 0008 remove só a coluna error_workflow_id', async () => {
+    await migrateDown(t.db); // 0019 (spec 027, projects.max_webhook_streams)
     await migrateDown(t.db); // 0018 (spec 026, executions.parent_node_id)
     await migrateDown(t.db); // 0017 (compatibilidade com o PostgreSQL 14)
     await migrateDown(t.db); // 0016 (spec 010, mcp_servers.insecure_tls)
@@ -419,6 +446,7 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
   });
 
   it('FR-001/FR-005/FR-012 (spec 006): down de 0007 remove só a tabela de payloads, o batimento e a cota', async () => {
+    await migrateDown(t.db); // 0019 (spec 027, projects.max_webhook_streams)
     await migrateDown(t.db); // 0018 (spec 026, executions.parent_node_id)
     await migrateDown(t.db); // 0017 (compatibilidade com o PostgreSQL 14)
     await migrateDown(t.db); // 0016 (spec 010, mcp_servers.insecure_tls)
@@ -449,6 +477,7 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
   });
 
   it('FR-001/FR-012 (spec 005): down de 0006 remove só as colunas de publicação e console', async () => {
+    await migrateDown(t.db); // 0019 (spec 027, projects.max_webhook_streams)
     await migrateDown(t.db); // 0018 (spec 026, executions.parent_node_id)
     await migrateDown(t.db); // 0017 (compatibilidade com o PostgreSQL 14)
     await migrateDown(t.db); // 0016 (spec 010, mcp_servers.insecure_tls)
@@ -482,6 +511,7 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
   });
 
   it('FR-001 (spec 004): down de 0005 remove só a tabela credentials', async () => {
+    await migrateDown(t.db); // 0019 (spec 027, projects.max_webhook_streams)
     await migrateDown(t.db); // 0018 (spec 026, executions.parent_node_id)
     await migrateDown(t.db); // 0017 (compatibilidade com o PostgreSQL 14)
     await migrateDown(t.db); // 0016 (spec 010, mcp_servers.insecure_tls)
@@ -503,6 +533,7 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
   });
 
   it('FR-020 (spec 003): down de 0004 remove só a coluna reused', async () => {
+    await migrateDown(t.db); // 0019 (spec 027, projects.max_webhook_streams)
     await migrateDown(t.db); // 0018 (spec 026, executions.parent_node_id)
     await migrateDown(t.db); // 0017 (compatibilidade com o PostgreSQL 14)
     await migrateDown(t.db); // 0016 (spec 010, mcp_servers.insecure_tls)
@@ -533,6 +564,7 @@ describe('FR-009: migrations versionadas e reversíveis', () => {
   });
 
   it('FR-001/FR-002 (spec 002): down de 0003 e 0002 remove só as tabelas delas', async () => {
+    await migrateDown(t.db); // 0019 (spec 027, projects.max_webhook_streams)
     await migrateDown(t.db); // 0018 (spec 026, executions.parent_node_id)
     await migrateDown(t.db); // 0017 (compatibilidade com o PostgreSQL 14)
     await migrateDown(t.db); // 0016 (spec 010, mcp_servers.insecure_tls)

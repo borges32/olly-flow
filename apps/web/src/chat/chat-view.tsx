@@ -42,16 +42,19 @@ function MessageText({ text }: { text: string }) {
 export function ChatMessageList({
   messages,
   pending,
+  step,
   testId = 'chat-messages',
 }: {
   messages: ChatEntry[];
   pending: boolean;
+  /** Spec 027: nó em execução (modo Streaming), no lugar de "Respondendo…". */
+  step?: string | null;
   testId?: string;
 }) {
   const end = useRef<HTMLDivElement>(null);
   useEffect(() => {
     end.current?.scrollIntoView({ block: 'end' });
-  }, [messages, pending]);
+  }, [messages, pending, step]);
   return (
     <div className="min-h-0 flex-1 overflow-y-auto p-3" data-testid={testId} aria-live="polite">
       <div className="grid gap-2">
@@ -76,8 +79,12 @@ export function ChatMessageList({
           </div>
         ))}
         {pending && (
-          <div className="justify-self-start rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">
-            <Loader2 className="inline size-4 animate-spin" /> Respondendo…
+          <div
+            data-testid="chat-step"
+            className="justify-self-start rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground"
+          >
+            <Loader2 className="inline size-4 animate-spin" />{' '}
+            {step ? `Executando: ${step}…` : 'Respondendo…'}
           </div>
         )}
         <div ref={end} />

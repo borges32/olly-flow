@@ -61,6 +61,9 @@ describe('configuração da API (validação zod na inicialização)', () => {
       responseTimeoutMs: 120_000,
       rateLimitPerMin: 120,
       requireAuth: false,
+      // Spec 027.
+      streamMaxPerProject: 20,
+      streamPingMs: 15_000,
     });
     expect(config.code).toEqual({ timeoutMs: 30_000, memoryMb: 128 });
     expect(config.dispatcher.maxConcurrent).toBe(10);

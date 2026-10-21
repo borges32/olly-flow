@@ -7,6 +7,8 @@ import { PublishApprovalsService } from './publish-approvals.service.js';
 import { PublishRequestsController } from './publish-requests.controller.js';
 import { PublishingService } from './publishing.service.js';
 import { TestListeners } from './test-listeners.js';
+import { StreamLimiter } from './stream-limiter.js';
+import { StreamResponder } from './stream-responder.js';
 import { WebhookGateway } from './webhook-gateway.js';
 import { WebhookRegistry } from './webhook-registry.js';
 import { WebhooksController } from './webhooks.controller.js';
@@ -22,6 +24,8 @@ import { WebhooksController } from './webhooks.controller.js';
     PublishApprovalsService,
     WebhookGateway,
     ChatService,
+    StreamLimiter,
+    StreamResponder,
     { provide: TestListeners, useFactory: () => new TestListeners() },
   ],
   exports: [WebhookRegistry, WebhookGateway],

@@ -120,3 +120,4 @@ Fila/workers, paralelismo, Merge, While, Python, cron, OAuth2 Authorization Code
 | 03/10/2026 | Criação a partir do prompt da Sprint 4 | Migração para SDD |
 | 03/10/2026 | Permissões RBAC explicitadas no plano (seção e tarefa T089), sem mudança de requisito | Decisão humana sobre permissões por spec |
 | 05/10/2026 | HU-2.1 e FR-007: a escuta iniciada no nó executa só o Webhook | Teste de UX: a chamada de teste disparava o fluxo inteiro; esperado comportamento do N8N |
+| 20/10/2026 | FR-004/FR-005: o Webhook ganha o modo de resposta "Streaming" (spec 027): os passos aos poucos (nome de cada nó executado) e a resposta no fim, em NDJSON no formato do N8N, com limite de streams por projeto | Spec 027 |
