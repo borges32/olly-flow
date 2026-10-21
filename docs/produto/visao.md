@@ -33,26 +33,26 @@ Os itens PR-01 a PR-14 são os requisitos originais solicitados. Os itens PR-15 
 
 | ID | Requisito | Prioridade |
 |---|---|---|
-| PR-01 | Nó **While** (laço com condição) | Obrigatório | | | |
-| PR-02 | Nó **If** (desvio condicional) | Obrigatório | | | |
-| PR-03 | Nó **HTTP Request** | Obrigatório | | | |
-| PR-04 | Nó de **query PostgreSQL** | Obrigatório | | | |
-| PR-05 | Nó de **inclusão/alteração de registros no PostgreSQL** | Obrigatório | | | |
-| PR-06 | **Webhook de entrada** | Obrigatório | | | |
-| PR-07 | **Log de todas as execuções** de workflow | Obrigatório | | | ○ |
-| PR-08 | **RBAC** com papéis para criar, visualizar e executar workflows | Obrigatório | | | |
-| PR-09 | Nó de **código JavaScript** | Obrigatório | | | |
-| PR-10 | Nó de **código Python** | Obrigatório | | | |
-| PR-11 | **Transferência de valores/variáveis entre nós** | Obrigatório | | | |
-| PR-12 | **Processamento paralelo** de nós | Obrigatório | | | |
-| PR-13 | Nó de **Merge** de dados | Obrigatório | | | |
-| PR-14 | Nó **cliente MCP** | Obrigatório | | | |
-| PR-15 | **Editor visual** de workflows (canvas) com teste interativo | Obrigatório | ○ | ○ | |
-| PR-16 | **AI Agent** usando tools da plataforma (MCP, HTTP, Postgres, sub-workflows) | Obrigatório | | | |
-| PR-17 | **Compatibilidade e migração** a partir do N8N | Obrigatório | | | |
-| PR-18 | **Gestão segura de credenciais** | Obrigatório | | | |
-| PR-19 | **Auditoria, versionamento e LGPD** | Obrigatório | | | ○ |
-| PR-20 | **Operação**: escalabilidade, observabilidade, implantação | Obrigatório | | | ○ |
+| PR-01 | Nó **While** (laço com condição) | Obrigatório | | | | |
+| PR-02 | Nó **If** (desvio condicional) | Obrigatório | | | | |
+| PR-03 | Nó **HTTP Request** | Obrigatório | | | | |
+| PR-04 | Nó de **query PostgreSQL** | Obrigatório | | | | |
+| PR-05 | Nó de **inclusão/alteração de registros no PostgreSQL** | Obrigatório | | | | |
+| PR-06 | **Webhook de entrada** | Obrigatório | | | | ○ |
+| PR-07 | **Log de todas as execuções** de workflow | Obrigatório | | | ○ | |
+| PR-08 | **RBAC** com papéis para criar, visualizar e executar workflows | Obrigatório | | | | |
+| PR-09 | Nó de **código JavaScript** | Obrigatório | | | | |
+| PR-10 | Nó de **código Python** | Obrigatório | | | | |
+| PR-11 | **Transferência de valores/variáveis entre nós** | Obrigatório | | | | |
+| PR-12 | **Processamento paralelo** de nós | Obrigatório | | | | |
+| PR-13 | Nó de **Merge** de dados | Obrigatório | | | | |
+| PR-14 | Nó **cliente MCP** | Obrigatório | | | | |
+| PR-15 | **Editor visual** de workflows (canvas) com teste interativo | Obrigatório | ○ | ○ | | |
+| PR-16 | **AI Agent** usando tools da plataforma (MCP, HTTP, Postgres, sub-workflows) | Obrigatório | | | | |
+| PR-17 | **Compatibilidade e migração** a partir do N8N | Obrigatório | | | | ○ |
+| PR-18 | **Gestão segura de credenciais** | Obrigatório | | | | |
+| PR-19 | **Auditoria, versionamento e LGPD** | Obrigatório | | | ○ | |
+| PR-20 | **Operação**: escalabilidade, observabilidade, implantação | Obrigatório | | | ○ | ○ |
 
 ## 5. Requisitos não funcionais globais
 
@@ -69,28 +69,28 @@ Os itens PR-01 a PR-14 são os requisitos originais solicitados. Os itens PR-15 
 
 ## 6. Matriz de rastreabilidade (requisito de produto → specs)
 
-| PR | 001 | 002 | 003 | 004 | 005 | 006 | 007 | 008 | 009 | 010 | 011 | 012 | 013 | 014 | 015 | 016 | 017 | 018 | 019 | 021 | 022 | 023 | 024 | 025 | 026 |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| PR-01 While | | | | | | | ● | | | | | | | | | | | | | | | | | | |
-| PR-02 If | | | ● | | | | ○ | | | | | | | | | | | | | | | | | | |
-| PR-03 HTTP | | | | ● | | | | ○ | | | | | | | | | | | | | | | | | |
-| PR-04 Query PG | | | | ● | | | | | | | | | | | | | | | | | ○ | | | | |
-| PR-05 Escrita PG | | | | ● | | | | | | | | | | | | | | | | | ○ | | | | |
-| PR-06 Webhook | | | | | ● | | | | | | | | | | | | | | | | | | | | |
-| PR-07 Log | | | ● | | ● | | | | ○ | | | ○ | | | | | | | | | | | | | ○ |
-| PR-08 RBAC | ○ | ● | | | ● | | | | ○ | | | | | ○ | | | | | | | | | | | |
-| PR-09 JS | | | | | ● | | | | | | | | | | | | | | | | | | | | |
-| PR-10 Python | | | | | | | | ● | | | | | | | | | | | | | | | | | |
-| PR-11 Variáveis | | | ● | | | | | | | | | | | | | | | | | | | | | | |
-| PR-12 Paralelo | | | | | | ● | | | | | | | | | | | | | | | | | | | |
-| PR-13 Merge | | | | | | | ● | | | | | | | | | | | | | | | | | | |
-| PR-14 MCP | | | | | | | | | | ● | ○ | | | | | | | | | | | | | | |
-| PR-15 Editor | ○ | ● | ● | | | | | | | | | | | | ○ | | | | ○ | ○ | | ○ | ○ | ○ | |
-| PR-16 Agent | | | | | | | | | | | ● | | | | | ○ | ○ | ○ | | ○ | | | | | |
-| PR-17 N8N | | | ○ | | ○ | | | | | | | | ○ | | ● | ○ | ○ | ○ | | ○ | ○ | ○ | | | |
-| PR-18 Credenciais | | | | ● | | | | | ○ | | | | | | ○ | ○ | | | | | | | | | |
-| PR-19 Auditoria/LGPD | ○ | | | | ● | | | | ● | | | | | | ○ | | | | | | | | | | ○ |
-| PR-20 Operação | ○ | | | | | ● | | | | | | ● | ● | ○ | | | | | | | | | | | ○ |
+| PR | 001 | 002 | 003 | 004 | 005 | 006 | 007 | 008 | 009 | 010 | 011 | 012 | 013 | 014 | 015 | 016 | 017 | 018 | 019 | 021 | 022 | 023 | 024 | 025 | 026 | 027 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| PR-01 While | | | | | | | ● | | | | | | | | | | | | | | | | | | | |
+| PR-02 If | | | ● | | | | ○ | | | | | | | | | | | | | | | | | | | |
+| PR-03 HTTP | | | | ● | | | | ○ | | | | | | | | | | | | | | | | | | |
+| PR-04 Query PG | | | | ● | | | | | | | | | | | | | | | | | ○ | | | | | |
+| PR-05 Escrita PG | | | | ● | | | | | | | | | | | | | | | | | ○ | | | | | |
+| PR-06 Webhook | | | | | ● | | | | | | | | | | | | | | | | | | | | | ○ |
+| PR-07 Log | | | ● | | ● | | | | ○ | | | ○ | | | | | | | | | | | | | ○ | |
+| PR-08 RBAC | ○ | ● | | | ● | | | | ○ | | | | | ○ | | | | | | | | | | | | |
+| PR-09 JS | | | | | ● | | | | | | | | | | | | | | | | | | | | | |
+| PR-10 Python | | | | | | | | ● | | | | | | | | | | | | | | | | | | |
+| PR-11 Variáveis | | | ● | | | | | | | | | | | | | | | | | | | | | | | |
+| PR-12 Paralelo | | | | | | ● | | | | | | | | | | | | | | | | | | | | |
+| PR-13 Merge | | | | | | | ● | | | | | | | | | | | | | | | | | | | |
+| PR-14 MCP | | | | | | | | | | ● | ○ | | | | | | | | | | | | | | | |
+| PR-15 Editor | ○ | ● | ● | | | | | | | | | | | | ○ | | | | ○ | ○ | | ○ | ○ | ○ | | |
+| PR-16 Agent | | | | | | | | | | | ● | | | | | ○ | ○ | ○ | | ○ | | | | | | |
+| PR-17 N8N | | | ○ | | ○ | | | | | | | | ○ | | ● | ○ | ○ | ○ | | ○ | ○ | ○ | | | | ○ |
+| PR-18 Credenciais | | | | ● | | | | | ○ | | | | | | ○ | ○ | | | | | | | | | | |
+| PR-19 Auditoria/LGPD | ○ | | | | ● | | | | ● | | | | | | ○ | | | | | | | | | | ○ | |
+| PR-20 Operação | ○ | | | | | ● | | | | | | ● | ● | ○ | | | | | | | | | | | ○ | ○ |
 
 ● entrega principal · ○ entrega parcial/complementar
 

@@ -160,7 +160,7 @@ Como **editor que migra do N8N**, quero que o Chat Trigger seja importado com a 
 - **NFR-001**: A página hospedada e o painel do editor funcionam em celular e computador, em português do Brasil (NFR-G07); o conteúdo configurado (título, mensagens) aparece como digitado.
 - **NFR-002**: O tempo entre o fim da execução e a resposta aparecer no chat é de até 1 segundo, com a fila sem carga.
 - **NFR-003**: Os testes automatizados usam o modelo simulado (spec 011), sem chamadas a provedores reais.
-- **NFR-004**: A página hospedada não expõe dados do workflow além do que foi configurado para ela (sem nomes de nós, credenciais ou dados de outras sessões).
+- **NFR-004**: A página hospedada não expõe dados do workflow além do que foi configurado para ela (sem credenciais ou dados de outras sessões, nem nomes de nós). Exceção (spec 027): no modo de resposta "Streaming", escolhido por quem monta o workflow, a página mostra os nomes dos nós executados (o passo atual).
 
 ## Entidades-chave
 
@@ -215,3 +215,4 @@ Nenhum. Respondidos pelo PO em 14/10/2026:
 | 14/10/2026 | Implementação concluída ([relatório](report.md)) | — |
 | 14/10/2026 | Pedido do PO (tela do N8N): o chat do editor passa para a parte de baixo, ao lado de um painel de Logs dos nós (FR-002 alterado, FR-016 novo, SC-007 novo) | Testar o fluxo como no N8N, vendo os logs dos nós durante a conversa |
 | 14/10/2026 | Painel inferior com chat e logs implementado ([relatório](report.md)) | — |
+| 20/10/2026 | NFR-004: no modo de resposta "Streaming" (spec 027), a página hospedada mostra os nomes dos nós executados; nos demais modos, continua sem nomes de nós | Decisão do PO na criação da spec 027 |

@@ -34,6 +34,7 @@
 | 024 | [destacar-proximo-no](../specs/024-destacar-proximo-no/spec.md) | 4 — Hardening (apoio à depuração e à UX) | Na execução de teste nó a nó, destaca com outra cor e o selo "próximo" os nós que esperam a execução (só os ramos do If/Switch com itens) e anima as conexões até eles | 003, 005, 007 | Implementada ([relatório](../specs/024-destacar-proximo-no/report.md)) | |
 | 025 | [redimensionar-colunas-do-no](../specs/025-redimensionar-colunas-do-no/spec.md) | 4 — Hardening (apoio à UX) | Divisórias arrastáveis entre as colunas Entrada, Parâmetros e Saída do painel do nó, com teclado, clique duplo para o padrão e larguras lembradas no navegador | 003 | Implementada ([relatório](../specs/025-redimensionar-colunas-do-no/report.md)) | |
 | 026 | [acoes-da-execucao](../specs/026-acoes-da-execucao/spec.md) | 4 — Hardening (operação e depuração) | Menu de ações nas execuções terminadas: **Log** (modal com os nós executados, erros, subexecuções, filtros, cópia e downloads) e **Excluir** (permissão `execution:delete`, remoção completa e auditoria) | 003, 005, 006, 008, 009 | Implementada ([relatório](../specs/026-acoes-da-execucao/report.md)) | |
+| 027 | [resposta-streaming](../specs/027-resposta-streaming/spec.md) | 4 — Hardening (paridade com o N8N, operação) | Modo de resposta "Streaming" no Webhook e no Chat Trigger: NDJSON próximo do N8N com o início e o fim de cada nó executado (só metadados) e a resposta no fim; passo atual no chat; limite de streams simultâneos por projeto; importação do modo do N8N | 005, 006, 009, 015, 021 | Planejada (plano e tarefas aguardando revisão) | |
 
 As specs estão organizadas por escopo, não por calendário. A referência original era de 13 sprints de 2 semanas com uma equipe de 4 pessoas. Com implementação por agente de IA, o ritmo depende principalmente das revisões humanas entre specs.
 
@@ -65,6 +66,7 @@ Entre cada spec, antes de iniciar a próxima:
 | 019 | Revisar o escopo (arquivo JSON por saída, sem binários); DPO: avaliar se o download dos dados do painel, já mascarados, precisa de auditoria | PO + DPO |
 | 021 | ~~Responder aos pontos em aberto~~ (14/10/2026: autenticação do N8N, sem widget, sem *streaming*, mensagens da sessão em sequência, risco do `sessionId` aceito, "Respond to Chat" fora); ~~revisar plano e tarefas~~ (aprovados em 14/10/2026); avaliação da Segurança sobre a exposição pública do chat; workflows da POC com Chat Trigger em `fixtures/n8n/` | PO + Segurança |
 | 022 | ~~Decidir os comandos de exclusão, a organização e a importação~~ (14/10/2026: igual ao N8N; nó único com migração; Select importado; v1 fora) | PO |
+| 027 | ~~Responder às decisões~~ (19 e 20/10/2026: só passos, NDJSON próximo do N8N, só metadados, sem sub-workflows, Chat Trigger incluído, limite por projeto, nomes dos nós permitidos no chat público); revisar plano e tarefas; Infra: proxies fora do `k3s/` sem buffer e com tempo limite para fluxos longos | PO + Infra + Segurança |
 | Pós 013 | Deploy em produção, treinamento, reteste do pentest, hypercare, desligamento do N8N | Infra + PO + Segurança |
 
 ## Decisões pendentes
