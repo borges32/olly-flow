@@ -17,6 +17,8 @@ export function AdminNav() {
     mcp && { to: '/admin/mcp', label: 'MCP' },
     // Spec 011: uso, preços, modelos e limites de IA (administração da plataforma).
     masking && { to: '/admin/ai', label: 'IA' },
+    // Spec 028: configuração do Olly Chat (administração da plataforma).
+    masking && { to: '/admin/chat', label: 'Olly Chat' },
   ].filter((t): t is { to: string; label: string; end?: boolean } => Boolean(t));
   return (
     <nav aria-label="Administração" className="flex gap-1 border-b">

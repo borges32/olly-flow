@@ -23,6 +23,43 @@ export interface UsersTable {
   is_admin: Generated<boolean>;
   failed_logins: Generated<number>;
   locked_until: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
+  /** Spec 028: `preferred_username` do IdP (o `login` do payload do Olly Chat). */
+  idp_username: ColumnType<string | null, string | null | undefined, string | null>;
+  /** Spec 028: sessões do Olly Chat já criadas (o número da sessão nunca é reaproveitado). */
+  chat_sessions_created: Generated<number>;
+}
+
+/** Spec 028: configuração do Olly Chat (uma linha; sem linha = não configurado). */
+export interface OllyChatConfigTable {
+  id: Generated<boolean>;
+  webhook_url: string | null;
+  retention_days: Generated<number>;
+  auth_type: Generated<'none' | 'headerAuth' | 'basicAuth'>;
+  auth_encrypted: Buffer | null;
+  key_version: number | null;
+  key_provider: string | null;
+  updated_by: string | null;
+  updated_at: GeneratedTimestamp;
+}
+
+export interface OllyChatSessionsTable {
+  id: Generated<string>;
+  user_id: string;
+  number: number;
+  title: string;
+  title_custom: Generated<boolean>;
+  created_at: GeneratedTimestamp;
+  last_message_at: GeneratedTimestamp;
+}
+
+export interface OllyChatMessagesTable {
+  id: Generated<string>;
+  session_id: string;
+  role: 'user' | 'assistant' | 'error';
+  text: string;
+  status: Generated<'pending' | 'done'>;
+  execution_id: string | null;
+  created_at: GeneratedTimestamp;
 }
 
 /** Spec 014: sessão local (token opaco, guardado só como hash). */
@@ -418,6 +455,9 @@ export interface CredentialsTable {
 
 export interface Database {
   users: UsersTable;
+  olly_chat_config: OllyChatConfigTable;
+  olly_chat_sessions: OllyChatSessionsTable;
+  olly_chat_messages: OllyChatMessagesTable;
   user_sessions: UserSessionsTable;
   roles: RolesTable;
   projects: ProjectsTable;

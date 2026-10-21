@@ -23,6 +23,7 @@ import { NodeTypesModule } from './node-types/node-types.module.js';
 import { ProjectsModule } from './projects/projects.module.js';
 import { UsersModule } from './users/users.module.js';
 import { WebhooksModule } from './webhooks/webhooks.module.js';
+import { OllyChatModule } from './olly-chat/olly-chat.module.js';
 import { WorkflowIoModule } from './workflow-io/workflow-io.module.js';
 import { WorkflowsModule } from './workflows/workflows.module.js';
 
@@ -88,6 +89,8 @@ export class AppModule {
         AiModule,
         // Spec 015: baixar e importar workflows em JSON.
         WorkflowIoModule,
+        // Spec 028: chat da plataforma.
+        OllyChatModule,
       ],
       providers: [{ provide: APP_FILTER, useClass: DomainExceptionFilter }],
     };

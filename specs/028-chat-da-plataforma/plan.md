@@ -1,4 +1,4 @@
-# Plano técnico — Spec 028: Chat da plataforma ("Chat Olly")
+# Plano técnico — Spec 028: Chat da plataforma ("Olly Chat")
 
 **Spec:** [spec.md](spec.md) · **Tarefas:** [tasks.md](tasks.md)
 
@@ -14,8 +14,8 @@
   - **configuração:** rota da administração da plataforma;
   - **limpeza:** passo novo na manutenção diária (spec 009).
 - **Web:**
-  - item **Chat** no menu e página `/assistente` (barra de sessões e conversa), reaproveitando os componentes e a leitura do stream do chat da spec 021/027;
-  - aba **Chat** na Administração.
+  - item **Olly Chat** no menu e página `/assistente` (barra de sessões e conversa), reaproveitando os componentes e a leitura do stream do chat da spec 021/027;
+  - aba **Olly Chat** na Administração.
 
 ## Verificação da constituição
 
@@ -86,7 +86,7 @@ Todas sob `/api/v1`. Rotas do usuário com `@Authenticated()` (qualquer usuário
 3. **Resposta ao navegador:** assume a resposta com os cabeçalhos do stream (spec 027, `STREAM_RESPONSE_HEADERS`).
 4. **Chamada ao webhook:** `POST` com o payload, `content-type: application/json` e a autenticação configurada (cabeçalho ou `Authorization: Basic`), pelo `HttpGuard.fetch`.
 5. **Leitura da resposta:**
-   - **NDJSON:** repassa cada linha ao navegador e guarda o `item` final ou o `error` (e o `executionId` do `metadata`);
+   - **NDJSON:** repassa cada linha ao navegador e guarda o `item` final ou o `error` (e o `executionId` do `metadata`). O texto guardado vem de `ollyChatReplyText` (`packages/shared-types`): o primeiro elemento, se for lista; o campo `report`; senão `output` ou `text`; senão o JSON formatado. Um texto (o conteúdo inteiro, ou o `output`/`text`) que é um JSON com `report`, com ou sem bloco ```json em volta, é lido como JSON; um item no formato do N8N (`{ json: {...} }`) é desembrulhado;
    - **resposta comum:** JSON ou texto vira um `item` único;
    - **HTTP de erro** (ex.: 429 do limite de streams, 401, 500): vira um `error` com a mensagem do corpo, quando houver.
 6. **Resposta guardada:** finaliza a `pending` como `assistant` (texto: `output`, `text` ou o JSON formatado) ou `error`, e encerra.
@@ -100,13 +100,15 @@ Todas sob `/api/v1`. Rotas do usuário com `@Authenticated()` (qualquer usuário
 
 ### §6 Web
 
-- **Menu** (`app-layout.tsx`): item **Chat** (ícone `MessagesSquare`), para todo usuário autenticado, rota `/assistente`.
+- **Menu** (`app-layout.tsx`): item **Olly Chat** (ícone `MessagesSquare`), para todo usuário autenticado, rota `/assistente`.
 - **Página `OllyChatPage`:**
   - **barra lateral:** sessões, **Nova sessão**, renomear (edição no lugar) e excluir (confirmação);
   - **conversa:** `ChatMessageList` e `ChatComposer` (spec 021) e `readChatStream` (spec 027), que mostra "Executando: <nó>";
   - **estados:** sem configuração, mostra o aviso; na primeira visita, cria a sessão 1;
   - **mobile:** a barra lateral vira uma lista recolhível.
-- **Administração:** aba **Chat** (`/admin/chat`) com URL, retenção e autenticação (tipo e campos de segredo vazios com "deixe em branco para manter"), para quem tem `project:manage` global.
+- **GFM (FR-012):** o `MessageText` usa o plugin `remark-gfm` (tabelas, tachado, listas de tarefas, links automáticos) e estiliza títulos, citações, linhas horizontais e tabelas (bordas, cabeçalho, rolagem horizontal num contêiner). Continua sem HTML bruto. Vale também para os chats da spec 021.
+- **Mermaid (FR-011):** no `MessageText` (componente de Markdown dos chats), o bloco de código com a linguagem `mermaid` vira o componente `MermaidDiagram`, que carrega a biblioteca `mermaid` sob demanda (`import()`; fora do pacote principal), desenha com `securityLevel: 'strict'` (rótulos sanitizados, sem scripts nem cliques) e o tema claro ou escuro. Erro de sintaxe: mostra o código e o aviso. Vale também para os chats da spec 021, que usam o mesmo componente.
+- **Administração:** aba **Olly Chat** (`/admin/chat`) com URL, retenção e autenticação (tipo e campos de segredo vazios com "deixe em branco para manter"), para quem tem `project:manage` global.
 
 ## Modelo de dados
 
@@ -125,7 +127,7 @@ Ver §3; payload em §2; stream no formato da spec 027.
 
 ## Configuração
 
-Nenhuma variável nova: a configuração é da plataforma, na aba **Chat** (banco). O teto usa `OLLY_DEFAULT_WORKFLOW_TIMEOUT`.
+Nenhuma variável nova: a configuração é da plataforma, na aba **Olly Chat** (banco). O teto usa `OLLY_DEFAULT_WORKFLOW_TIMEOUT`.
 
 ## Decisões técnicas
 
@@ -136,6 +138,8 @@ Nenhuma variável nova: a configuração é da plataforma, na aba **Chat** (banc
 | Resposta `pending` gravada antes da chamada | Gravar só no fim | Bloqueio de uma mensagem por vez sem Redis; a resposta é guardada mesmo com o navegador fechado |
 | Segredo criptografado como as credenciais | Credencial de um projeto | A configuração é da plataforma, não de um projeto |
 | Rota `/assistente` | `/chat` | `/chat/:webhookId` já é o chat público da spec 021 |
+| `remark-gfm` (MIT) | Escrever o parser das tabelas | Plugin oficial do `react-markdown` (mesmo grupo, `remarkjs`) para o padrão GFM |
+| `mermaid` (MIT), carregada sob demanda | Renderizar no servidor; imagem pronta vinda do workflow | Biblioteca de referência do formato, no navegador e só quando há diagrama; `securityLevel: 'strict'` |
 
 ## Estratégia de testes
 
@@ -145,7 +149,7 @@ Nenhuma variável nova: a configuração é da plataforma, na aba **Chat** (banc
 | FR-004 (`login`) | Integração | `olly-chat.int.test.ts` + `auth` (`preferred_username` gravado no login pelo IdP; prioridade sobre o e-mail) |
 | FR-008, SC-004 | Integração | `olly-chat.int.test.ts` (só `project:manage` global; segredo não volta; auditoria sem segredo; validação) |
 | FR-009, SC-003 | Integração | `apps/api/src/maintenance/retention.int.test.ts` (sessão vencida apagada; sessão antiga com mensagem recente mantida) |
-| FR-001, FR-002, FR-005, FR-006 | E2E | `apps/web/e2e/olly-chat.spec.ts` (menu para o viewer, Nova sessão, conversa com o passo atual, voltar à sessão, renomear, excluir, aba Chat da Administração) |
+| FR-001, FR-002, FR-005, FR-006 | E2E | `apps/web/e2e/olly-chat.spec.ts` (menu para o viewer, Nova sessão, conversa com o passo atual, voltar à sessão, renomear, excluir, aba Olly Chat da Administração) |
 | Migration | Integração | `packages/db/src/migrations.int.test.ts` |
 
 ## Riscos
@@ -161,3 +165,6 @@ Nenhuma variável nova: a configuração é da plataforma, na aba **Chat** (banc
 | Data | Alteração | Motivo |
 |---|---|---|
 | 21/10/2026 | Criação do plano | Spec 028 esclarecida pelo PO |
+| 21/10/2026 | §4: texto pelo campo `report`; §6: diagramas Mermaid | Spec 028, histórico |
+| 21/10/2026 | §4: JSON final que chega como texto (correção) | Spec 028, histórico |
+| 21/10/2026 | §6: Markdown GFM (tabelas) e estilos de títulos | Spec 028, histórico |

@@ -10,6 +10,8 @@ import { Toaster } from '@/components/ui/toaster';
 import { EditorPage } from '@/editor/editor-page';
 import { AdminAuditPage } from '@/pages/admin-audit-page';
 import { AdminMaskingPage } from '@/pages/admin-masking-page';
+import { AdminChatPage } from '@/pages/admin-chat-page';
+import { OllyChatPage } from '@/pages/olly-chat-page';
 import { AdminAiPage } from '@/pages/admin-ai-page';
 import { ChangePasswordPage } from '@/pages/change-password-page';
 import { AdminMcpPage } from '@/pages/admin-mcp-page';
@@ -57,6 +59,9 @@ const router = createBrowserRouter([
           { path: 'admin/audit', element: <AdminAuditPage /> },
           { path: 'admin/mcp', element: <AdminMcpPage /> },
           { path: 'admin/ai', element: <AdminAiPage /> },
+          // Spec 028: chat da plataforma e a configuração dele.
+          { path: 'admin/chat', element: <AdminChatPage /> },
+          { path: 'assistente', element: <OllyChatPage /> },
           { path: 'approvals', element: <ApprovalsPage /> },
           // Spec 014: troca voluntária da senha local.
           { path: 'change-password', element: <ChangePasswordPage /> },

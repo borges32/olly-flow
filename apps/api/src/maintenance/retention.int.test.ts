@@ -314,3 +314,58 @@ describe('spec 009 — FR-017/SC-007: retenção por projeto, partições e audi
     expect([a.ran, b.ran].sort()).toEqual([false, true]);
   });
 });
+
+describe('spec 028 — FR-009/SC-003: retenção das sessões do Olly Chat', () => {
+  it('FR-009/SC-003: apaga a sessão sem mensagem há mais que a retenção; mensagem recente renova o prazo', async () => {
+    const db = ctx.database.db;
+    await db
+      .insertInto('olly_chat_config')
+      .values({ id: true, webhook_url: 'https://assistente.exemplo/webhook', retention_days: 7 })
+      .onConflict((oc) => oc.column('id').doUpdateSet({ retention_days: 7 }))
+      .execute();
+    const session = async (number: number, createdDaysAgo: number, lastDaysAgo: number) =>
+      (
+        await db
+          .insertInto('olly_chat_sessions')
+          .values({
+            user_id: admin.id,
+            number,
+            title: `Sessão ${String(number)}`,
+            created_at: new Date(Date.now() - createdDaysAgo * DAY),
+            last_message_at: new Date(Date.now() - lastDaysAgo * DAY),
+          })
+          .returning('id')
+          .executeTakeFirstOrThrow()
+      ).id;
+    const expired = await session(901, 8, 8);
+    const renewed = await session(902, 30, 1);
+    await db
+      .insertInto('olly_chat_messages')
+      .values({ session_id: expired, role: 'user', text: 'mensagem antiga' })
+      .execute();
+
+    const report = await maintenance.run();
+    expect(report.ollyChatSessionsDeleted).toBe(1);
+    const left = await db
+      .selectFrom('olly_chat_sessions')
+      .select('id')
+      .where('id', 'in', [expired, renewed])
+      .execute();
+    expect(left.map((r) => r.id)).toEqual([renewed]);
+    // As mensagens saem com a sessão.
+    expect(
+      await db
+        .selectFrom('olly_chat_messages')
+        .select('id')
+        .where('session_id', '=', expired)
+        .execute(),
+    ).toEqual([]);
+    const audit = await db
+      .selectFrom('audit_log')
+      .select('details')
+      .where('action', '=', 'retention.run')
+      .orderBy('id', 'desc')
+      .executeTakeFirstOrThrow();
+    expect(audit.details).toMatchObject({ ollyChatSessionsDeleted: 1 });
+  });
+});

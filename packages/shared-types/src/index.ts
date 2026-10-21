@@ -14,3 +14,4 @@ export * from './workflow-file.js';
 export * from './chat.js';
 export * from './json-text.js';
 export * from './stream.js';
+export * from './olly-chat.js';

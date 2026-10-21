@@ -1,8 +1,8 @@
-# Spec 028 — Chat da plataforma ("Chat Olly")
+# Spec 028 — Chat da plataforma ("Olly Chat")
 
 | Campo | Valor |
 |---|---|
-| **Status** | Planejada (plano e tarefas aguardando revisão) |
+| **Status** | Implementada |
 | **Fase** | 4 — Hardening (produto: assistente para os usuários) |
 | **Depende de** | 002, 009, 014, 021, 027 |
 | **Requisitos de produto** | PR-15 (parcial), PR-16 (parcial), PR-19 (parcial) |
@@ -26,10 +26,10 @@ O PO pediu (21/10/2026) uma tela de chat na plataforma:
 
 Como **usuário autenticado**, quero mandar uma mensagem no chat da plataforma e ver a resposta do workflow, acompanhando o progresso, para tirar dúvidas e pedir análises sem sair da plataforma.
 
-**Teste independente:** com o chat configurado, abrir **Chat** no menu, mandar "Analise se estamos com algum problema com o mobile pf" e conferir que o workflow recebe o payload com a sessão, os dados do usuário e a mensagem, e que a resposta aparece.
+**Teste independente:** com o chat configurado, abrir **Olly Chat** no menu, mandar "Analise se estamos com algum problema com o mobile pf" e conferir que o workflow recebe o payload com a sessão, os dados do usuário e a mensagem, e que a resposta aparece.
 
 **Cenários de aceite:**
-1. **Dado** um usuário autenticado de qualquer perfil, **quando** abre o menu, **então** vê o item **Chat** com ícone, que leva à página do chat.
+1. **Dado** um usuário autenticado de qualquer perfil, **quando** abre o menu, **então** vê o item **Olly Chat** com ícone, que leva à página do chat.
 2. **Dado** a página do chat, **quando** o usuário envia uma mensagem, **então** o workflow configurado recebe:
    ```json
    {
@@ -63,10 +63,10 @@ Como **usuário**, quero ter várias sessões numeradas numa barra lateral, para
 
 Como **administrador da plataforma**, quero configurar a URL do webhook que alimenta o chat e o tempo de retenção das sessões, para ligar o chat ao workflow certo e cumprir a política de dados.
 
-**Teste independente:** na aba **Chat** da Administração, salvar a URL de um webhook em "Streaming" e a retenção de 7 dias, mandar uma mensagem no chat e conferir que ela chega a esse webhook.
+**Teste independente:** na aba **Olly Chat** da Administração, salvar a URL de um webhook em "Streaming" e a retenção de 7 dias, mandar uma mensagem no chat e conferir que ela chega a esse webhook.
 
 **Cenários de aceite:**
-1. **Dado** a aba **Chat** da Administração, **quando** informo a URL do webhook, o tempo de retenção e, se o webhook exigir, a autenticação (cabeçalho com chave ou Basic) e salvo, **então** as próximas mensagens vão para essa URL com essa autenticação, e a alteração fica na auditoria. Os segredos da autenticação não voltam para a tela depois de salvos.
+1. **Dado** a aba **Olly Chat** da Administração, **quando** informo a URL do webhook, o tempo de retenção e, se o webhook exigir, a autenticação (cabeçalho com chave ou Basic) e salvo, **então** as próximas mensagens vão para essa URL com essa autenticação, e a alteração fica na auditoria. Os segredos da autenticação não voltam para a tela depois de salvos.
 2. **Dado** uma URL inválida (não HTTP ou HTTPS) ou uma retenção fora dos limites, **quando** salvo, **então** a tela mostra o erro e não salva.
 3. **Dado** o chat sem configuração, **quando** um usuário abre a página, **então** vê o aviso de que o chat ainda não foi configurado, sem conseguir enviar.
 4. **Dado** quem não é administrador da plataforma, **quando** tenta abrir a configuração, **então** não consegue (a tela não aparece e a API recusa).
@@ -90,14 +90,16 @@ Como **responsável pelos dados (LGPD)**, quero que as sessões do chat sejam ap
 
 ## Requisitos funcionais
 
-- **FR-001**: A plataforma DEVE ter o item **Chat**, com ícone, no menu lateral, visível a todo usuário autenticado (de qualquer perfil, inclusive sem projeto), levando à página do chat.
+- **FR-001**: A plataforma DEVE ter o item **Olly Chat**, com ícone, no menu lateral, visível a todo usuário autenticado (de qualquer perfil, inclusive sem projeto), levando à página do chat.
 - **FR-002**: A página do chat DEVE ter a barra lateral com as sessões do usuário (número e título, das mais recentes para as mais antigas), o botão **Nova sessão** e a conversa da sessão selecionada.
 - **FR-003**: Cada sessão DEVE ter um número sequencial **por usuário** (1, 2, 3…), gerado pela plataforma, enviado como texto no `chatSessionId` de todas as mensagens dela. Um número NÃO DEVE ser reaproveitado, nem depois de excluir a sessão.
 - **FR-004**: Cada mensagem DEVE ser enviada ao webhook configurado com o payload `{ chatSessionId, client: "chat-olly", email, login, name, message }`. `email`, `login` e `name` DEVEM vir do usuário autenticado, e NÃO DEVEM poder ser alterados pelo usuário nem pela página. O `login` DEVE ser o nome de usuário do provedor de identidade (IdP), quando houver; senão, o e-mail.
-- **FR-005**: O chat DEVE consumir a resposta em streaming (formato da spec 027), mostrando o passo atual enquanto espera e a resposta no fim (Markdown); uma resposta comum (JSON ou texto, de uma vez) DEVE ser mostrada também. O texto da resposta é o campo `output` ou `text`, ou o JSON formatado.
+- **FR-005**: O chat DEVE consumir a resposta em streaming (formato da spec 027), mostrando o passo atual enquanto espera e a resposta no fim (Markdown); uma resposta comum (JSON ou texto, de uma vez) DEVE ser mostrada também. O workflow devolve no fim um JSON como `[ { "client": "chat-olly", "report": "<Markdown>", "memoria": {} } ]` (lista ou objeto): o texto exibido DEVE ser o campo **`report`**; sem ele, `output` ou `text`, ou o JSON formatado. O mesmo JSON DEVE ser reconhecido quando chega como texto (ex.: Responder ao Webhook em "Texto" ou `output` de um Agent com o JSON, inclusive num bloco ```json).
+- **FR-012**: O Markdown da resposta DEVE seguir o padrão do GitHub (GFM): tabelas, tachado, listas de tarefas e links automáticos, além de títulos (`#` a `####`), citações e linhas horizontais com formatação visível. Uma tabela larga DEVE rolar na horizontal dentro da mensagem.
+- **FR-011**: O Markdown da resposta DEVE mostrar como diagrama os blocos ` ```mermaid ` (ao menos o flowchart); um diagrama inválido DEVE aparecer como o código, com o aviso do erro, sem quebrar a mensagem.
 - **FR-006**: As mensagens do usuário e as respostas (ou os erros) DEVEM ficar guardadas na sessão, para o usuário voltar a ela a qualquer momento. Cada usuário DEVE ver só as próprias sessões e PODE renomeá-las ou excluí-las (com confirmação).
 - **FR-007**: Numa sessão, só uma mensagem DEVE ficar em andamento por vez; o envio fica bloqueado até a resposta, o erro ou o tempo limite.
-- **FR-008**: A configuração do chat DEVE ficar numa aba **Chat** da Administração, só para o administrador da plataforma, com: a URL do webhook (qualquer URL HTTP ou HTTPS, respeitando o filtro de rede), o tempo de retenção das sessões (dias, padrão 7, de 1 a 3650) e a autenticação opcional do webhook (nenhuma, cabeçalho com chave ou Basic). Os segredos DEVEM ser guardados criptografados e NÃO DEVEM voltar à tela nem aparecer em logs. Cada alteração DEVE ficar na auditoria. Sem URL configurada, o chat DEVE avisar que não está disponível.
+- **FR-008**: A configuração do chat DEVE ficar numa aba **Olly Chat** da Administração, só para o administrador da plataforma, com: a URL do webhook (qualquer URL HTTP ou HTTPS, respeitando o filtro de rede), o tempo de retenção das sessões (dias, padrão 7, de 1 a 3650) e a autenticação opcional do webhook (nenhuma, cabeçalho com chave ou Basic). Os segredos DEVEM ser guardados criptografados e NÃO DEVEM voltar à tela nem aparecer em logs. Cada alteração DEVE ficar na auditoria. Sem URL configurada, o chat DEVE avisar que não está disponível.
 - **FR-009**: Sessões cuja última mensagem for mais antiga que o tempo de retenção DEVEM ser apagadas automaticamente, com as mensagens. Uma mensagem nova renova o prazo da sessão.
 - **FR-010**: Falhas DEVEM aparecer na conversa com mensagem clara: chat não configurado, webhook indisponível ou recusando a chamada, limite de streams do projeto (spec 027), erro do workflow e tempo esgotado.
 
@@ -121,6 +123,8 @@ Como **responsável pelos dados (LGPD)**, quero que as sessões do chat sejam ap
 - **SC-002**: Duas sessões criadas por um usuário aparecem na barra lateral, como "Sessão 1" e "Sessão 2", com o histórico de cada uma depois de recarregar a página; outro usuário não as vê e tem a sua própria "Sessão 1".
 - **SC-003**: Com retenção de 7 dias, uma sessão com a última mensagem de 8 dias atrás é apagada pela limpeza automática; uma sessão criada há 30 dias com uma mensagem de ontem é mantida.
 - **SC-004**: Um usuário que não é administrador da plataforma não consegue ver nem alterar a configuração do chat.
+- **SC-006**: A resposta real de produção do PO (relatório com títulos, listas e a tabela "Ações recomendadas") aparece com a tabela formatada (cabeçalho e linhas), e não como texto com `|`.
+- **SC-005**: Uma resposta `[ { "report": "## Análise\n\n```mermaid\nflowchart LR\n  A --> B\n```" } ]` aparece com o título formatado e o flowchart desenhado (SVG) na conversa.
 
 ## Fora do escopo
 
@@ -143,7 +147,7 @@ Nenhum. Respondidos pelo PO em 21/10/2026:
 1. **Numeração:** por usuário (cada um tem a sua "Sessão 1", "Sessão 2"…), sem reaproveitar números. O workflow combina o `login` com o `chatSessionId` na memória (pré-requisitos).
 2. **Título:** "Sessão N", e depois "Sessão N · <começo da primeira mensagem>". O usuário pode renomear e excluir.
 3. **Retenção:** conta a partir da última mensagem (uma mensagem nova renova o prazo); padrão de 7 dias (limites de 1 a 3650).
-4. **Configuração:** nova aba **Chat** na Administração.
+4. **Configuração:** nova aba **Olly Chat** na Administração.
 5. **Autenticação do webhook:** opcional (nenhuma, cabeçalho com chave ou Basic).
 6. **`login`:** o nome de usuário do provedor de identidade, com prioridade; senão, o e-mail.
 7. **Destino:** qualquer URL HTTP ou HTTPS, respeitando o filtro de rede.
@@ -154,4 +158,9 @@ Nenhum. Respondidos pelo PO em 21/10/2026:
 | Data | Alteração | Motivo |
 |---|---|---|
 | 21/10/2026 | Criação da spec, a pedido do PO (tela de chat da plataforma, com sessões, ligada a um workflow por webhook em streaming) | Assistente para os usuários dentro da plataforma |
-| 21/10/2026 | Pontos em aberto respondidos pelo PO (numeração por usuário, renomear e excluir, retenção a partir da última mensagem com padrão de 7 dias, aba Chat na Administração, autenticação opcional, `login` do IdP com prioridade, qualquer URL, passo atual). Plano e tarefas criados. Status: Planejada | Esclarecimento |
+| 21/10/2026 | Pontos em aberto respondidos pelo PO (numeração por usuário, renomear e excluir, retenção a partir da última mensagem com padrão de 7 dias, aba Olly Chat na Administração, autenticação opcional, `login` do IdP com prioridade, qualquer URL, passo atual). Plano e tarefas criados. Status: Planejada | Esclarecimento |
+| 21/10/2026 | Nome na interface: **Olly Chat** (item do menu, título da página e aba da Administração), no lugar de "Chat" | Pedido do PO |
+| 21/10/2026 | Implementação concluída ([relatório](report.md)) | — |
+| 21/10/2026 | FR-005: o texto da resposta é o campo `report` (Markdown) do JSON final do workflow (lista ou objeto, com `client`, `report` e `memoria`); FR-011 e SC-005 novos: flowchart Mermaid na resposta | Detalhe informado pelo PO |
+| 21/10/2026 | FR-005: o JSON final também é reconhecido quando chega como texto (o chat mostrava o JSON inteiro num workflow real) | Teste do PO em dev |
+| 21/10/2026 | FR-012 e SC-006 novos: Markdown no padrão GFM (tabelas) e títulos formatados | Teste do PO com a resposta real de produção (a tabela não era formatada) |

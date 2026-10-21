@@ -4,6 +4,7 @@ import {
   History,
   KeyRound,
   LogOut,
+  MessagesSquare,
   Settings,
   Workflow,
   type LucideIcon,
@@ -33,6 +34,8 @@ const NAV: NavItem[] = [
   { to: '/workflows', label: 'Workflows', icon: Workflow },
   { to: '/executions', label: 'Execuções', icon: History },
   { to: '/credentials', label: 'Credenciais', icon: KeyRound },
+  // Spec 028: chat da plataforma, para todo usuário autenticado.
+  { to: '/assistente', label: 'Olly Chat', icon: MessagesSquare },
   { to: '/approvals', label: 'Aprovações', icon: BadgeCheck, approversOnly: true },
   { to: '/admin', label: 'Administração', icon: Settings, adminOnly: true },
 ];

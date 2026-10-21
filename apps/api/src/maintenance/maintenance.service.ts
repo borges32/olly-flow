@@ -31,6 +31,8 @@ export interface MaintenanceReport {
   usersInactivated: number;
   /** Spec 014: sessões locais expiradas ou revogadas há mais de 7 dias, apagadas. */
   sessionsDeleted: number;
+  /** Spec 028, FR-009: sessões do Olly Chat sem mensagem há mais que a retenção, apagadas. */
+  ollyChatSessionsDeleted: number;
 }
 
 interface StoredRetention {
@@ -70,6 +72,7 @@ export class MaintenanceService {
       partitionsDropped: [],
       usersInactivated: 0,
       sessionsDeleted: 0,
+      ollyChatSessionsDeleted: 0,
     };
     const token = randomUUID();
     const locked = await this.redis.set(LOCK_KEY, token, 'PX', LOCK_TTL_MS, 'NX');
@@ -117,6 +120,7 @@ export class MaintenanceService {
         )
         .executeTakeFirst();
       report.sessionsDeleted = Number(sessions.numDeletedRows);
+      report.ollyChatSessionsDeleted = await this.purgeOllyChat(now);
       await this.audit.record(
         this.db,
         { userId: null, ip: null },
@@ -139,6 +143,37 @@ export class MaintenanceService {
           token,
         )
         .catch(() => undefined);
+    }
+  }
+
+  /**
+   * Spec 028 (FR-009): sessões do Olly Chat cuja última mensagem é mais antiga que a retenção
+   * configurada (padrão 7 dias), com as mensagens (em cascata), em lotes.
+   */
+  private async purgeOllyChat(now: Date): Promise<number> {
+    const config = await this.db
+      .selectFrom('olly_chat_config')
+      .select('retention_days')
+      .executeTakeFirst();
+    const cutoff = new Date(now.getTime() - (config?.retention_days ?? 7) * DAY_MS);
+    let deleted = 0;
+    for (;;) {
+      const rows = await this.db
+        .selectFrom('olly_chat_sessions')
+        .select('id')
+        .where('last_message_at', '<', cutoff)
+        .limit(BATCH)
+        .execute();
+      if (rows.length === 0) return deleted;
+      const result = await this.db
+        .deleteFrom('olly_chat_sessions')
+        .where(
+          'id',
+          'in',
+          rows.map((r) => r.id),
+        )
+        .executeTakeFirst();
+      deleted += Number(result.numDeletedRows);
     }
   }
 

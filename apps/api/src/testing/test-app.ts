@@ -165,7 +165,14 @@ export interface TestUser {
 /** Autentica um usuário no IdP falso e sincroniza-o na plataforma (via /me). */
 export async function loginAs(
   ctx: TestContext,
-  claims: { sub: string; email: string; name?: string; groups?: string[] },
+  claims: {
+    sub: string;
+    email: string;
+    name?: string;
+    groups?: string[];
+    /** Spec 028: nome de usuário do IdP (o `login` do Olly Chat). */
+    preferred_username?: string;
+  },
 ): Promise<TestUser> {
   const token = await ctx.issuer.sign(claims);
   const call: TestUser['call'] = (method, path, payload) =>

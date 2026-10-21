@@ -96,6 +96,38 @@ export async function rotateCredentialKeys(
     options.onProgress?.({ target, rewrapped: report.rewrapped, failed: report.failed });
   }
 
+  // Spec 028: o segredo da autenticação do webhook do Olly Chat segue a mesma chave.
+  const chat = await db
+    .selectFrom('olly_chat_config')
+    .select(['auth_encrypted', 'key_provider', 'key_version'])
+    .where('auth_encrypted', 'is not', null)
+    .executeTakeFirst();
+  if (
+    chat?.auth_encrypted &&
+    (chat.key_provider !== target.provider || chat.key_version !== target.version) &&
+    (options.from === undefined || chat.key_provider === options.from)
+  ) {
+    try {
+      const next = await rewrapCredentialData(chat.auth_encrypted, keys);
+      await db
+        .updateTable('olly_chat_config')
+        .set({
+          auth_encrypted: next.blob,
+          key_version: next.keyVersion,
+          key_provider: next.keyProvider,
+        })
+        .where('auth_encrypted', '=', chat.auth_encrypted)
+        .execute();
+      report.rewrapped++;
+    } catch (error) {
+      report.failed++;
+      report.errors.push({
+        credentialId: 'olly_chat_config',
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   await audit.record(db, SYSTEM, {
     action: `${action}.finish`,
     entityType: 'system',

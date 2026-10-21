@@ -38,13 +38,17 @@ export class UserSyncService {
     const email = claims.email?.trim().toLowerCase();
     if (!email) throw new UnauthenticatedError('Token sem a claim email');
     const name = claims.name ?? claims.preferred_username ?? null;
+    // Spec 028 (FR-004): o nome de usuário do IdP é o `login` do Olly Chat.
+    const idpUsername = claims.preferred_username?.trim() || null;
 
     const groups = [...(claims.groups ?? [])].sort();
-    const key = JSON.stringify([claims.sub, email, name, groups]);
+    const key = JSON.stringify([claims.sub, email, name, idpUsername, groups]);
     const cached = this.cache.get(key);
     if (cached && cached.expiresAt > Date.now()) return cached.user;
 
-    const user = (await this.link(claims, email)) ?? (await this.upsert(claims.sub, email, name));
+    const user =
+      (await this.link(claims, email, idpUsername)) ??
+      (await this.upsert(claims.sub, email, name, idpUsername));
     if (user.is_active) await this.groups.sync(user.id, groups);
     if (this.cache.size >= CACHE_MAX) this.cache.clear();
     this.cache.set(key, { user, expiresAt: Date.now() + CACHE_TTL_MS });
@@ -56,7 +60,11 @@ export class UserSyncService {
    * IdP) vincula as contas, desde que o IdP declare o e-mail verificado; senão, recusa. Devolve o
    * usuário vinculado, ou `undefined` quando não há o que vincular.
    */
-  private async link(claims: AccessTokenClaims, email: string): Promise<User | undefined> {
+  private async link(
+    claims: AccessTokenClaims,
+    email: string,
+    idpUsername: string | null,
+  ): Promise<User | undefined> {
     const known = await this.db
       .selectFrom('users')
       .select('id')
@@ -89,7 +97,7 @@ export class UserSyncService {
     return this.db.transaction().execute(async (trx) => {
       const linked = await trx
         .updateTable('users')
-        .set({ external_id: claims.sub, updated_at: sql<Date>`now()` })
+        .set({ external_id: claims.sub, idp_username: idpUsername, updated_at: sql<Date>`now()` })
         .where('id', '=', local.id)
         .where('external_id', 'is', null)
         .returningAll()
@@ -113,19 +121,25 @@ export class UserSyncService {
     for (const [key, entry] of this.cache) if (entry.user.id === userId) this.cache.delete(key);
   }
 
-  private async upsert(externalId: string, email: string, name: string | null): Promise<User> {
+  private async upsert(
+    externalId: string,
+    email: string,
+    name: string | null,
+    idpUsername: string | null,
+  ): Promise<User> {
     try {
       const changed = await this.db
         .insertInto('users')
-        .values({ external_id: externalId, email, name })
+        .values({ external_id: externalId, email, name, idp_username: idpUsername })
         .onConflict((oc) =>
           oc
             .column('external_id')
-            .doUpdateSet({ email, name, updated_at: sql<Date>`now()` })
+            .doUpdateSet({ email, name, idp_username: idpUsername, updated_at: sql<Date>`now()` })
             .where((eb) =>
               eb.or([
                 eb('users.email', 'is distinct from', email),
                 eb('users.name', 'is distinct from', name),
+                eb('users.idp_username', 'is distinct from', idpUsername),
               ]),
             ),
         )

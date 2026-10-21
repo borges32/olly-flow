@@ -1,17 +1,24 @@
 import { Loader2, Paperclip, SendHorizontal, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { ChatEntry } from './chat-entry';
+import { MermaidDiagram } from './mermaid-diagram';
+import { mermaidSource } from './mermaid-source';
+
+/** Spec 028, FR-012: o GFM traz tabelas, tachado, listas de tarefas e links automáticos. */
+const REMARK_PLUGINS = [remarkGfm];
 
 /**
  * Texto da mensagem (spec 021, plan §6): Markdown sem HTML bruto (o `react-markdown` não
  * interpreta HTML por padrão) e links abertos em nova aba, sem acesso à página de origem.
  */
-function MessageText({ text }: { text: string }) {
+export function MessageText({ text }: { text: string }) {
   return (
     <Markdown
+      remarkPlugins={REMARK_PLUGINS}
       components={{
         a: ({ children, href }) => (
           <a href={href} target="_blank" rel="noopener noreferrer" className="underline">
@@ -21,16 +28,54 @@ function MessageText({ text }: { text: string }) {
         p: ({ children }) => <p className="my-1 first:mt-0 last:mb-0">{children}</p>,
         ul: ({ children }) => <ul className="my-1 list-disc pl-5">{children}</ul>,
         ol: ({ children }) => <ol className="my-1 list-decimal pl-5">{children}</ol>,
+        h1: ({ children }) => (
+          <h1 className="mt-3 mb-1 text-lg font-semibold first:mt-0">{children}</h1>
+        ),
+        h2: ({ children }) => (
+          <h2 className="mt-3 mb-1 text-base font-semibold first:mt-0">{children}</h2>
+        ),
+        h3: ({ children }) => <h3 className="mt-2 mb-1 font-semibold first:mt-0">{children}</h3>,
+        h4: ({ children }) => <h4 className="mt-2 mb-1 font-medium first:mt-0">{children}</h4>,
+        blockquote: ({ children }) => (
+          <blockquote className="my-1 border-l-2 border-current/30 pl-3 opacity-90">
+            {children}
+          </blockquote>
+        ),
+        hr: () => <hr className="my-3 border-current/20" />,
+        // Tabela larga rola dentro da mensagem, sem alargar o balão.
+        table: ({ children }) => (
+          <div className="my-2 max-w-full overflow-x-auto">
+            <table className="w-full border-collapse text-left text-xs">{children}</table>
+          </div>
+        ),
+        th: ({ children, style }) => (
+          <th
+            style={style}
+            className="border border-current/20 bg-black/5 px-2 py-1 font-semibold dark:bg-white/10"
+          >
+            {children}
+          </th>
+        ),
+        td: ({ children, style }) => (
+          <td style={style} className="border border-current/20 px-2 py-1 align-top">
+            {children}
+          </td>
+        ),
         code: ({ children }) => (
           <code className="rounded bg-black/10 px-1 font-mono text-[0.85em] dark:bg-white/10">
             {children}
           </code>
         ),
-        pre: ({ children }) => (
-          <pre className="my-1 overflow-x-auto rounded bg-black/10 p-2 dark:bg-white/10">
-            {children}
-          </pre>
-        ),
+        // Spec 028, FR-011: bloco ```mermaid vira diagrama.
+        pre: ({ children, node }) => {
+          const mermaid = mermaidSource(node);
+          if (mermaid !== null) return <MermaidDiagram code={mermaid} />;
+          return (
+            <pre className="my-1 overflow-x-auto rounded bg-black/10 p-2 dark:bg-white/10">
+              {children}
+            </pre>
+          );
+        },
       }}
     >
       {text}

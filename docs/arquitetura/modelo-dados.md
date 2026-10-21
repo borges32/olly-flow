@@ -6,7 +6,7 @@
 
 | Tabela | Finalidade | Spec | Observações |
 |---|---|---|---|
-| `users` | Usuários locais (014) e do IdP (`external_id` = `sub`) | 001 | `last_login_at` e inativação por falta de login (009); `password_hash` (scrypt), `must_change_password`, `is_admin`, `failed_logins`, `locked_until` (014). Origem: senha local, IdP ou os dois (vinculado) |
+| `users` | Usuários locais (014) e do IdP (`external_id` = `sub`) | 001 | `last_login_at` e inativação por falta de login (009); `password_hash` (scrypt), `must_change_password`, `is_admin`, `failed_logins`, `locked_until` (014); `idp_username` (`preferred_username` do IdP, o `login` do Olly Chat) e `chat_sessions_created` (028). Origem: senha local, IdP ou os dois (vinculado) |
 | `user_sessions` | Sessões locais (token opaco guardado como hash), com expiração por inatividade e por tempo máximo e revogação | 014 | Migration `0015_local_users`; apagadas pela manutenção 7 dias após expirar ou ser revogadas |
 | `roles` | Papéis e lista de permissões | 001 | Seed: admin, editor, executor, viewer |
 | `projects` | Agrupamento de workflows e credenciais | 001 | `max_concurrent_executions` (006); `require_publish_approval`, `executor_can_read_data`, `save_execution_data` (`all` \| `errorsOnly` \| `none`) e `retention` JSONB `{ dataDays?, metadataDays?, memoryDays? }` (009; `memoryDays`: 011); `allowed_models`, `monthly_token_limit` (011); `max_webhook_streams` (027) |
@@ -20,6 +20,9 @@
 | `workflows.published_version`, `workflows.active` | Versão em produção e se as rotas estão ativas (spec 005, `0006_publish_console`) | 005 | |
 | `execution_payloads` | Dados do disparo de uma execução enfileirada (itens do gatilho, nó inicial, pinData, reaproveitamento): a fila leva só o id (spec 006, `0007_queue`). Acima de 1 MB, conteúdo no object storage (`data_ref`) | 006 | Sem FK (executions é particionada) |
 | `projects.max_concurrent_executions` | Cota de execuções simultâneas do projeto; `NULL` usa `OLLY_PROJECT_MAX_CONCURRENT` (spec 006, `0007_queue`) | 006 | |
+| `olly_chat_config` | Configuração do Olly Chat (uma linha) | 028 | URL do webhook, `retention_days` (padrão 7), `auth_type` e segredos criptografados (`auth_encrypted`, envelope como as credenciais) |
+| `olly_chat_sessions` | Sessão do Olly Chat | 028 | Número por usuário (`UNIQUE (user_id, number)`; o contador `users.chat_sessions_created` não reaproveita), título, `last_message_at` (base da retenção) |
+| `olly_chat_messages` | Mensagem do Olly Chat | 028 | `role` (`user` \| `assistant` \| `error`), `status` (`pending` \| `done`), `execution_id`; apagadas com a sessão |
 | `projects.max_webhook_streams` | Streams simultâneos do projeto (Webhook e chat em "Streaming"); `NULL` usa `OLLY_WEBHOOK_STREAM_MAX_PER_PROJECT` (spec 027, `0019_project_stream_limit`) | 027 | |
 | `credentials` | Credenciais cifradas por projeto (`data_encrypted` = envelope AES-256-GCM, `key_version` da chave mestra); nome único no projeto | 004 | `key_provider` (`env` \| `vault`, 009): checkpoint da rotação e da migração. Ver [docs/credenciais.md](../credenciais.md) |
 | `execution_payloads` | Payload do gatilho para o worker | 006 | Ou object storage se grande |
@@ -103,6 +106,8 @@ CREATE TABLE execution_payloads (            -- 0007_queue (spec 006)
 -- 0011_execution_state (spec 008, parte): execution_state; executions.parent_execution_id, depth, retry_of
 -- 0018_execution_parent_node (spec 026): executions.parent_node_id
 -- 0019_project_stream_limit (spec 027): projects.max_webhook_streams (NULL = OLLY_WEBHOOK_STREAM_MAX_PER_PROJECT)
+-- 0020_olly_chat (spec 028): olly_chat_config (uma linha), olly_chat_sessions, olly_chat_messages;
+--   users.idp_username (preferred_username do IdP), users.chat_sessions_created
 CREATE TABLE audit_log (                      -- sem FK em user_id: o registro sobrevive a users
   id BIGSERIAL PRIMARY KEY, user_id UUID, action TEXT NOT NULL, entity_type TEXT,
   entity_id TEXT, details JSONB, ip INET, created_at TIMESTAMPTZ DEFAULT now()
