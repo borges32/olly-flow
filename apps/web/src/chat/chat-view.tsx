@@ -21,48 +21,64 @@ export function MessageText({ text }: { text: string }) {
       remarkPlugins={REMARK_PLUGINS}
       components={{
         a: ({ children, href }) => (
-          <a href={href} target="_blank" rel="noopener noreferrer" className="underline">
+          <a
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium underline underline-offset-2"
+          >
             {children}
           </a>
         ),
-        p: ({ children }) => <p className="my-1 first:mt-0 last:mb-0">{children}</p>,
-        ul: ({ children }) => <ul className="my-1 list-disc pl-5">{children}</ul>,
-        ol: ({ children }) => <ol className="my-1 list-decimal pl-5">{children}</ol>,
+        p: ({ children }) => (
+          <p className="my-2 leading-relaxed first:mt-0 last:mb-0">{children}</p>
+        ),
+        ul: ({ children }) => (
+          <ul className="my-2 list-disc space-y-1 pl-5 marker:opacity-60">{children}</ul>
+        ),
+        ol: ({ children }) => (
+          <ol className="my-2 list-decimal space-y-1 pl-5 marker:opacity-60">{children}</ol>
+        ),
+        li: ({ children }) => <li className="leading-relaxed">{children}</li>,
         h1: ({ children }) => (
-          <h1 className="mt-3 mb-1 text-lg font-semibold first:mt-0">{children}</h1>
+          <h1 className="mt-5 mb-2 text-lg font-semibold tracking-tight first:mt-0">{children}</h1>
         ),
         h2: ({ children }) => (
-          <h2 className="mt-3 mb-1 text-base font-semibold first:mt-0">{children}</h2>
+          <h2 className="mt-5 mb-2 border-b border-current/10 pb-1 text-base font-semibold tracking-tight first:mt-0">
+            {children}
+          </h2>
         ),
-        h3: ({ children }) => <h3 className="mt-2 mb-1 font-semibold first:mt-0">{children}</h3>,
-        h4: ({ children }) => <h4 className="mt-2 mb-1 font-medium first:mt-0">{children}</h4>,
+        h3: ({ children }) => <h3 className="mt-4 mb-1.5 font-semibold first:mt-0">{children}</h3>,
+        h4: ({ children }) => <h4 className="mt-3 mb-1 font-medium first:mt-0">{children}</h4>,
         blockquote: ({ children }) => (
-          <blockquote className="my-1 border-l-2 border-current/30 pl-3 opacity-90">
+          <blockquote className="my-3 rounded-r-md border-l-4 border-primary/40 bg-current/5 py-1 pr-2 pl-3">
             {children}
           </blockquote>
         ),
-        hr: () => <hr className="my-3 border-current/20" />,
-        // Tabela larga rola dentro da mensagem, sem alargar o balão.
+        hr: () => <hr className="my-4 border-current/15" />,
+        // Spec 028, FR-012: tabela larga rola dentro da mensagem, sem alargar o balão.
         table: ({ children }) => (
-          <div className="my-2 max-w-full overflow-x-auto">
-            <table className="w-full border-collapse text-left text-xs">{children}</table>
+          <div className="my-3 max-w-full overflow-x-auto rounded-lg border border-current/15">
+            <table className="w-full border-collapse text-left text-xs [&_tbody_tr:last-child_td]:border-b-0 [&_tbody_tr:nth-child(even)]:bg-current/[0.03]">
+              {children}
+            </table>
           </div>
         ),
         th: ({ children, style }) => (
           <th
             style={style}
-            className="border border-current/20 bg-black/5 px-2 py-1 font-semibold dark:bg-white/10"
+            className="border-b border-current/15 bg-current/5 px-3 py-2 font-semibold whitespace-nowrap"
           >
             {children}
           </th>
         ),
         td: ({ children, style }) => (
-          <td style={style} className="border border-current/20 px-2 py-1 align-top">
+          <td style={style} className="border-b border-current/10 px-3 py-2 align-top">
             {children}
           </td>
         ),
         code: ({ children }) => (
-          <code className="rounded bg-black/10 px-1 font-mono text-[0.85em] dark:bg-white/10">
+          <code className="rounded bg-black/10 px-1 py-0.5 font-mono text-[0.85em] dark:bg-white/10">
             {children}
           </code>
         ),
@@ -71,7 +87,7 @@ export function MessageText({ text }: { text: string }) {
           const mermaid = mermaidSource(node);
           if (mermaid !== null) return <MermaidDiagram code={mermaid} />;
           return (
-            <pre className="my-1 overflow-x-auto rounded bg-black/10 p-2 dark:bg-white/10">
+            <pre className="my-3 overflow-x-auto rounded-lg bg-zinc-950 p-3 text-xs leading-relaxed text-zinc-100 [&_code]:bg-transparent [&_code]:p-0 [&_code]:text-[1em]">
               {children}
             </pre>
           );

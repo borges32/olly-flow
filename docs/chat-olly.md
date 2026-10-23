@@ -4,7 +4,7 @@
 
 ## Para quem usa
 
-- **Sessões:** ficam na barra lateral, numeradas por usuário ("Sessão 1", "Sessão 2"…).
+- **Sessões:** ficam na barra lateral, numeradas por usuário ("Sessão 1", "Sessão 2"…) e agrupadas pela última mensagem (Hoje, Ontem, Últimos 7 dias, Anteriores). A sessão que está respondendo mostra um indicador girando.
   - **Criar:** **Nova sessão** cria a próxima; na primeira visita, uma sessão já está pronta.
   - **Título:** "Sessão N · <começo da primeira mensagem>". Renomeie pelo lápis e exclua pela lixeira (com confirmação).
   - **Número:** não é reaproveitado, nem depois de excluir.
@@ -12,6 +12,7 @@
 - **Conversa:**
   - **Envio:** uma mensagem por vez por sessão.
   - **Espera:** o chat mostra o passo atual ("Executando: <nó>") e, no fim, a resposta, com Markdown e diagramas Mermaid.
+  - **Tela:** a conversa fica numa coluna central. A pergunta aparece num balão à direita, e a resposta num cartão largo com o horário e o botão **Copiar** (copia o Markdown). Uma sessão nova dá boas-vindas com o seu nome.
   - **Histórico:** fica guardado para voltar à sessão a qualquer momento, até a retenção.
   - **Navegador fechado no meio:** a resposta é guardada mesmo assim e aparece ao voltar.
 - **Retenção:** a sessão é apagada quando a última mensagem fica mais antiga que o prazo configurado (padrão 7 dias). Uma mensagem nova renova o prazo.

@@ -75,7 +75,7 @@ const sessionNumber = async (page: Page) =>
   Number(/Sessão (\d+)/.exec(await page.getByTestId('olly-chat-title').innerText())?.[1]);
 
 test.describe('spec 028 — Olly Chat', () => {
-  test('FR-001/FR-002/FR-005/FR-006/FR-011/FR-012/SC-001/SC-002/SC-005/SC-006: o viewer conversa, volta à sessão, renomeia e exclui', async ({
+  test('FR-001/FR-002/FR-005/FR-006/FR-011/FR-012/FR-013/SC-001/SC-002/SC-005/SC-006: o viewer conversa, volta à sessão, renomeia e exclui', async ({
     page,
   }) => {
     await loginViaUi(page, 'viewer', '/');
@@ -89,6 +89,9 @@ test.describe('spec 028 — Olly Chat', () => {
     await expect(page.getByRole('button', { name: 'Nova sessão' })).toBeEnabled();
     await expect(page.getByTestId('olly-chat-title')).toHaveText(/^Sessão \d+$/);
     const number = await sessionNumber(page);
+    // FR-013: sessão sem mensagens dá boas-vindas; as sessões ficam agrupadas por data.
+    await expect(page.getByTestId('olly-chat-empty')).toContainText('Como posso ajudar?');
+    await expect(page.getByTestId('olly-chat-sessions')).toContainText('Hoje');
 
     await page.getByTestId('chat-input').fill('Analise o mobile pf');
     await page.getByTestId('chat-input').press('Enter');
@@ -106,6 +109,12 @@ test.describe('spec 028 — Olly Chat', () => {
     await expect(answer.getByTestId('mermaid-diagram').locator('svg')).toBeVisible();
     await expect(answer.getByTestId('mermaid-diagram')).toContainText('Pergunta');
     await expect(answer).not.toContainText('flowchart LR');
+    // FR-013: cabeçalho com a atividade; Copiar leva o Markdown da resposta.
+    await expect(page.getByText(/^2 mensagens · última atividade \d{2}:\d{2}$/)).toBeVisible();
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+    await page.getByRole('button', { name: 'Copiar' }).last().click();
+    await expect(page.getByRole('button', { name: 'Copiado' })).toBeVisible();
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toContain('```mermaid');
     // FR-011: o segundo bloco (a mensagem, que não é um diagrama) mostra o código e o aviso.
     await expect(answer.getByTestId('mermaid-error')).toContainText(
       'Não foi possível desenhar o diagrama',

@@ -5,15 +5,17 @@ import {
   type OllyChatStatus,
 } from '@olly/shared-types';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, MessageSquarePlus, Pencil, Trash2, X } from 'lucide-react';
+import { Check, Loader2, MessageSquare, Pencil, SquarePen, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useApi } from '@/api/api-provider';
 import { ApiError } from '@/api/client';
+import { useMe } from '@/api/use-me';
 import { useAuth } from '@/auth/auth-provider';
 import { chatEntry, type ChatEntry } from '@/chat/chat-entry';
 import { readChatStream } from '@/chat/chat-stream';
-import { ChatComposer, ChatMessageList } from '@/chat/chat-view';
+import { conversationSummary, firstName, groupSessions } from '@/chat/olly-chat-format';
+import { OllyAvatar, OllyComposer, OllyEmptyState, OllyMessageList } from '@/chat/olly-chat-view';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -35,6 +37,7 @@ const entryOf = (m: OllyChatMessage): ChatEntry => ({
   id: m.id,
   role: m.role === 'user' ? 'user' : m.role === 'error' ? 'error' : 'bot',
   text: (m.role === 'assistant' ? ollyChatReplyText(m.text) : m.text) || '(sem texto)',
+  at: m.createdAt,
 });
 
 const errorText = async (res: Response): Promise<string> => {
@@ -49,6 +52,7 @@ const errorText = async (res: Response): Promise<string> => {
 export function OllyChatPage() {
   const api = useApi();
   const auth = useAuth();
+  const me = useMe().data;
   const queryClient = useQueryClient();
   const status = useQuery({
     queryKey: ['olly-chat', 'status'],
@@ -108,7 +112,7 @@ export function OllyChatPage() {
   const send = (text: string) => {
     if (!current) return;
     const sessionId = current.id;
-    const question = chatEntry('user', text);
+    const question = { ...chatEntry('user', text), at: new Date().toISOString() };
     setLocal([question]);
     setPending(true);
     const token = auth.getAccessToken();
@@ -156,139 +160,173 @@ export function OllyChatPage() {
 
   if (status.data && !status.data.configured) {
     return (
-      <div className="grid gap-2" data-testid="olly-chat-unconfigured">
-        <h1 className="text-2xl font-semibold tracking-tight">Olly Chat</h1>
-        <p className="text-muted-foreground">
+      <div className="grid gap-4" data-testid="olly-chat-unconfigured">
+        <PageTitle />
+        <div className="rounded-xl border bg-card p-6 text-sm text-muted-foreground shadow-sm">
           O chat ainda não foi configurado. Peça à administração da plataforma para informar o
           webhook do assistente (Administração › Olly Chat).
-        </p>
+        </div>
       </div>
     );
   }
 
   const busy = pending || current?.busy === true;
   const entries = [...(messages.data ?? []).map(entryOf), ...local];
+  const loaded = messages.data !== undefined || current === null;
   return (
-    <div className="grid gap-4">
-      <h1 className="text-2xl font-semibold tracking-tight">Olly Chat</h1>
-      <div className="grid min-h-[70vh] overflow-hidden rounded-lg border md:grid-cols-[16rem_1fr]">
+    // Altura da tela menos o cabeçalho (h-14) e o espaçamento do layout (p-6).
+    <div className="flex h-[calc(100dvh-6.5rem)] min-h-[32rem] flex-col gap-4">
+      <PageTitle />
+      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-xl border bg-card shadow-sm md:grid-cols-[17rem_minmax(0,1fr)] md:grid-rows-1">
         <aside
           aria-label="Sessões"
-          className="flex max-h-60 flex-col border-b md:max-h-none md:border-r md:border-b-0"
+          className="flex max-h-44 min-h-0 flex-col border-b bg-muted/40 md:max-h-none md:border-r md:border-b-0"
         >
-          <div className="border-b p-2">
+          <div className="p-3">
             <Button
-              variant="outline"
-              size="sm"
-              className="w-full"
+              className="w-full justify-start"
               disabled={pending || creatingSession || sessions.data === undefined}
               onClick={() => void create()}
             >
-              <MessageSquarePlus /> Nova sessão
+              <SquarePen /> Nova sessão
             </Button>
           </div>
-          <ul className="min-h-0 flex-1 overflow-y-auto p-1" data-testid="olly-chat-sessions">
-            {sessions.data?.map((s) => (
-              <li key={s.id} className="group">
-                {editing?.id === s.id ? (
-                  <form
-                    className="flex items-center gap-1 p-1"
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      void rename();
-                    }}
-                  >
-                    <Input
-                      autoFocus
-                      aria-label="Título da sessão"
-                      className="h-7 text-xs"
-                      maxLength={120}
-                      value={editing.title}
-                      onChange={(e) => {
-                        setEditing({ id: s.id, title: e.target.value });
-                      }}
-                    />
-                    <Button
-                      type="submit"
-                      size="icon"
-                      variant="ghost"
-                      className="size-7"
-                      aria-label="Salvar título"
-                    >
-                      <Check />
-                    </Button>
-                    <Button
-                      type="button"
-                      size="icon"
-                      variant="ghost"
-                      className="size-7"
-                      aria-label="Cancelar"
-                      onClick={() => {
-                        setEditing(null);
-                      }}
-                    >
-                      <X />
-                    </Button>
-                  </form>
-                ) : (
-                  <div
-                    className={cn(
-                      'flex items-center rounded-md hover:bg-accent',
-                      s.id === current?.id && 'bg-accent font-medium',
-                    )}
-                  >
-                    <button
-                      type="button"
-                      data-testid={`olly-chat-session-${String(s.number)}`}
-                      className="min-w-0 flex-1 truncate px-2 py-1.5 text-left text-sm"
-                      title={s.title}
-                      disabled={pending}
-                      onClick={() => {
-                        setSelected(s.id);
-                        setLocal([]);
-                      }}
-                    >
-                      {s.title}
-                    </button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="size-7 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 disabled:invisible"
-                      aria-label={`Renomear ${s.title}`}
-                      onClick={() => {
-                        setEditing({ id: s.id, title: s.title });
-                      }}
-                    >
-                      <Pencil className="size-3.5" />
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="size-7 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 disabled:invisible"
-                      aria-label={`Excluir ${s.title}`}
-                      disabled={pending}
-                      onClick={() => {
-                        setRemoving(s);
-                      }}
-                    >
-                      <Trash2 className="size-3.5" />
-                    </Button>
-                  </div>
-                )}
+          <ul className="min-h-0 flex-1 overflow-y-auto px-2 pb-3" data-testid="olly-chat-sessions">
+            {groupSessions(sessions.data ?? []).map((group) => (
+              <li key={group.label}>
+                <p className="px-2 pt-3 pb-1 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+                  {group.label}
+                </p>
+                <ul className="flex flex-col gap-0.5">
+                  {group.sessions.map((s) => (
+                    <li key={s.id} className="group">
+                      {editing?.id === s.id ? (
+                        <form
+                          className="flex items-center gap-1 rounded-lg bg-background p-1 ring-1 ring-border"
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            void rename();
+                          }}
+                        >
+                          <Input
+                            autoFocus
+                            aria-label="Título da sessão"
+                            className="h-7 text-xs"
+                            maxLength={120}
+                            value={editing.title}
+                            onChange={(e) => {
+                              setEditing({ id: s.id, title: e.target.value });
+                            }}
+                          />
+                          <Button
+                            type="submit"
+                            size="icon"
+                            variant="ghost"
+                            className="size-7"
+                            aria-label="Salvar título"
+                          >
+                            <Check />
+                          </Button>
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            className="size-7"
+                            aria-label="Cancelar"
+                            onClick={() => {
+                              setEditing(null);
+                            }}
+                          >
+                            <X />
+                          </Button>
+                        </form>
+                      ) : (
+                        <div
+                          className={cn(
+                            'flex items-center gap-1 rounded-lg pl-2 text-muted-foreground transition-colors hover:bg-background/70 hover:text-foreground',
+                            s.id === current?.id &&
+                              'bg-background font-medium text-foreground shadow-sm ring-1 ring-border',
+                          )}
+                        >
+                          {s.busy || (pending && s.id === current?.id) ? (
+                            <Loader2 className="size-3.5 shrink-0 animate-spin text-primary" />
+                          ) : (
+                            <MessageSquare className="size-3.5 shrink-0" />
+                          )}
+                          <button
+                            type="button"
+                            data-testid={`olly-chat-session-${String(s.number)}`}
+                            className="min-w-0 flex-1 truncate py-2 pr-1 pl-1 text-left text-sm"
+                            title={s.title}
+                            disabled={pending}
+                            onClick={() => {
+                              setSelected(s.id);
+                              setLocal([]);
+                            }}
+                          >
+                            {s.title}
+                          </button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="size-7 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                            aria-label={`Renomear ${s.title}`}
+                            onClick={() => {
+                              setEditing({ id: s.id, title: s.title });
+                            }}
+                          >
+                            <Pencil className="size-3.5" />
+                          </Button>
+                          {/* Durante a espera, a sessão não pode ser excluída (FR-007). */}
+                          {!pending && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="size-7 opacity-0 group-hover:opacity-100 hover:text-destructive focus-visible:opacity-100"
+                              aria-label={`Excluir ${s.title}`}
+                              onClick={() => {
+                                setRemoving(s);
+                              }}
+                            >
+                              <Trash2 className="size-3.5" />
+                            </Button>
+                          )}
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
               </li>
             ))}
           </ul>
         </aside>
-        <section aria-label="Conversa" className="flex min-h-[60vh] flex-col">
-          <header className="border-b px-3 py-2 text-sm font-medium" data-testid="olly-chat-title">
-            {current?.title ?? ''}
+        <section aria-label="Conversa" className="flex min-h-0 flex-col">
+          <header className="flex items-center gap-3 border-b px-5 py-3">
+            <div className="min-w-0 flex-1">
+              <h2 className="truncate text-sm font-semibold" data-testid="olly-chat-title">
+                {current?.title ?? ''}
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                {conversationSummary(
+                  entries.filter((e) => e.role !== 'error').length,
+                  entries.at(-1)?.at ?? current?.lastMessageAt ?? null,
+                )}
+              </p>
+            </div>
+            {busy && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+                <Loader2 className="size-3 animate-spin" /> Respondendo
+              </span>
+            )}
           </header>
-          <ChatMessageList messages={entries} pending={busy} step={step} />
-          <ChatComposer
-            placeholder="Digite sua mensagem…"
-            disabled={busy || current === null}
-            onSend={send}
-          />
+          {loaded && entries.length === 0 && !busy ? (
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <OllyEmptyState name={firstName(me?.name ?? auth.profileName, me?.email)} />
+            </div>
+          ) : (
+            <OllyMessageList messages={entries} pending={busy} step={step} />
+          )}
+          <OllyComposer disabled={busy || current === null} onSend={send} />
         </section>
       </div>
       <Dialog
@@ -319,6 +357,18 @@ export function OllyChatPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function PageTitle() {
+  return (
+    <div className="flex items-center gap-3">
+      <OllyAvatar />
+      <div>
+        <h1 className="text-xl leading-tight font-semibold tracking-tight">Olly Chat</h1>
+        <p className="text-xs text-muted-foreground">Assistente da plataforma</p>
+      </div>
     </div>
   );
 }

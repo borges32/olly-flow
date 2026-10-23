@@ -106,6 +106,17 @@ Todas sob `/api/v1`. Rotas do usuário com `@Authenticated()` (qualquer usuário
   - **conversa:** `ChatMessageList` e `ChatComposer` (spec 021) e `readChatStream` (spec 027), que mostra "Executando: <nó>";
   - **estados:** sem configuração, mostra o aviso; na primeira visita, cria a sessão 1;
   - **mobile:** a barra lateral vira uma lista recolhível.
+- **Visual (FR-013):**
+  - **Componentes próprios:** `OllyMessageList`, `OllyComposer` e `OllyEmptyState` (`chat/olly-chat-view.tsx`). Os chats da spec 021 (painel do editor e chat público) continuam com os balões de `ChatMessageList`.
+  - **Funções puras testadas:** agrupamento das sessões por data e horário relativo (`chat/olly-chat-format.ts`).
+  - **Tipografia do `MessageText`** (comum aos chats):
+    - parágrafos com entrelinha maior;
+    - títulos com espaçamento, e `##` com linha embaixo;
+    - tabela com borda arredondada, cabeçalho e linhas alternadas;
+    - blocos de código escuros;
+    - citação com barra de cor;
+    - diagrama Mermaid num cartão; o erro de sintaxe aparece como aviso (âmbar).
+  - **Sem dependência nova.**
 - **GFM (FR-012):** o `MessageText` usa o plugin `remark-gfm` (tabelas, tachado, listas de tarefas, links automáticos) e estiliza títulos, citações, linhas horizontais e tabelas (bordas, cabeçalho, rolagem horizontal num contêiner). Continua sem HTML bruto. Vale também para os chats da spec 021.
 - **Mermaid (FR-011):** no `MessageText` (componente de Markdown dos chats), o bloco de código com a linguagem `mermaid` vira o componente `MermaidDiagram`, que carrega a biblioteca `mermaid` sob demanda (`import()`; fora do pacote principal), desenha com `securityLevel: 'strict'` (rótulos sanitizados, sem scripts nem cliques) e o tema claro ou escuro. Erro de sintaxe: mostra o código e o aviso. Vale também para os chats da spec 021, que usam o mesmo componente.
 - **Administração:** aba **Olly Chat** (`/admin/chat`) com URL, retenção e autenticação (tipo e campos de segredo vazios com "deixe em branco para manter"), para quem tem `project:manage` global.
@@ -169,3 +180,4 @@ Nenhuma variável nova: a configuração é da plataforma, na aba **Olly Chat** 
 | 21/10/2026 | §4: JSON final que chega como texto (correção) | Spec 028, histórico |
 | 21/10/2026 | §6: Markdown GFM (tabelas) e estilos de títulos | Spec 028, histórico |
 | 22/10/2026 | §4: `report` dentro de embrulhos; exibição das respostas guardadas | Spec 028, histórico |
+| 23/10/2026 | §6: visual da página (FR-013) | Spec 028, histórico |

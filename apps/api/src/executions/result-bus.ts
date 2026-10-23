@@ -62,8 +62,30 @@ export class ResultSubscriber {
       resolve = r;
     });
     const listener = (message: ResultMessage) => {
-      if (message.kind === 'finished') resolve({ kind: 'finished', outcome: message.outcome });
-      else if (untilResponse) resolve({ kind: 'response', response: message.response });
+      if (message.kind === 'response') {
+        if (untilResponse) resolve({ kind: 'response', response: message.response });
+        return;
+      }
+      const finished: WaitResult = { kind: 'finished', outcome: message.outcome };
+      if (!untilResponse) {
+        resolve(finished);
+        return;
+      }
+      // O worker grava a resposta antes do desfecho, mas o desfecho publicado pode chegar antes
+      // da leitura das chaves abaixo: a resposta já gravada prevalece sobre o "último nó".
+      this.redis.get(responseKey(executionId)).then(
+        (raw) => {
+          const stored = raw ? (JSON.parse(raw) as ResultMessage) : null;
+          resolve(
+            stored?.kind === 'response'
+              ? { kind: 'response', response: stored.response }
+              : finished,
+          );
+        },
+        () => {
+          resolve(finished);
+        },
+      );
     };
     const timer = setTimeout(() => {
       resolve({ kind: 'timeout' });

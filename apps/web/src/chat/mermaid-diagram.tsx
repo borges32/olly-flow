@@ -1,4 +1,4 @@
-import { Loader2 } from 'lucide-react';
+import { AlertTriangle, Loader2, Workflow } from 'lucide-react';
 import type { Mermaid } from 'mermaid';
 import { useEffect, useId, useState } from 'react';
 
@@ -39,29 +39,41 @@ export function MermaidDiagram({ code }: { code: string }) {
 
   if (!result) {
     return (
-      <div className="my-2 flex items-center gap-2 text-xs text-muted-foreground">
+      <div className="my-3 flex items-center gap-2 rounded-lg border border-dashed border-current/20 px-3 py-6 text-xs opacity-70">
         <Loader2 className="size-3 animate-spin" /> Desenhando o diagrama…
       </div>
     );
   }
   if ('error' in result) {
     return (
-      <div className="my-2 grid gap-1" data-testid="mermaid-error">
-        <p className="text-xs text-destructive">
-          Não foi possível desenhar o diagrama: {result.error}
+      <div
+        className="my-3 grid gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3"
+        data-testid="mermaid-error"
+      >
+        <p className="flex items-start gap-2 text-xs text-amber-800 dark:text-amber-300">
+          <AlertTriangle className="mt-px size-3.5 shrink-0" />
+          <span>
+            <span className="font-medium">Não foi possível desenhar o diagrama.</span>{' '}
+            {result.error}
+          </span>
         </p>
-        <pre className="overflow-x-auto rounded bg-black/10 p-2 font-mono text-xs dark:bg-white/10">
+        <pre className="overflow-x-auto rounded-md bg-black/5 p-2 font-mono text-xs dark:bg-white/10">
           {code}
         </pre>
       </div>
     );
   }
   return (
-    <div
-      data-testid="mermaid-diagram"
-      className="my-2 overflow-x-auto rounded bg-white p-2 dark:bg-transparent [&_svg]:h-auto [&_svg]:max-w-full"
-      // SVG gerado pela biblioteca com `securityLevel: 'strict'` (sanitizado por ela).
-      dangerouslySetInnerHTML={{ __html: result.svg }}
-    />
+    <figure className="my-3 overflow-hidden rounded-lg border border-current/15">
+      <div
+        data-testid="mermaid-diagram"
+        className="overflow-x-auto bg-white p-4 dark:bg-zinc-900 [&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-full"
+        // SVG gerado pela biblioteca com `securityLevel: 'strict'` (sanitizado por ela).
+        dangerouslySetInnerHTML={{ __html: result.svg }}
+      />
+      <figcaption className="flex items-center gap-1.5 border-t border-current/10 bg-current/5 px-3 py-1.5 text-[11px] opacity-70">
+        <Workflow className="size-3" /> Diagrama
+      </figcaption>
+    </figure>
   );
 }

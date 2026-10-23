@@ -35,6 +35,7 @@ A plataforma ganhou o **Olly Chat**:
 | Correção (21/10/2026) | ✅ | No teste do PO em dev, com um workflow real, o chat mostrou o JSON inteiro: o JSON final chegava como **texto**, e `ollyChatReplyText` só lia o `report` de objetos. Reproduzido em `olly-chat.test.ts` › "FR-005 (correção 21/10/2026)…" e corrigido: um texto que é um JSON com `report` (inclusive em `output`/`text` e num bloco ```json) é lido como JSON. Itens no formato do N8N (`{ json: {...} }`) são desembrulhados. Integração › "FR-005 (correção 21/10/2026)…" |
 | T053 | ✅ | `remark-gfm` no `MessageText` (`chat-view.tsx`), com estilos de tabela (contêiner com rolagem), títulos, citação e linha horizontal; `message-text.test.tsx` (trecho da resposta real do PO); E2E com título e tabela |
 | Correção (22/10/2026) | ✅ | Em dev, o chat mostrou o JSON inteiro de novo (`exemplo.json`). O conteúdo direto (lista, objeto, texto) já funcionava, mas não quando vinha embrulhado: `{ output: [...] }` de um Agent com parser estruturado, outro campo em volta, `{ json: [...] }` ou JSON serializado duas vezes. Reproduzido em `olly-chat.test.ts` › "FR-005 (correção 22/10/2026)…" e corrigido: a busca desce até 6 níveis, e o `report` do nível mais alto (ou um `output`/`text` em texto) vence. A página do chat aplica a mesma leitura às respostas já guardadas. Integração › "FR-005 (correção 22/10/2026)…" |
+| T054 | ✅ | Visual (FR-013): `chat/olly-chat-view.tsx` (`OllyMessageList`, `OllyComposer`, `OllyEmptyState`, `OllyAvatar`), `chat/olly-chat-format.ts` (com `olly-chat-format.test.ts`), página reorganizada; tipografia do `MessageText` e cartão do diagrama; E2E (boas-vindas, grupo "Hoje", resumo do cabeçalho, Copiar com a área de transferência). Conferido com capturas em claro, escuro e celular (390 px) |
 | T090 | ✅ | `docs/chat-olly.md`, `contratos.md`, `modelo-dados.md` (a matriz de RBAC não mudou) |
 | T091–T093 | ✅ | Ver abaixo |
 
@@ -54,6 +55,7 @@ A plataforma ganhou o **Olly Chat**:
 | FR-010 | Sim | `olly-chat.int.test.ts` › "FR-005/FR-010…" (HTTP 500, limite de streams, filtro de rede) |
 | FR-011 | Sim | Unidade `mermaid-source.test.ts`; E2E `olly-chat.spec.ts` (flowchart desenhado em SVG; bloco inválido mostra o código e o aviso, e o resto da mensagem aparece) |
 | FR-012 | Sim | Unidade `message-text.test.tsx` (tabela com cabeçalho e linhas em contêiner com rolagem; títulos, linha horizontal, tachado, link automático; sem HTML bruto); E2E `olly-chat.spec.ts` (título e tabela na resposta) |
+| FR-013 | Sim | Unidade `olly-chat-format.test.ts` (grupos por data, horário, resumo, primeiro nome); E2E `olly-chat.spec.ts` (boas-vindas, grupo "Hoje", "2 mensagens · última atividade", Copiar leva o Markdown) |
 | NFR-001 | Sim | Integração (identidade do servidor; destino interno bloqueado pelo filtro) |
 | NFR-002 | Sim | Retenção, sessões só do dono e auditoria (testes acima) |
 | NFR-003 | Sim (indireto) | O stream é repassado linha a linha, sem acumular (E2E: o passo aparece antes da resposta); a latência não é medida separadamente |
@@ -113,6 +115,12 @@ Depois da correção de 22/10/2026 (`report` dentro de embrulhos), rodei de novo
   - **"Nova sessão":** fica desabilitada enquanto uma sessão está sendo criada. O E2E mostrou uma corrida entre a sessão automática da primeira visita e o clique.
   - **Ícones de excluir:** somem durante a espera da resposta.
 - **Nome "Olly Chat":** pedido pelo PO durante a verificação (menu, título, aba). O `client` do payload continua `chat-olly`.
+- **Visual (23/10/2026, pedido do PO):**
+  - **Componentes próprios:** o Olly Chat ganhou componentes próprios, porque as respostas são relatórios longos. Os chats da spec 021 (painel do editor e chat público) mantêm os balões e só herdam a tipografia nova do Markdown.
+  - **Altura:** a página ocupa a altura da tela.
+  - **Largura:** a conversa fica numa coluna de até 56 rem.
+  - **Celular:** o avatar some para sobrar espaço.
+  - **Exclusão durante a resposta:** a lixeira não aparece (antes, ficava esmaecida).
 - **Campo `report` e Mermaid (21/10/2026, pedido do PO depois da implementação):**
   - **Texto:** a API guarda o `report` do primeiro item do JSON final. Sem ele, vale o comportamento anterior (`output`/`text`/JSON), e os workflows já feitos continuam funcionando.
   - **Diagramas:** desenhados no navegador, no componente de Markdown comum aos chats, e por isso valem também nos chats da spec 021.
@@ -122,7 +130,7 @@ Depois da correção de 22/10/2026 (`report` dentro de embrulhos), rodei de novo
 
 ## Desvios da spec/plano
 
-Nenhum. O ajuste do `report` e do Mermaid entrou na spec e no plano antes do código (Histórico de 21/10/2026: FR-005 alterado, FR-011 e SC-005 novos, Fase 5b). O mesmo vale para a correção do JSON como texto (FR-005) e para o Markdown GFM (FR-012 e SC-006, T053).
+Nenhum. O ajuste do `report` e do Mermaid entrou na spec e no plano antes do código (Histórico de 21/10/2026: FR-005 alterado, FR-011 e SC-005 novos, Fase 5b). O mesmo vale para a correção do JSON como texto (FR-005), para o Markdown GFM (FR-012 e SC-006, T053) e para o visual da página (FR-013, T054).
 
 ## Dependências adicionadas
 

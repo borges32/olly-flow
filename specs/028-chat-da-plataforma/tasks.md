@@ -42,6 +42,7 @@ Marque `- [x]` ao concluir. Não pule fases: cada fase depende da anterior.
 - [x] T051 `MermaidDiagram` no Markdown dos chats, com a biblioteca `mermaid` carregada sob demanda, tema e erro de sintaxe (FR-011)
 - [x] T052 E2E: resposta com `report` e flowchart desenhado (SC-005); documentação
 - [x] T053 Markdown GFM (`remark-gfm`) e estilos de tabela, títulos, citação e linha horizontal, com testes de unidade e E2E (FR-012, SC-006)
+- [x] T054 Visual da página (FR-013): coluna de leitura, cartões de resposta (avatar, horário, copiar), alerta de falha, espera animada, boas-vindas, sessões por data, cabeçalho com atividade, campo de mensagem que cresce; tipografia do Markdown; testes de unidade e E2E
 
 ## Fase 6 — Documentação e verificação
 

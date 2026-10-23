@@ -103,6 +103,17 @@ Como **responsável pelos dados (LGPD)**, quero que as sessões do chat sejam ap
 - **FR-009**: Sessões cuja última mensagem for mais antiga que o tempo de retenção DEVEM ser apagadas automaticamente, com as mensagens. Uma mensagem nova renova o prazo da sessão.
 - **FR-010**: Falhas DEVEM aparecer na conversa com mensagem clara: chat não configurado, webhook indisponível ou recusando a chamada, limite de streams do projeto (spec 027), erro do workflow e tempo esgotado.
 
+- **FR-013** (visual, 23/10/2026): A página DEVE:
+  - ocupar a altura da tela, com o campo de mensagem sempre visível embaixo;
+  - mostrar a conversa numa coluna central de leitura;
+  - mostrar a pergunta num balão à direita e a resposta como um cartão largo, com o avatar e o nome "Olly", o horário e a ação **Copiar** (o Markdown da resposta);
+  - mostrar a falha como um alerta;
+  - mostrar a espera com animação e o passo atual;
+  - dar boas-vindas com o nome do usuário numa sessão sem mensagens;
+  - agrupar as sessões por data da última mensagem (Hoje, Ontem, Últimos 7 dias, Anteriores), destacando a sessão aberta e a que está respondendo;
+  - mostrar no cabeçalho da conversa a quantidade de mensagens e a última atividade;
+  - ter um campo de mensagem que cresce com o texto, com a dica de teclado.
+
 ## Requisitos não funcionais
 
 - **NFR-001**: **Segurança:** a chamada ao webhook sai da plataforma em nome do usuário autenticado (a identidade não vem do navegador) e passa pelo filtro de rede da plataforma (constituição, Art. III). A URL só é alterada pela administração da plataforma.
@@ -165,3 +176,4 @@ Nenhum. Respondidos pelo PO em 21/10/2026:
 | 21/10/2026 | FR-005: o JSON final também é reconhecido quando chega como texto (o chat mostrava o JSON inteiro num workflow real) | Teste do PO em dev |
 | 21/10/2026 | FR-012 e SC-006 novos: Markdown no padrão GFM (tabelas) e títulos formatados | Teste do PO com a resposta real de produção (a tabela não era formatada) |
 | 22/10/2026 | FR-005: o `report` é procurado também dentro de embrulhos (`output` de parser estruturado, outros campos, JSON serializado duas vezes), e as respostas já guardadas são exibidas com o `report` | Novo caso em dev: o chat mostrou o JSON inteiro (`exemplo.json`) |
+| 23/10/2026 | FR-013 novo: visual da página (coluna de leitura, cartões de resposta com avatar, horário e copiar, boas-vindas, sessões por data, cabeçalho com atividade, campo de mensagem que cresce) e tipografia do Markdown | Pedido do PO: a área do chat estava visualmente básica |

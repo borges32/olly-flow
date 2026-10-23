@@ -6,6 +6,8 @@ export interface ChatEntry {
   text: string;
   /** Rodapé opcional da mensagem (ex.: link para a execução no editor). */
   meta?: ReactNode;
+  /** Momento da mensagem (ISO), quando conhecido (Olly Chat, spec 028, FR-013). */
+  at?: string;
 }
 
 let counter = 0;
