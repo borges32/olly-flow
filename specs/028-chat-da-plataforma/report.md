@@ -101,6 +101,10 @@ Depois da correção de 22/10/2026 (`report` dentro de embrulhos), rodei de novo
 - **`pnpm test:integration`:** 421 de 422. A falha foi o teste SC-004 da spec 011 (aprovação com troca de worker), uma disputa de tempo. Rodado de novo sozinho, passou (6 de 6).
 - **`pnpm test:e2e`:** 61 de 62. Falhou de novo o teste de fps do canvas (spec 002, 26 fps). Rodado de novo sozinho, com o E2E do Olly Chat, passou (3 de 3).
 
+Depois do visual novo (FR-013, T054), rodei de novo a verificação completa:
+- **✅** typecheck, `pnpm test` (936: web 131), build, `pnpm test:integration` (423), `pnpm test:e2e` (62 de 62), `app:up` e smoke.
+- **`pnpm lint`:** de novo, só o Prettier no `exemplo.json` do PO.
+
 ## Decisões tomadas
 
 - **A API chama o webhook,** não o navegador: a identidade não pode ser forjada, os segredos não vão ao navegador e o filtro de rede vale. A API repassa o NDJSON ao navegador sem mudar o formato da spec 027.
