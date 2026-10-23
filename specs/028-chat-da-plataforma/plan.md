@@ -86,7 +86,7 @@ Todas sob `/api/v1`. Rotas do usuário com `@Authenticated()` (qualquer usuário
 3. **Resposta ao navegador:** assume a resposta com os cabeçalhos do stream (spec 027, `STREAM_RESPONSE_HEADERS`).
 4. **Chamada ao webhook:** `POST` com o payload, `content-type: application/json` e a autenticação configurada (cabeçalho ou `Authorization: Basic`), pelo `HttpGuard.fetch`.
 5. **Leitura da resposta:**
-   - **NDJSON:** repassa cada linha ao navegador e guarda o `item` final ou o `error` (e o `executionId` do `metadata`). O texto guardado vem de `ollyChatReplyText` (`packages/shared-types`): o primeiro elemento, se for lista; o campo `report`; senão `output` ou `text`; senão o JSON formatado. Um texto (o conteúdo inteiro, ou o `output`/`text`) que é um JSON com `report`, com ou sem bloco ```json em volta, é lido como JSON; um item no formato do N8N (`{ json: {...} }`) é desembrulhado;
+   - **NDJSON:** repassa cada linha ao navegador e guarda o `item` final ou o `error` (e o `executionId` do `metadata`). O texto guardado vem de `ollyChatReplyText` (`packages/shared-types`): o primeiro elemento, se for lista; o campo `report`; senão `output` ou `text`; senão o JSON formatado. Um texto (o conteúdo inteiro, ou o `output`/`text`) que é um JSON com `report`, com ou sem bloco ```json em volta, é lido como JSON; um item no formato do N8N (`{ json: {...} }`) é desembrulhado. Sem `report`/`output`/`text` no objeto, a busca desce pelos campos (até 6 níveis, textos JSON incluídos), e o primeiro `report` achado vale. A página aplica a mesma função ao exibir as respostas guardadas;
    - **resposta comum:** JSON ou texto vira um `item` único;
    - **HTTP de erro** (ex.: 429 do limite de streams, 401, 500): vira um `error` com a mensagem do corpo, quando houver.
 6. **Resposta guardada:** finaliza a `pending` como `assistant` (texto: `output`, `text` ou o JSON formatado) ou `error`, e encerra.
@@ -168,3 +168,4 @@ Nenhuma variável nova: a configuração é da plataforma, na aba **Olly Chat** 
 | 21/10/2026 | §4: texto pelo campo `report`; §6: diagramas Mermaid | Spec 028, histórico |
 | 21/10/2026 | §4: JSON final que chega como texto (correção) | Spec 028, histórico |
 | 21/10/2026 | §6: Markdown GFM (tabelas) e estilos de títulos | Spec 028, histórico |
+| 22/10/2026 | §4: `report` dentro de embrulhos; exibição das respostas guardadas | Spec 028, histórico |

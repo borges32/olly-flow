@@ -71,42 +71,56 @@ export interface OllyChatConfigUpdate {
  * `[ { "client": "chat-olly", "report": "<Markdown>", "memoria": {} } ]` (lista ou objeto). Usa o
  * campo `report`; sem ele, `output` (Agent) ou `text` (Basic LLM Chain); senão o JSON formatado.
  * O JSON pode chegar como texto (Responder ao Webhook em "Texto", `output` de um Agent, bloco
- * ```json): se o texto for um JSON com `report`, vale o `report` dele.
+ * ```json, serializado duas vezes) ou embrulhado (`{ output: [...] }` de um parser estruturado,
+ * `{ data: [...] }`, item do N8N `{ json: ... }`): o `report` é procurado dentro dele.
  */
 export function ollyChatReplyText(content: unknown): string {
-  if (typeof content === 'string') return reportInText(content) ?? content;
   if (content === null || content === undefined) return '';
-  const fields = firstObject(content);
-  if (typeof fields?.report === 'string') return fields.report;
-  for (const value of [fields?.output, fields?.text])
-    if (typeof value === 'string') return reportInText(value) ?? value;
-  return JSON.stringify(content, null, 2);
+  const found = replyIn(content, 0);
+  if (found !== undefined) return found;
+  return typeof content === 'string' ? content : JSON.stringify(content, null, 2);
 }
 
-/** Primeiro objeto da resposta (lista ou objeto; item do N8N `{ json: {...} }` desembrulhado). */
-function firstObject(content: unknown): Record<string, unknown> | undefined {
-  const first: unknown = Array.isArray(content) ? content[0] : content;
-  if (!first || typeof first !== 'object' || Array.isArray(first)) return undefined;
-  const fields = first as Record<string, unknown>;
-  const { json } = fields;
-  if (!('report' in fields) && json && typeof json === 'object' && !Array.isArray(json))
-    return json as Record<string, unknown>;
-  return fields;
+/** Até onde a busca desce (embrulhos e textos JSON). */
+const MAX_DEPTH = 6;
+
+/**
+ * Texto da resposta dentro de `value`: num objeto, o `report`; senão `output`/`text` em texto;
+ * senão o primeiro achado nos campos. Listas: o primeiro item. Textos JSON são lidos como JSON.
+ */
+function replyIn(value: unknown, depth: number): string | undefined {
+  if (depth > MAX_DEPTH) return undefined;
+  if (typeof value === 'string') {
+    const parsed = parseJsonText(value);
+    return parsed === undefined ? undefined : replyIn(parsed, depth + 1);
+  }
+  if (Array.isArray(value)) return value.length > 0 ? replyIn(value[0], depth + 1) : undefined;
+  if (!value || typeof value !== 'object') return undefined;
+  const fields = value as Record<string, unknown>;
+  if (typeof fields.report === 'string') return fields.report;
+  for (const key of ['output', 'text']) {
+    const field = fields[key];
+    if (typeof field === 'string') return replyIn(field, depth + 1) ?? field;
+  }
+  for (const field of Object.values(fields)) {
+    if (field === null || typeof field === 'number' || typeof field === 'boolean') continue;
+    const found = replyIn(field, depth + 1);
+    if (found !== undefined) return found;
+  }
+  return undefined;
 }
 
-/** `report` de um texto que é um JSON (aceita um bloco ```json em volta); senão `undefined`. */
-function reportInText(text: string): string | undefined {
+/** Valor de um texto que é JSON (lista, objeto ou texto entre aspas; aceita um bloco ```json). */
+function parseJsonText(text: string): unknown {
   const trimmed = text
     .trim()
+    .replace(/^\uFEFF/, '')
     .replace(/^```(?:json)?\s*\n([\s\S]*)\n\s*```$/, '$1')
     .trim();
-  if (!/^[[{]/.test(trimmed)) return undefined;
-  let parsed: unknown;
+  if (!/^[[{"]/.test(trimmed)) return undefined;
   try {
-    parsed = JSON.parse(trimmed);
+    return JSON.parse(trimmed) as unknown;
   } catch {
     return undefined;
   }
-  const report = firstObject(parsed)?.report;
-  return typeof report === 'string' ? report : undefined;
 }

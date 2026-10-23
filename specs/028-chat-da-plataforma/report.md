@@ -34,6 +34,7 @@ A plataforma ganhou o **Olly Chat**:
 | T052 | ✅ | E2E `olly-chat.spec.ts` (diagrama desenhado e bloco inválido); `docs/chat-olly.md` |
 | Correção (21/10/2026) | ✅ | No teste do PO em dev, com um workflow real, o chat mostrou o JSON inteiro: o JSON final chegava como **texto**, e `ollyChatReplyText` só lia o `report` de objetos. Reproduzido em `olly-chat.test.ts` › "FR-005 (correção 21/10/2026)…" e corrigido: um texto que é um JSON com `report` (inclusive em `output`/`text` e num bloco ```json) é lido como JSON. Itens no formato do N8N (`{ json: {...} }`) são desembrulhados. Integração › "FR-005 (correção 21/10/2026)…" |
 | T053 | ✅ | `remark-gfm` no `MessageText` (`chat-view.tsx`), com estilos de tabela (contêiner com rolagem), títulos, citação e linha horizontal; `message-text.test.tsx` (trecho da resposta real do PO); E2E com título e tabela |
+| Correção (22/10/2026) | ✅ | Em dev, o chat mostrou o JSON inteiro de novo (`exemplo.json`). O conteúdo direto (lista, objeto, texto) já funcionava, mas não quando vinha embrulhado: `{ output: [...] }` de um Agent com parser estruturado, outro campo em volta, `{ json: [...] }` ou JSON serializado duas vezes. Reproduzido em `olly-chat.test.ts` › "FR-005 (correção 22/10/2026)…" e corrigido: a busca desce até 6 níveis, e o `report` do nível mais alto (ou um `output`/`text` em texto) vence. A página do chat aplica a mesma leitura às respostas já guardadas. Integração › "FR-005 (correção 22/10/2026)…" |
 | T090 | ✅ | `docs/chat-olly.md`, `contratos.md`, `modelo-dados.md` (a matriz de RBAC não mudou) |
 | T091–T093 | ✅ | Ver abaixo |
 
@@ -91,6 +92,12 @@ Depois da correção do JSON como texto, rodei de novo:
 Depois do Markdown GFM (T053), rodei de novo a verificação completa:
 - **✅** install, lint, typecheck, `pnpm test` (930: web 128, shared-types 51…), build, `pnpm test:integration` (422: api 353, db 35, nodes 31, engine 3), `app:up` e smoke.
 - **`pnpm test:e2e`:** 61 de 62. A falha foi o teste de desempenho do canvas (spec 002, NFR-001: 26 fps, mínimo de 30), que não tem relação com o chat. Rodado de novo sozinho, com os E2E dos chats (specs 021 e 028), passou (7 de 7).
+
+Depois da correção de 22/10/2026 (`report` dentro de embrulhos), rodei de novo a verificação completa:
+- **✅** typecheck, `pnpm test` (shared-types 52), build, `app:up` e smoke.
+- **`pnpm lint`:** só o Prettier reclamou do `exemplo.json`, um arquivo de exemplo do PO na raiz do repositório, fora do código. Não mexi nele. Sem ele, o lint passa.
+- **`pnpm test:integration`:** 421 de 422. A falha foi o teste SC-004 da spec 011 (aprovação com troca de worker), uma disputa de tempo. Rodado de novo sozinho, passou (6 de 6).
+- **`pnpm test:e2e`:** 61 de 62. Falhou de novo o teste de fps do canvas (spec 002, 26 fps). Rodado de novo sozinho, com o E2E do Olly Chat, passou (3 de 3).
 
 ## Decisões tomadas
 

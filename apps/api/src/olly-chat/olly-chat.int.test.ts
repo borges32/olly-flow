@@ -78,6 +78,18 @@ beforeAll(async () => {
         );
         return;
       }
+      if (path === '/report-embrulhado') {
+        // Agent com parser estruturado: o JSON final vem no `output`, como lista.
+        res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
+        res.end(
+          line({
+            type: 'item',
+            content: { output: [{ client: 'chat-olly', report: '**Escopo:** bff', memoria: {} }] },
+            metadata: meta({ final: true }),
+          }),
+        );
+        return;
+      }
       if (path === '/report-texto') {
         // Responder ao Webhook em "Texto": o item final traz o JSON serializado.
         res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
@@ -369,6 +381,17 @@ describe('spec 028 — sessões e mensagens', () => {
     expect((await messagesOf(ana, session.id)).at(-1)).toMatchObject({
       role: 'assistant',
       text: '**Registro:** P-1',
+    });
+    await configure('/stream');
+  });
+
+  it('FR-005 (correção 22/10/2026): o report é achado dentro do output de um Agent', async () => {
+    await configure('/report-embrulhado');
+    const session = await newSession(ana);
+    await send(ana, session.id, 'Mobile PF?');
+    expect((await messagesOf(ana, session.id)).at(-1)).toMatchObject({
+      role: 'assistant',
+      text: '**Escopo:** bff',
     });
     await configure('/stream');
   });

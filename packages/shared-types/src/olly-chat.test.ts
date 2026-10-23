@@ -42,4 +42,23 @@ describe('spec 028 — FR-005 (21/10/2026): texto da resposta do Olly Chat', () 
     expect(ollyChatReplyText('[nota] texto { solto }')).toBe('[nota] texto { solto }');
     expect(ollyChatReplyText({ output: '{"a":1}' })).toBe('{"a":1}');
   });
+
+  it('FR-005 (correção 22/10/2026): o report é achado quando o JSON vem embrulhado', () => {
+    const report =
+      '**Escopo:** `bcpf-bff-aceite` · **Segmento:** MOBILE\n\n## 1. O que está acontecendo';
+    const final = [{ client: 'chat-olly', origem: 'orquestrador', report }];
+    // Agent com parser estruturado: o output é a lista, não um texto.
+    expect(ollyChatReplyText([{ output: final }])).toBe(report);
+    expect(ollyChatReplyText({ output: final[0] })).toBe(report);
+    // Outro campo em volta, item do N8N com a lista, JSON serializado duas vezes.
+    expect(ollyChatReplyText({ data: final })).toBe(report);
+    expect(ollyChatReplyText([{ json: final }])).toBe(report);
+    expect(ollyChatReplyText(JSON.stringify(JSON.stringify(final, null, 4)))).toBe(report);
+    expect(ollyChatReplyText({ body: JSON.stringify(final) })).toBe(report);
+    // O report do nível mais alto vence um report aninhado (ex.: dentro da memória).
+    expect(ollyChatReplyText([{ report, memoria: { report: 'antigo' } }])).toBe(report);
+    expect(ollyChatReplyText([{ memoria: { report: 'aninhado' }, output: 'do Agent' }])).toBe(
+      'do Agent',
+    );
+  });
 });

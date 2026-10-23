@@ -1,4 +1,9 @@
-import type { OllyChatMessage, OllyChatSession, OllyChatStatus } from '@olly/shared-types';
+import {
+  ollyChatReplyText,
+  type OllyChatMessage,
+  type OllyChatSession,
+  type OllyChatStatus,
+} from '@olly/shared-types';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, MessageSquarePlus, Pencil, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -24,10 +29,12 @@ import { cn } from '@/lib/utils';
 const SESSIONS = ['olly-chat', 'sessions'] as const;
 const messagesKey = (id: string) => ['olly-chat', 'messages', id] as const;
 
+// FR-005: a resposta guardada antes da correção de 22/10/2026 pode ser o JSON inteiro; a mesma
+// leitura do servidor mostra o `report` dela.
 const entryOf = (m: OllyChatMessage): ChatEntry => ({
   id: m.id,
   role: m.role === 'user' ? 'user' : m.role === 'error' ? 'error' : 'bot',
-  text: m.text || '(sem texto)',
+  text: (m.role === 'assistant' ? ollyChatReplyText(m.text) : m.text) || '(sem texto)',
 });
 
 const errorText = async (res: Response): Promise<string> => {
