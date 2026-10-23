@@ -1,6 +1,14 @@
-import type { ExecutionDetail, NodeExecutionStatus, SubExecutionRef } from '@olly/shared-types';
+import type {
+  ExecutionStatus,
+  ExecutionSteps,
+  NodeExecutionStatus,
+  SubExecutionRef,
+} from '@olly/shared-types';
 
-/** Linha do log da execução (spec 026, FR-002): uma por execução de nó, mais a falha geral. */
+/**
+ * Linha do log da execução (spec 026, FR-002): uma por execução de nó, mais a falha geral. Spec
+ * 029: os passos em andamento entram no fim, com o status `running` e a duração correndo.
+ */
 export interface LogRow {
   key: string;
   kind: 'node' | 'execution';
@@ -10,7 +18,7 @@ export interface LogRow {
   nodeId: string | null;
   nodeName: string;
   nodeType: string;
-  status: NodeExecutionStatus | ExecutionDetail['status'];
+  status: NodeExecutionStatus | ExecutionStatus;
   durationMs: number | null;
   itemsIn: number | null;
   itemsOut: number | null;
@@ -29,8 +37,31 @@ export const LOG_STATUS_LABEL: Record<LogStatusFilter, string> = {
   skipped: 'Sem dados',
   waiting: 'Aguardando',
   cancelled: 'Interrompido',
-  running: 'Executando',
+  running: 'Em andamento',
 };
+
+/** Spec 029, FR-003: status do passo como aparece na tela. */
+export const STEP_STATUS_LABEL: Record<NodeExecutionStatus, string> = {
+  running: 'em andamento',
+  success: 'sucesso',
+  error: 'erro',
+  skipped: 'sem dados',
+  waiting: 'aguardando',
+  cancelled: 'interrompido',
+};
+
+export const EXECUTION_STATUS_LABEL: Record<ExecutionStatus, string> = {
+  queued: 'Na fila',
+  running: 'Executando',
+  waiting: 'Aguardando',
+  success: 'Sucesso',
+  error: 'Erro',
+  cancelled: 'Cancelada',
+};
+
+/** Execução na fila, em andamento ou aguardando: o Log funciona como acompanhamento ao vivo. */
+export const isActiveStatus = (status: ExecutionStatus) =>
+  status === 'queued' || status === 'running' || status === 'waiting';
 
 const pad = (n: number, size = 2) => String(n).padStart(size, '0');
 
@@ -50,18 +81,21 @@ const between = (startIso: string, endIso: string | null) =>
 /**
  * Linhas na ordem da API (início e iteração), com o tipo do nó da definição executada e as
  * subexecuções de cada nó (FR-004): na iteração cujo intervalo contém o início da subexecução;
- * sem intervalo que a contenha, na última iteração do nó.
+ * sem intervalo que a contenha, na última iteração do nó. Spec 029: os passos em andamento vêm
+ * depois dos concluídos, com a duração até `now` (FR-003).
  */
-export function logRows(detail: ExecutionDetail): { rows: LogRow[]; orphans: SubExecutionRef[] } {
-  const types = new Map((detail.definition?.nodes ?? []).map((n) => [n.id, n.type]));
-  const rows: LogRow[] = detail.nodes.map((n) => ({
+export function logRows(
+  detail: ExecutionSteps,
+  now = Date.now(),
+): { rows: LogRow[]; orphans: SubExecutionRef[] } {
+  const rows: LogRow[] = detail.steps.map((n) => ({
     key: `${n.nodeId}#${String(n.runIndex)}`,
     kind: 'node',
     time: logTime(n.startedAt),
     startedAt: n.startedAt,
     nodeId: n.nodeId,
     nodeName: n.nodeName,
-    nodeType: types.get(n.nodeId) ?? '',
+    nodeType: n.nodeType,
     status: n.status,
     durationMs: between(n.startedAt, n.finishedAt),
     itemsIn: n.itemsIn,
@@ -70,6 +104,24 @@ export function logRows(detail: ExecutionDetail): { rows: LogRow[]; orphans: Sub
     error: n.error?.message ?? null,
     subExecutions: [],
   }));
+  for (const r of detail.running) {
+    rows.push({
+      key: `${r.nodeId}#${String(r.runIndex)}`,
+      kind: 'node',
+      time: logTime(r.startedAt),
+      startedAt: r.startedAt,
+      nodeId: r.nodeId,
+      nodeName: r.nodeName,
+      nodeType: r.nodeType,
+      status: 'running',
+      durationMs: Math.max(0, now - Date.parse(r.startedAt)),
+      itemsIn: null,
+      itemsOut: null,
+      runIndex: r.runIndex,
+      error: null,
+      subExecutions: [],
+    });
+  }
   const orphans: SubExecutionRef[] = [];
   for (const sub of detail.subExecutions) {
     const candidates = rows.filter((r) => r.nodeId !== null && r.nodeId === sub.nodeId);
@@ -105,6 +157,28 @@ export function logRows(detail: ExecutionDetail): { rows: LogRow[]; orphans: Sub
   return { rows, orphans };
 }
 
+/** Spec 029, FR-010 e FR-016: resumo do progresso e linhas que ficaram de fora do limite. */
+export function logProgress(detail: ExecutionSteps) {
+  return {
+    done: detail.total,
+    running: detail.running.length,
+    executed: detail.executedNodeIds.length,
+    nodeCount: detail.nodeCount,
+    hidden: Math.max(0, detail.total - detail.steps.length),
+  };
+}
+
+/** FR-002 (spec 029): tempo decorrido, como `45 s`, `4 min 05 s` ou `1 h 02 min`. */
+export function formatElapsed(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const sec = total % 60;
+  if (h > 0) return `${String(h)} h ${pad(m)} min`;
+  if (m > 0) return `${String(m)} min ${pad(sec)} s`;
+  return `${String(sec)} s`;
+}
+
 /** FR-003: status e texto (nome, tipo ou mensagem, sem diferenciar maiúsculas). */
 export function filterLog(rows: LogRow[], status: LogStatusFilter, text: string): LogRow[] {
   const needle = text.trim().toLowerCase();
@@ -121,7 +195,7 @@ export const shortId = (id: string) => id.slice(0, 8);
 const MODE_LABEL = { test: 'teste', production: 'produção' } as const;
 
 /** Linha de resumo do cabeçalho (status · modo · gatilho · início → fim · duração). */
-export function logSummary(detail: ExecutionDetail): string {
+export function logSummary(detail: ExecutionSteps): string {
   const end = detail.finishedAt ? new Date(detail.finishedAt).toLocaleString('pt-BR') : '…';
   return [
     detail.status,
@@ -147,7 +221,7 @@ const rowText = (r: LogRow) =>
     .trimEnd();
 
 /** FR-003: texto para copiar e baixar (`.txt`), com as linhas filtradas. */
-export function logText(detail: ExecutionDetail, workflowName: string, rows: LogRow[]): string {
+export function logText(detail: ExecutionSteps, workflowName: string, rows: LogRow[]): string {
   return [
     `Log — execução ${detail.id} · ${workflowName}`,
     logSummary(detail),
@@ -157,7 +231,7 @@ export function logText(detail: ExecutionDetail, workflowName: string, rows: Log
 }
 
 /** FR-003: conteúdo do `.json`, com as linhas filtradas. */
-export function logJson(detail: ExecutionDetail, workflowName: string, rows: LogRow[]) {
+export function logJson(detail: ExecutionSteps, workflowName: string, rows: LogRow[]) {
   return {
     execution: {
       id: detail.id,

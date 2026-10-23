@@ -237,6 +237,66 @@ export interface ExecutionDetail {
   subExecutions: SubExecutionRef[];
 }
 
+/**
+ * Spec 029, FR-016: linhas do acompanhamento ao vivo (as últimas, enquanto a execução está
+ * ativa). O Log da execução terminada traz todas.
+ */
+export const LIVE_STEPS_LIMIT = 500;
+
+/** Spec 029: passo concluído (nó + iteração), só com os metadados (FR-013). */
+export interface ExecutionStep {
+  nodeId: string;
+  nodeName: string;
+  nodeType: string;
+  runIndex: number;
+  status: NodeExecutionStatus;
+  startedAt: string;
+  finishedAt: string | null;
+  itemsIn: number;
+  itemsOut: number;
+  error: NodeExecutionError | null;
+}
+
+/** Spec 029, FR-005: passo em andamento (iniciado e ainda sem fim). */
+export interface RunningStep {
+  nodeId: string;
+  nodeName: string;
+  nodeType: string;
+  runIndex: number;
+  startedAt: string;
+}
+
+/** `GET /executions/:id/steps` (spec 029): acompanhamento ao vivo, sem os dados dos nós. */
+export interface ExecutionSteps {
+  id: string;
+  workflowId: string;
+  projectId: string;
+  workflowVersion: number | null;
+  mode: 'test' | 'production';
+  triggerType: string;
+  status: ExecutionStatus;
+  startedAt: string;
+  finishedAt: string | null;
+  error: ExecutionErrorInfo | null;
+  /** FR-007: próxima retomada da execução em espera, quando conhecida. */
+  resumeAt: string | null;
+  /**
+   * Nós da definição executada (sem os sub-nós): os eventos ao vivo trazem só o `nodeId`, e a
+   * web tira daqui o nome e o tipo dos passos que começam depois da consulta.
+   */
+  nodes: { id: string; name: string; type: string }[];
+  /** FR-010: nós do workflow (sem os sub-nós) e os que já rodaram ao menos uma vez. */
+  nodeCount: number;
+  executedNodeIds: string[];
+  /** FR-016: total de passos concluídos (`steps` pode trazer só os últimos). */
+  total: number;
+  /** Os últimos `limit` passos concluídos, em ordem de início. */
+  steps: ExecutionStep[];
+  running: RunningStep[];
+  /** FR-011: subexecuções, com o status (acompanhamento ou Log). */
+  subExecutions: SubExecutionRef[];
+}
+
 /** Linha de `GET /executions` (spec 005, FR-013). */
 export interface ExecutionSummary {
   id: string;
@@ -310,6 +370,15 @@ export interface ExecutionFinishedEvent {
   /** `null` quando a execução entrou em espera. */
   finishedAt: string | null;
   error: ExecutionErrorInfo | null;
+}
+
+/**
+ * Mensagem `join` do namespace `/executions`. Spec 029: com `metadataOnly`, a conexão recebe a
+ * versão dos eventos sem dados, mesmo com `execution:readData` (FR-013).
+ */
+export interface JoinExecutionRequest {
+  executionId: string;
+  metadataOnly?: boolean;
 }
 
 export interface ExecutionEvents {

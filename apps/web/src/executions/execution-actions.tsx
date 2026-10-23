@@ -1,6 +1,6 @@
 import type { ExecutionSummary } from '@olly/shared-types';
 import { useQueryClient } from '@tanstack/react-query';
-import { MoreHorizontal, ScrollText, Trash2 } from 'lucide-react';
+import { Activity, MoreHorizontal, ScrollText, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useApi } from '@/api/api-provider';
@@ -15,16 +15,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { isActiveStatus } from './execution-log';
 import { ExecutionLogDialog } from './execution-log-dialog';
 
 /**
  * Ações de uma execução terminada (spec 026, FR-001): "Log" e, com `execution:delete` no
- * projeto, "Excluir" (com confirmação, FR-005).
+ * projeto, "Excluir" (com confirmação, FR-005). Spec 029, FR-001: na execução ativa, "Acompanhar"
+ * abre o Log ao vivo; Excluir continua só nas terminadas.
  */
 export function ExecutionActions({ execution }: { execution: ExecutionSummary }) {
   const api = useApi();
   const queryClient = useQueryClient();
-  const canDelete = useCan('execution:delete', execution.projectId);
+  const active = isActiveStatus(execution.status);
+  const canDelete = useCan('execution:delete', execution.projectId) && !active;
   // Posição do menu (fixa, a partir do botão): a tabela corta o que passa da borda.
   const [open, setOpen] = useState<{ top: number; right: number } | null>(null);
   const [dialog, setDialog] = useState<'log' | 'delete' | null>(null);
@@ -111,7 +114,15 @@ export function ExecutionActions({ execution }: { execution: ExecutionSummary })
               choose('log');
             }}
           >
-            <ScrollText className="size-4" /> Log
+            {active ? (
+              <>
+                <Activity className="size-4" /> Acompanhar
+              </>
+            ) : (
+              <>
+                <ScrollText className="size-4" /> Log
+              </>
+            )}
           </button>
           {canDelete && (
             <button
@@ -131,8 +142,11 @@ export function ExecutionActions({ execution }: { execution: ExecutionSummary })
         <ExecutionLogDialog
           executionId={execution.id}
           workflowName={execution.workflowName}
+          live={active}
           onClose={() => {
             setDialog(null);
+            // O status pode ter mudado durante o acompanhamento.
+            if (active) void queryClient.invalidateQueries({ queryKey: ['executions'] });
           }}
         />
       )}

@@ -288,13 +288,12 @@ export function ExecutionsPage() {
                   {dateFormat.format(new Date(e.startedAt))}
                 </td>
                 <td className="px-4 py-2 text-muted-foreground">{duration(e.durationMs)}</td>
-                <td className="px-2 py-1 text-right">
-                  {e.status === 'queued' || e.status === 'running' ? (
+                <td className="px-2 py-1 text-right whitespace-nowrap">
+                  {(e.status === 'queued' || e.status === 'running') && (
                     <StopButton executionId={e.id} projectId={e.projectId} />
-                  ) : (
-                    // Spec 026: Log e Excluir nas execuções terminadas.
-                    e.status !== 'waiting' && <ExecutionActions execution={e} />
                   )}
+                  {/* Spec 026: Log e Excluir nas terminadas; spec 029: Acompanhar nas ativas. */}
+                  <ExecutionActions execution={e} />
                 </td>
               </tr>
             ))}

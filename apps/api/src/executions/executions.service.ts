@@ -17,17 +17,21 @@ import {
 } from '@olly/engine';
 import { exposedEnv, type ExpressionEvaluator } from '@olly/expressions';
 import type { NodeRegistry } from '@olly/nodes';
-import type {
-  ExecutionDetail,
-  ExecutionList,
-  ExecutionStatus,
-  ExpressionPreviewResponse,
-  Item,
-  NodeExecutionStatus,
-  QueueStats,
-  TestRunResponse,
-  WorkflowDefinition,
+import {
+  isSubNodeType,
+  resolveNodePorts,
+  type ExecutionDetail,
+  type ExecutionList,
+  type ExecutionStatus,
+  type ExecutionSteps,
+  type ExpressionPreviewResponse,
+  type Item,
+  type NodeExecutionStatus,
+  type QueueStats,
+  type TestRunResponse,
+  type WorkflowDefinition,
 } from '@olly/shared-types';
+import type { Redis } from 'ioredis';
 import { sql } from 'kysely';
 import { AuditService, type AuditContext } from '../audit/audit.service.js';
 import type { AuthenticatedUser } from '../auth/auth.types.js';
@@ -38,7 +42,7 @@ import {
   UnprocessableError,
 } from '../common/errors.js';
 import { APP_CONFIG, type AppConfig } from '../config/config.js';
-import { DB } from '../core/tokens.js';
+import { DB, REDIS } from '../core/tokens.js';
 import { EXPRESSION_EVALUATOR } from '../expressions/expressions.module.js';
 import { NODE_REGISTRY } from '../node-types/node-types.module.js';
 import { hasProjectPermission } from '../rbac/ability.factory.js';
@@ -48,7 +52,13 @@ import { readNodeData } from './node-data.js';
 import { purgeExecutions } from './purge.js';
 import { ExecutionDispatcher } from './dispatcher.js';
 import type { ExecutionJob } from './execution-job.js';
-import type { ListExecutionsQuery, PreviewBody, TestRunBody } from './executions.schemas.js';
+import type {
+  ListExecutionsQuery,
+  PreviewBody,
+  StepsQuery,
+  TestRunBody,
+} from './executions.schemas.js';
+import { RunningSteps } from './running-steps.js';
 import { readDefinition } from '../workflows/definition.js';
 
 const PARTITION_REFRESH_MS = 12 * 60 * 60 * 1000;
@@ -78,6 +88,7 @@ export interface LaunchRequest {
 export class ExecutionsService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ExecutionsService.name);
   private partitionTimer?: NodeJS.Timeout;
+  private readonly runningSteps: RunningSteps;
 
   constructor(
     @Inject(DB) private readonly db: Db,
@@ -87,7 +98,10 @@ export class ExecutionsService implements OnModuleInit, OnModuleDestroy {
     @Inject(ExecutionDispatcher) private readonly dispatcher: ExecutionDispatcher,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(BINARY_STORAGE) private readonly storage: S3BinaryStorage | null,
-  ) {}
+    @Inject(REDIS) redis: Redis,
+  ) {
+    this.runningSteps = new RunningSteps(redis);
+  }
 
   onModuleInit(): void {
     void this.ensurePartitions();
@@ -365,7 +379,7 @@ export class ExecutionsService implements OnModuleInit, OnModuleDestroy {
       .$if(query.workflowId !== undefined, (qb) =>
         qb.where('e.workflow_id', '=', query.workflowId ?? ''),
       )
-      .$if(query.status !== undefined, (qb) => qb.where('e.status', '=', query.status ?? ''))
+      .$if(query.status !== undefined, (qb) => qb.where('e.status', 'in', query.status ?? []))
       .$if(query.mode !== undefined, (qb) => qb.where('e.mode', '=', query.mode ?? 'test'))
       .$if(query.trigger !== undefined, (qb) =>
         qb.where('e.trigger_type', '=', query.trigger ?? ''),
@@ -479,6 +493,159 @@ export class ExecutionsService implements OnModuleInit, OnModuleDestroy {
           };
         }),
       ),
+      subExecutions: children.map((c) => ({
+        id: c.id,
+        workflowId: c.workflow_id,
+        workflowName: c.name,
+        nodeId: c.parent_node_id,
+        status: c.status as ExecutionStatus,
+        startedAt: c.started_at.toISOString(),
+      })),
+    };
+  }
+
+  /**
+   * Spec 029 (plan §2): acompanhamento ao vivo. Só metadados (FR-013): não lê os dados dos nós
+   * nem o object storage, para custar o mesmo com saídas grandes ou pequenas (NFR-002). Com
+   * `limit`, os últimos passos concluídos (FR-016); `total` conta todos.
+   */
+  async steps(executionId: string, query: StepsQuery): Promise<ExecutionSteps> {
+    const execution = await this.db
+      .selectFrom('executions')
+      .select([
+        'id',
+        'workflow_id',
+        'project_id',
+        'workflow_version',
+        'mode',
+        'trigger_type',
+        'status',
+        'started_at',
+        'finished_at',
+        'error',
+        'definition',
+      ])
+      .where('id', '=', executionId)
+      .executeTakeFirst();
+    if (!execution) throw new NotFoundError('Execução não encontrada');
+    const status = execution.status as ExecutionStatus;
+    const active = ['queued', 'running', 'waiting'].includes(status);
+    const definition = execution.definition ? readDefinition(execution.definition) : null;
+    const types = new Map((definition?.nodes ?? []).map((n) => [n.id, n.type]));
+    const names = new Map((definition?.nodes ?? []).map((n) => [n.id, n.name]));
+    // FR-010: os sub-nós (modelo, memória, ferramentas) não contam, como no agendamento do motor.
+    const mainNodes = (definition?.nodes ?? []).filter((n) => {
+      const type = this.registry.get(n.type);
+      return type === undefined || !isSubNodeType(resolveNodePorts(type, n));
+    });
+    const counted = new Set(mainNodes.map((n) => n.id));
+
+    const columns = [
+      'node_id',
+      'node_name',
+      'run_index',
+      'status',
+      'started_at',
+      'finished_at',
+      'items_in',
+      'items_out',
+      'error',
+    ] as const;
+    const [rows, totals, executed, children, wait, running] = await Promise.all([
+      query.limit === undefined
+        ? this.db
+            .selectFrom('node_executions')
+            .select(columns)
+            .where('execution_id', '=', executionId)
+            .orderBy('started_at')
+            .orderBy('run_index')
+            .execute()
+        : this.db
+            .selectFrom('node_executions')
+            .select(columns)
+            .where('execution_id', '=', executionId)
+            .orderBy('started_at', 'desc')
+            .orderBy('run_index', 'desc')
+            .limit(query.limit)
+            .execute()
+            .then((r) => r.reverse()),
+      this.db
+        .selectFrom('node_executions')
+        .select((eb) => eb.fn.countAll<string>().as('total'))
+        .where('execution_id', '=', executionId)
+        .executeTakeFirst(),
+      this.db
+        .selectFrom('node_executions')
+        .select('node_id')
+        .distinct()
+        .where('execution_id', '=', executionId)
+        .execute(),
+      this.db
+        .selectFrom('executions as e')
+        .innerJoin('workflows as w', 'w.id', 'e.workflow_id')
+        .select(['e.id', 'e.workflow_id', 'w.name', 'e.parent_node_id', 'e.status', 'e.started_at'])
+        .where('e.parent_execution_id', '=', executionId)
+        .orderBy('e.started_at')
+        .execute(),
+      status === 'waiting'
+        ? this.db
+            .selectFrom('execution_state')
+            .select('resume_at')
+            .where('execution_id', '=', executionId)
+            .executeTakeFirst()
+        : undefined,
+      // O hash pode sobrar numa execução já terminada (DEL que falhou, worker perdido).
+      active ? this.runningSteps.list(executionId) : [],
+    ]);
+    const key = (nodeId: string, runIndex: number) => `${nodeId}#${String(runIndex)}`;
+    const finished = new Set(
+      rows.filter((r) => r.status !== 'waiting').map((r) => key(r.node_id, r.run_index)),
+    );
+    // Um passo que terminou entre as duas leituras aparece só como concluído.
+    const runningSteps = running.filter((r) => !finished.has(key(r.nodeId, r.runIndex)));
+    const runningKeys = new Set(runningSteps.map((r) => key(r.nodeId, r.runIndex)));
+    // Na retomada do Esperar, o passo `waiting` voltou a rodar: aparece só em andamento.
+    const doneRows = rows.filter(
+      (r) => !(r.status === 'waiting' && runningKeys.has(key(r.node_id, r.run_index))),
+    );
+    const executedNodeIds = [
+      ...new Set([...executed.map((r) => r.node_id), ...runningSteps.map((r) => r.nodeId)]),
+    ].filter((id) => counted.has(id));
+    return {
+      id: execution.id,
+      workflowId: execution.workflow_id,
+      projectId: execution.project_id,
+      workflowVersion: execution.workflow_version,
+      mode: execution.mode,
+      triggerType: execution.trigger_type,
+      status,
+      startedAt: execution.started_at.toISOString(),
+      finishedAt: iso(execution.finished_at),
+      error: execution.error as ExecutionSteps['error'],
+      resumeAt: iso(wait?.resume_at ?? null),
+      nodes: mainNodes.map((n) => ({ id: n.id, name: n.name, type: n.type })),
+      nodeCount: counted.size,
+      executedNodeIds,
+      total: Number(totals?.total ?? 0),
+      steps: doneRows.map((n) => ({
+        nodeId: n.node_id,
+        nodeName: n.node_name,
+        nodeType: types.get(n.node_id) ?? '',
+        runIndex: n.run_index,
+        status: n.status as NodeExecutionStatus,
+        startedAt: n.started_at.toISOString(),
+        finishedAt: iso(n.finished_at),
+        itemsIn: n.items_in,
+        itemsOut: n.items_out,
+        error: n.error as { name: string; message: string } | null,
+      })),
+      running: runningSteps.map((r) => ({
+        nodeId: r.nodeId,
+        nodeName: names.get(r.nodeId) ?? r.nodeId,
+        nodeType: types.get(r.nodeId) ?? '',
+        runIndex: r.runIndex,
+        startedAt: r.startedAt,
+      })),
       subExecutions: children.map((c) => ({
         id: c.id,
         workflowId: c.workflow_id,

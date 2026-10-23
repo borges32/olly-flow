@@ -59,11 +59,12 @@ export class ExecutionsGateway implements OnGatewayInit {
     const parsed = joinSchema.safeParse(body);
     const auth = this.sessions.get(socket);
     if (!parsed.success || !auth) return { ok: false, error: 'invalid' };
-    const { executionId } = parsed.data;
+    const { executionId, metadataOnly } = parsed.data;
     const access = await this.access(auth, 'execution', executionId);
     if (!access.read) return { ok: false, error: 'not_found' };
     const room = executionRoom(executionId);
-    await socket.join(access.readData ? dataRoom(room) : room);
+    // Spec 029, FR-013: o acompanhamento ao vivo usa a sala sem dados, mesmo com `readData`.
+    await socket.join(access.readData && !metadataOnly ? dataRoom(room) : room);
     return { ok: true };
   }
 
@@ -118,6 +119,7 @@ export class ExecutionsGateway implements OnGatewayInit {
     };
   }
 
+  /** Sai das duas salas da execução (spec 029: o acompanhamento ao fechar). */
   @SubscribeMessage('leave')
   async leave(
     @ConnectedSocket() socket: Socket,

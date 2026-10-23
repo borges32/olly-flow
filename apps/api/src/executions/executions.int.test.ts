@@ -143,6 +143,24 @@ describe('spec 005 — FR-013: listagem de execuções', () => {
     expect((await list(admin)).items).toHaveLength(4);
     expect((await outsider.call('GET', '/executions')).statusCode).toBe(403);
   });
+
+  it('spec 029 — FR-015: status aceita uma lista separada por vírgulas', async () => {
+    const [first, second] = (await list(editor, `?workflowId=${wfA.id}`)).items;
+    const ids = [first?.id ?? '', second?.id ?? ''];
+    const setStatus = (id: string, status: 'running' | 'waiting' | 'success') =>
+      ctx.database.db.updateTable('executions').set({ status }).where('id', '=', id).execute();
+    await setStatus(ids[0] ?? '', 'running');
+    await setStatus(ids[1] ?? '', 'waiting');
+    try {
+      const active = await list(editor, `?workflowId=${wfA.id}&status=queued,running,waiting`);
+      expect(active.items.map((i) => i.id).sort()).toEqual([...ids].sort());
+      expect((await list(editor, `?workflowId=${wfA.id}&status=running`)).items).toHaveLength(1);
+      expect((await list(editor, `?projectId=${project.id}&status=success`)).items).toHaveLength(1);
+      expect((await editor.call('GET', '/executions?status=running,talvez')).statusCode).toBe(400);
+    } finally {
+      for (const id of ids) await setStatus(id, 'success');
+    }
+  });
 });
 
 describe('spec 005 — FR-014: dados de execução exigem execution:readData', () => {

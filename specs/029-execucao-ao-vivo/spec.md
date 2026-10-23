@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| **Status** | Planejada |
+| **Status** | Implementada |
 | **Fase** | 4 — Hardening (operação e depuração) |
 | **Depende de** | 003, 005, 006, 009, 026 |
 | **Requisitos de produto** | PR-07 (parcial), PR-20 (parcial) |
@@ -166,3 +166,4 @@ Respondidos pelo PO em 23/10/2026, com as recomendações aceitas:
 |---|---|---|
 | 23/10/2026 | Criação da spec, a pedido do PO (acompanhar ao vivo as execuções em andamento, numa visão simples fora do canvas) | Workflows de produção longos (cerca de 5 minutos), sem visibilidade do ponto em que estão |
 | 23/10/2026 | Pontos em aberto respondidos pelo PO (recomendações aceitas): Log da spec 026 ao vivo, aviso no editor, interromper, execuções de teste incluídas, últimas 500 iterações, link da subexecução. FR-016 novo. Plano e tarefas criados. Status: Planejada | Esclarecimento |
+| 23/10/2026 | Implementação concluída ([relatório](report.md)). Comportamento sem mudança; ajustes técnicos registrados no `plan.md` | — |

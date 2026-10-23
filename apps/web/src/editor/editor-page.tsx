@@ -57,6 +57,7 @@ import { NodeDetailsView } from './ndv/node-details-view';
 import { useEditorStore } from './store';
 import { NodeActionsContext, type NodeActions } from './node-actions';
 import { PublishControls } from './publish-controls';
+import { RunningExecutions } from './running-executions';
 import { LogsPanel } from './logs-panel';
 import { ExecutionTimeline } from './execution-timeline';
 import { timelineRows } from './timeline';
@@ -751,6 +752,8 @@ export function Editor({
             <Download /> Baixar
           </Button>
         )}
+        {/* Spec 029, FR-015: execuções em andamento; não aparece no canvas de uma execução. */}
+        {!execution && <RunningExecutions workflowId={workflow.id} />}
         {!execution && (
           <PublishControls workflow={workflow} dirty={dirty} canPublish={canPublish} />
         )}

@@ -13,6 +13,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type {
   ExecutionDetail,
   ExecutionList,
+  ExecutionSteps,
   ExpressionPreviewResponse,
   QueueStats,
   TestRunResponse,
@@ -26,9 +27,11 @@ import { RequirePermission } from '../rbac/require-permission.decorator.js';
 import {
   listExecutionsQuerySchema,
   previewSchema,
+  stepsQuerySchema,
   testRunSchema,
   type ListExecutionsQuery,
   type PreviewBody,
+  type StepsQuery,
   type TestRunBody,
 } from './executions.schemas.js';
 import { ExecutionsService } from './executions.service.js';
@@ -67,6 +70,16 @@ export class ExecutionsController {
   @Get('executions/:id')
   get(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string): Promise<ExecutionDetail> {
     return this.executions.get(user, id);
+  }
+
+  /** Spec 029: acompanhamento ao vivo, só com os metadados dos passos (FR-012, FR-013). */
+  @RequirePermission('execution:read', { execution: 'id' })
+  @Get('executions/:id/steps')
+  steps(
+    @Param('id') id: string,
+    @Query(new ZodPipe(stepsQuerySchema)) query: StepsQuery,
+  ): Promise<ExecutionSteps> {
+    return this.executions.steps(id, query);
   }
 
   /** Spec 006, FR-010: para uma execução na fila ou em andamento. */

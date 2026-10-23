@@ -100,7 +100,7 @@ test.describe('spec 026 — ações da execução', () => {
     await expect(log.getByTestId('log-row-Início')).toContainText('trigger.manual');
     const resolver = log.getByTestId('log-row-Resolver');
     await expect(resolver).toContainText('flow.executeWorkflow');
-    await expect(resolver).toContainText('success');
+    await expect(resolver).toContainText('sucesso');
     await expect(resolver.getByTestId('log-sub-execution')).toHaveCount(1);
     await expect(log.getByTestId('log-row-Validar').getByTestId('log-error')).toContainText(
       'campo cpf ausente',

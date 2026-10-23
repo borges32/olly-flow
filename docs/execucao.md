@@ -116,6 +116,19 @@ O nó de código não é elegível: o modo "uma vez por item" já roda todos os 
   - **Resultado:** o motor não espera o nó responder. Os nós interrompidos ficam `cancelled`, os pendentes não executam, e a execução termina `cancelled`, com `error.reason = 'cancelled'`. O alvo é terminar em até 2 s (NFR-001).
 - **Timeout global:** `settings.timeoutSec` do workflow ou `OLLY_DEFAULT_WORKFLOW_TIMEOUT` (300 s). Ao estourar, a execução é cancelada como acima, com `error.reason = 'timeout'`.
 
+## Acompanhamento ao vivo (spec 029)
+
+- **Onde:** o modal de **Log** (spec 026) funciona também com a execução na fila, em andamento ou aguardando. Ele abre:
+  - pela tela **Execuções**, no menu da execução ativa (**Acompanhar**);
+  - pelo editor, no botão "N em andamento" da barra superior (consulta a cada 10 s, com a aba visível; some quando não há execução ativa; não aparece no canvas de uma execução);
+  - pelo link da subexecução no próprio Log (acompanhamento, se ativa; Log, se terminou).
+- **O que mostra:** o indicador "Ao vivo", o status, o modo, o gatilho, a versão, o início e o tempo decorrido (a cada segundo); "X de Y nós já rodaram · N passos concluídos · N em andamento"; os passos na ordem de início, com os em andamento no fim (duração correndo); "Aguardando até HH:mm:ss" no Esperar longo; o erro da execução no topo. Copiar e baixar ficam disponíveis no fim.
+- **Só metadados:** nome, tipo, status, horários, itens e erro. Os dados de entrada e saída continuam no canvas da execução, com `execution:readData`.
+- **Como atualiza:** entra na sala da execução sem dados (`join` com `metadataOnly`) e só então faz a consulta leve `GET /executions/:id/steps?limit=500`; os eventos `nodeStarted`/`nodeFinished`/`executionFinished` atualizam a tela em até 2 s, sem duplicar. Os passos em andamento ao abrir vêm de um hash no Redis, gravado pelo worker (ou pela API, nas execuções em processo). Uma consulta de reserva a cada 15 s cobre eventos perdidos.
+- **Conexão perdida:** aviso "Conexão perdida. Reconectando…"; ao voltar, entra de novo na sala e ressincroniza.
+- **Laços longos:** enquanto a execução está ativa, só as últimas 500 linhas, com "Mostrando as últimas 500 de N linhas". No fim, o Log traz todas.
+- **Interromper:** no próprio modal, com confirmação, para quem tem `workflow:execute` no projeto, nas execuções na fila ou em andamento.
+
 ## Cotas por projeto
 
 - Cada projeto tem um limite de execuções simultâneas: `projects.max_concurrent_executions`, ou `OLLY_PROJECT_MAX_CONCURRENT` (20) quando não definido.

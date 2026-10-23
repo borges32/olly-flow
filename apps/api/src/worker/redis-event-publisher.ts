@@ -7,8 +7,12 @@ import {
   ExecutionEventSink,
   type ExecutionEventMessage,
 } from '../executions/execution-events.service.js';
+import { RunningSteps } from '../executions/running-steps.js';
 
-/** Eventos de execução do worker vão para o Redis; a API os entrega por WebSocket (FR-003). */
+/**
+ * Eventos de execução do worker vão para o Redis; a API os entrega por WebSocket (FR-003). Spec
+ * 029: o worker também mantém os passos em andamento (`RunningSteps`).
+ */
 @Injectable()
 export class RedisEventPublisher extends ExecutionEventSink {
   private readonly logger = new Logger('WorkerEvents');
@@ -23,8 +27,12 @@ export class RedisEventPublisher extends ExecutionEventSink {
     workflowId: string,
   ): void {
     const message: ExecutionEventMessage = { event, payload, workflowId };
-    this.redis.publish(EXECUTION_EVENTS_CHANNEL, JSON.stringify(message)).catch((e: unknown) => {
-      this.logger.warn(`Evento ${event} não publicado: ${String(e)}`);
-    });
+    // Spec 029, FR-005: os passos em andamento mudam junto com a publicação, na mesma transação.
+    RunningSteps.apply(this.redis.multi(), event, payload)
+      .publish(EXECUTION_EVENTS_CHANNEL, JSON.stringify(message))
+      .exec()
+      .catch((e: unknown) => {
+        this.logger.warn(`Evento ${event} não publicado: ${String(e)}`);
+      });
   }
 }

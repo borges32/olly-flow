@@ -1,6 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import type { ExecutionEvents } from '@olly/shared-types';
+import type { Redis } from 'ioredis';
 import type { Namespace } from 'socket.io';
+import { REDIS } from '../core/tokens.js';
+import { RunningSteps } from './running-steps.js';
 
 export const executionRoom = (executionId: string) => `execution:${executionId}`;
 /** Sala do workflow: o editor entra ao abrir, antes de existir o id da execução. */
@@ -76,6 +79,13 @@ export class ExecutionEventsService extends ExecutionEventSink {
   private publisher?: (message: string) => Promise<unknown>;
   /** Spec 027: ouvintes por execução nesta instância (streams do webhook e do chat). */
   private readonly listeners = new Map<string, Set<ExecutionEventListener>>();
+  /** Spec 029, FR-005: passos em andamento, gravados só por quem emite (não pelo relay). */
+  readonly runningSteps?: RunningSteps;
+
+  constructor(@Optional() @Inject(REDIS) redis?: Redis) {
+    super();
+    if (redis) this.runningSteps = new RunningSteps(redis);
+  }
 
   /** Recebe os eventos da execução entregues a esta instância; devolve o cancelamento. */
   listen(executionId: string, listener: ExecutionEventListener): () => void {
@@ -104,6 +114,7 @@ export class ExecutionEventsService extends ExecutionEventSink {
     payload: ExecutionEvents[K],
     workflowId: string,
   ): void {
+    this.runningSteps?.track(event, payload);
     if (!this.publisher) {
       this.deliver(event, payload, workflowId);
       return;
@@ -132,7 +143,10 @@ export class ExecutionEventsService extends ExecutionEventSink {
       }
     }
     const rooms = [executionRoom(payload.executionId), workflowRoom(workflowId)];
-    this.namespace?.to(rooms.map(dataRoom)).emit(event, payload);
-    this.namespace?.to(rooms).emit(event, withoutData(event, payload));
+    const full = rooms.map(dataRoom);
+    this.namespace?.to(full).emit(event, payload);
+    // Spec 029: a conexão numa sala com dados (o editor) e noutra sem (o acompanhamento ao vivo)
+    // recebe só a versão completa; a sem dados chegaria depois e apagaria a saída no canvas.
+    this.namespace?.to(rooms).except(full).emit(event, withoutData(event, payload));
   }
 }

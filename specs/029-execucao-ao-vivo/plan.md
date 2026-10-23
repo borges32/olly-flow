@@ -66,9 +66,10 @@ Sem tabela nova e sem dependência nova.
   - `count(*)` para o total;
   - com `limit`, os últimos `limit` por `started_at desc, run_index desc`, devolvidos em ordem crescente.
 - **Passos em andamento:** o `RunningSteps.list`, com o nome e o tipo tirados da definição. Só enquanto a execução está `queued`, `running` ou `waiting`.
-- **Retomada:** `resumeAt` vem de `execution_waits.resume_at` quando a execução está `waiting` (FR-007).
+- **Retomada:** `resumeAt` vem de `execution_state.resume_at` quando a execução está `waiting` (FR-007).
 - **Subexecuções:** a mesma consulta de `get` (por `parent_execution_id`), com o status, para o link do FR-011.
-- **Progresso (FR-010):** `nodeCount` conta os nós da definição, menos os sub-nós (`isSubNodeEdge`, como no editor) e as anotações. `executedNodeIds` são os ids distintos que já têm passo concluído ou em andamento. A web mostra "X de Y nós já rodaram".
+- **Progresso (FR-010):** `nodeCount` conta os nós da definição, menos os sub-nós (pelo tipo do nó, `isSubNodeType`, como no agendamento do motor; o catálogo não tem nó de anotação). `executedNodeIds` são os ids distintos que já têm passo concluído ou em andamento. A web mostra "X de Y nós já rodaram".
+- **Nós (`nodes`):** id, nome e tipo dos mesmos nós. Os eventos ao vivo trazem só o `nodeId`, e a web tira daqui o nome e o tipo dos passos que começam depois da consulta.
 - **`limit`:** opcional, de 1 a 10.000. A web usa 500 (`LIVE_STEPS_LIMIT`) enquanto a execução está ativa; sem `limit`, devolve todos (o Log da execução terminada).
 
 ### 3. WebSocket — `metadataOnly` e `leave` (FR-004, FR-013)
@@ -137,6 +138,7 @@ interface ExecutionSteps {
   mode: 'test' | 'production'; triggerType: string; status: ExecutionStatus;
   startedAt: string; finishedAt: string | null; error: ExecutionErrorInfo | null;
   resumeAt: string | null;                 // FR-007
+  nodes: { id: string; name: string; type: string }[];  // nome e tipo para os eventos ao vivo
   nodeCount: number; executedNodeIds: string[];  // FR-010
   total: number;                           // passos concluídos (FR-016)
   steps: ExecutionStep[];                  // os últimos `limit`, em ordem de início
@@ -187,7 +189,7 @@ Nenhuma variável nova. O TTL de 24 h do hash e o limite de 500 são constantes 
 | FR-012, FR-013 | Integração | Mesmo arquivo: 404 sem `execution:read`; a resposta não tem `input`/`output`; `join` com `metadataOnly` de um usuário com `readData` recebe o `nodeFinished` sem dados; `leave` para de receber |
 | FR-015 | Integração | `executions.int.test.ts`: `status=queued,running,waiting` |
 | FR-001, FR-004, FR-006, FR-008, SC-001, SC-002 | E2E | `apps/web/e2e/execution-live.spec.ts`: acompanhar pela lista um workflow com Esperar (o nó em andamento e depois concluído, o tempo correndo, o fim com o Log completo); abrir no meio; erro destacado |
-| FR-009, SC-003 | E2E | Mesmo arquivo: com a rede do navegador cortada e devolvida (`context.setOffline`), o aviso aparece e os passos terminam iguais aos do Log |
+| FR-009, SC-003 | E2E | Mesmo arquivo: com a rede do navegador cortada e devolvida (`context.setOffline`, mais `page.routeWebSocket` para derrubar e recusar o WebSocket, que o modo offline do Chromium não fecha), o aviso aparece e os passos terminam iguais aos do Log |
 | FR-014 | E2E | Mesmo arquivo: Interromper com confirmação; o viewer não vê a ação |
 | FR-015 | E2E | Mesmo arquivo: aviso "1 em andamento" no editor abre o acompanhamento e some no fim |
 | FR-011 | E2E | Mesmo arquivo: o link da subexecução ativa abre o acompanhamento dela |
@@ -207,3 +209,4 @@ Nenhuma variável nova. O TTL de 24 h do hash e o limite de 500 são constantes 
 | Data | Alteração | Motivo |
 |---|---|---|
 | 23/10/2026 | Criação do plano | Spec 029 esclarecida pelo PO |
+| 23/10/2026 | Ajustes na implementação: campo `nodes` em `ExecutionSteps` (nome e tipo para os passos que chegam pelos eventos); `resumeAt` de `execution_state` (a tabela que guarda a retomada); sub-nós pelo tipo do nó, como no motor; o `leave` já existia no gateway (só ganhou teste); a web refaz a consulta leve 1,5 s depois do início de um "Executar workflow" (link da subexecução, FR-011); E2E de reconexão com `routeWebSocket` | Implementação |
